@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# req - The interactive request tool for your terminal.
+
+# req_resolve_home - diretório raiz da instalação, seguindo symlinks.
+req_resolve_home() {
+    local src=${BASH_SOURCE[0]} dir
+    while [[ -L $src ]]; do
+        dir=$(cd -P "$(dirname "$src")" && pwd)
+        src=$(readlink "$src")
+        [[ $src == /* ]] || src=$dir/$src
+    done
+    cd -P "$(dirname "$src")/.." && pwd
+}
+
+main() {
+    REQ_HOME=$(req_resolve_home)
+    # shellcheck source=../lib/core.sh
+    source "$REQ_HOME/lib/core.sh"
+    # shellcheck source=../lib/ui.sh
+    source "$REQ_HOME/lib/ui.sh"
+
+    case ${1-} in
+        -v|--version) printf 'req %s\n' "$REQ_VERSION"; return 0 ;;
+    esac
+
+    req_check_bash
+    req_check_deps
+    req_setup_traps
+
+    printf 'req %s: navegação interativa ainda não implementada.\n' "$REQ_VERSION"
+}
+
+main "$@"
