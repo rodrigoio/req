@@ -44,8 +44,9 @@ test_colors() {
     assert_eq $'\033[32m' "$(req_color get)" "GET verde"
     assert_eq $'\033[34m' "$(req_color post)" "POST azul"
     assert_eq $'\033[38;5;208m' "$(req_color put)" "PUT laranja"
+    assert_eq $'\033[38;5;130m' "$(req_color patch)" "PATCH marrom"
     assert_eq $'\033[31m' "$(req_color delete)" "DELETE vermelho"
-    assert_eq "" "$(req_method_color patch)" "método desconhecido sem cor"
+    assert_eq "" "$(req_method_color head)" "método desconhecido sem cor"
 }
 
 test_missing_deps

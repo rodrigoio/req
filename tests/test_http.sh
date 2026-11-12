@@ -36,15 +36,15 @@ test_args() {
     assert_eq "0" "$?" "método, headers e url"
     assert_eq "" "$REQ_BODY" "GET sem corpo"
 
-    req_build_curl_args '{"method":"GET","url":"http://x","data_string":"ignorado"}'
-    assert_eq "" "$REQ_BODY" "GET ignora corpo"
+    local m
+    for m in GET DELETE; do
+        req_build_curl_args "{\"method\":\"$m\",\"url\":\"http://x\",\"data_parameter\":{\"a\":1},\"headers\":{\"Content-Type\":\"application/json\"}}"
+        has_arg --data-urlencode || has_arg --data-binary; assert_eq "1" "$?" "$m não envia corpo"
+        assert_eq "" "$REQ_BODY" "$m sem corpo em stdin"
+    done
 
-    req_build_curl_args '{"method":"POST","url":"http://x","data_string":"@/etc/passwd"}'
-    assert_eq "@/etc/passwd" "$REQ_BODY" "data_string literal vai para stdin"
-    has_arg --data-binary && has_arg @-; assert_eq "0" "$?" "corpo via --data-binary @-"
-
-    req_build_curl_args '{"method":"POST","url":"http://x","data_string":"raw","data_parameter":{"a":1}}'
-    assert_eq "raw" "$REQ_BODY" "data_string vence data_parameter"
+    req_build_curl_args '{"method":"PATCH","url":"http://x","data_parameter":{"a":"@/etc/passwd"}}'
+    has_arg -X && has_arg PATCH && has_arg "a=@/etc/passwd"; assert_eq "0" "$?" "PATCH; valor com @ segue literal"
 
     req_build_curl_args '{"method":"POST","url":"http://x","headers":{"content-type":"application/json"},"data_parameter":{"a":1,"b":"x"}}'
     assert_eq '{"a":1,"b":"x"}' "$REQ_BODY" "data_parameter vira JSON com Content-Type json"
@@ -123,8 +123,14 @@ test_execute() {
     [[ $out == "k=v%201" || $out == "k=v+1" ]]; assert_eq "0" "$?" "PUT com formulário url-encoded"
     assert_contains "x-www-form-urlencoded" "$(jq -r .content_type <<<"$REQ_RESP_BODY")" "content-type do formulário"
 
-    req_execute "{\"method\":\"POST\",\"url\":\"$base/p\",\"data_string\":\"@/etc/hostname\"}"
-    assert_eq "@/etc/hostname" "$(jq -r .body <<<"$REQ_RESP_BODY")" "@ no corpo não lê arquivo"
+    req_execute "{\"method\":\"PATCH\",\"url\":\"$base/p\",\"data_parameter\":{\"f\":\"@/etc/hostname\"}}"
+    assert_eq "PATCH" "$(jq -r .method <<<"$REQ_RESP_BODY")" "PATCH chega ao servidor"
+    out=$(jq -r .body <<<"$REQ_RESP_BODY")
+    [[ $out == f=%40* ]]; assert_eq "0" "$?" "@ no valor é enviado literal, sem ler arquivo"
+
+    req_execute "{\"method\":\"DELETE\",\"url\":\"$base/d\",\"data_parameter\":{\"a\":1}}"
+    assert_eq "DELETE" "$(jq -r .method <<<"$REQ_RESP_BODY")" "DELETE chega ao servidor"
+    assert_eq "" "$(jq -r .body <<<"$REQ_RESP_BODY")" "DELETE não envia corpo"
 
     req_execute "{\"method\":\"DELETE\",\"url\":\"$base/status/404\"}"
     assert_eq "404" "$REQ_RESP_STATUS" "DELETE com status 404"
@@ -136,7 +142,7 @@ test_execute() {
     assert_eq "7" "$?" "conexão recusada devolve código do curl"
 
     echo "http: req_run_request"
-    req_request_write "$TMP" users GET "{\"url\":\"$base/text\"}" >/dev/null
+    req_request_write "$TMP" users GET "$base/text" >/dev/null
     out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/users.get.json" 2>&1)
     assert_eq "0" "$?" "run termina com sucesso"
     assert_contains "GET $base/text" "$out" "mostra método e url"
@@ -146,7 +152,7 @@ test_execute() {
     assert_eq "====================" "$(tail -n 1 <<<"$out")" "termina com separador"
     assert_eq "" "$(find "$TMP" -newer "$TMP/port" -type f ! -name 'users.get.json' ! -name 'port')" "nenhum arquivo extra gravado"
 
-    req_request_write "$TMP" nourl GET >/dev/null
+    printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "request sem url falha"
     assert_contains '"url"' "$out" "orienta a definir a url"
     out=$(req_run_request "$TMP/inexistente.get.json" 2>&1); assert_eq "1" "$?" "arquivo inexistente falha"

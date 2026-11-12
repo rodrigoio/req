@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+"""Servidor HTTP local para os testes: devolve o que recebeu. Imprime a porta."""
+import json
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit, parse_qs
 
@@ -34,7 +38,7 @@ class Handler(BaseHTTPRequestHandler):
         }
         self._reply(200, "application/json", json.dumps(echo))
 
-    do_GET = do_POST = do_PUT = do_DELETE = _handle
+    do_GET = do_POST = do_PUT = do_PATCH = do_DELETE = _handle
 
     def log_message(self, *args):
         pass

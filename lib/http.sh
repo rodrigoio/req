@@ -39,9 +39,10 @@ req_body_is_json() {
 }
 
 # req_build_curl_args <json> - preenche REQ_CURL_ARGS e REQ_BODY.
-# Corpo (ignorado em GET): data_string vence; senão data_parameter, enviado como
-# JSON se o Content-Type for JSON, ou como formulário url-encoded nos demais casos.
-# O corpo vai por stdin para que valores iniciados em "@" nunca sejam lidos como arquivo.
+# Corpo (enviado só em POST, PUT e PATCH): data_parameter, enviado como JSON se o Content-Type
+# for JSON, ou como formulário url-encoded nos demais casos. O corpo JSON vai por
+# stdin e o formulário usa "chave=valor", para que valores iniciados em "@" nunca
+# sejam lidos como arquivo pelo curl.
 req_build_curl_args() {
     local json=$1 method url line
     url=$(req_build_url "$json") || return 1
@@ -57,11 +58,8 @@ req_build_curl_args() {
         [[ -n $line ]] && REQ_CURL_ARGS+=(-H "$line")
     done < <(jq -r '(.headers // {}) | to_entries[] | "\(.key): \(.value)"' <<<"$json")
 
-    if [[ $method != GET ]]; then
-        REQ_BODY=$(jq -r '.data_string // ""' <<<"$json")
-        if [[ -n $REQ_BODY ]]; then
-            REQ_CURL_ARGS+=(--data-binary @-)
-        elif [[ $(jq '(.data_parameter // {}) | length' <<<"$json") -gt 0 ]]; then
+    if [[ $method == POST || $method == PUT || $method == PATCH ]]; then
+        if [[ $(jq '(.data_parameter // {}) | length' <<<"$json") -gt 0 ]]; then
             if req_body_is_json "$json"; then
                 REQ_BODY=$(jq -c '.data_parameter' <<<"$json")
                 REQ_CURL_ARGS+=(--data-binary @-)

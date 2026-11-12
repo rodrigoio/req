@@ -60,24 +60,27 @@ Cada `tests/test_*.sh` é executado isoladamente; o runner falha se qualquer ass
 
 ## Formato dos arquivos
 
-Cada request é um arquivo `<nome>.<método>.json` (métodos: GET, POST, PUT, DELETE):
+Cada request é um arquivo `<slug>.<método>.json` (métodos: GET, POST, PUT, PATCH, DELETE). O slug usa só minúsculas, números e hífens (ex.: `listar-usuarios`). O `name` no JSON é idêntico ao slug do arquivo e é o rótulo mostrado no menu.
 
 ```json
 {
   "name": "login",
   "method": "POST",
   "url": "https://api.example.com/login",
+  "description": "Autentica o usuário",
   "headers": {"Content-Type": "application/json"},
   "query": {},
-  "data_parameter": {},
-  "data_string": ""
+  "data_parameter": {"user": "ana"}
 }
 ```
 
-`name` e `method` são obrigatórios; os demais campos são opcionais (a `url` é exigida ao executar).
-
+- Obrigatórios: `name`, `method` e `url`. Opcionais: `description`, `headers`, `query` e `data_parameter`.
+- `headers`, `query` e `data_parameter` são objetos de valores simples (texto, número ou booleano).
 - `query` é anexada à url com url-encode.
-- Corpo (ignorado em GET): `data_string` é enviada como está; se vazia, `data_parameter` é enviada como JSON quando o header `Content-Type` contém `json`, senão como formulário url-encoded. Subdiretórios do projeto são diretórios reais.
+- Corpo (enviado só em POST, PUT e PATCH): `data_parameter` é enviado como JSON quando o header `Content-Type` contém `json`, senão como formulário url-encoded.
+- Campos desconhecidos ou com tipo errado invalidam a request.
+
+Subdiretórios do projeto são diretórios reais.
 
 O arquivo `.req` na raiz do projeto lista os diretórios que o compõem, um por linha, relativos ao próprio `.req`. Linhas em branco e iniciadas por `#` são ignoradas:
 

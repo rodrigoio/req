@@ -15,6 +15,12 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - **Git:** `manifest` permanece no `.gitignore`.
 - **Enter em duas etapas:** o 1º Enter em uma request abre os detalhes (url, params), o 2º dispara; Esc volta. Assim o usuário confere antes de executar.
 - **Ambiente padrão:** `default`, usado quando `REQ_ENV` não está definido; troca em sessão via `:env <nome>`.
+- **Campos da request:** obrigatórios `name`, `method` e `url` (a `url` pode usar `${chave}`); opcionais `description`, `headers`, `query` e `data_parameter`.
+- **Nome slug:** `name` é um slug (minúsculas, números e hífens, ex.: `listar-usuarios`), idêntico ao nome do arquivo (`<slug>.<método>.json`) e usado como rótulo no menu.
+- **Validação estrita:** campo desconhecido ou com tipo errado invalida a request e é indicado ao usuário; o arquivo nunca é alterado.
+- **Headers genéricos:** qualquer nome de header válido, com valor texto, número ou booleano.
+- **Corpo (por ora):** apenas `data_parameter` com valores simples, enviado apenas em POST, PUT e PATCH (GET e DELETE não levam corpo); `data_string` fica reservado para a Fase 8.
+- **Métodos:** GET (verde), POST (azul), PUT (laranja), PATCH (marrom), DELETE (vermelho).
 - **Secrets:** arquivo `~/.req/env/<env>/secrets.json` ou variáveis de ambiente com prefixo, `${url}` resolve para `DEV_URL` (ambiente `dev`, chave em maiúsculas).
 
 ## Fases
@@ -29,7 +35,7 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - [x] `make test`, `make lint`, `make check`, `make install` e `make uninstall` (link simbólico em `~/.local/bin`, configurável via `PREFIX`/`BINDIR`).
 
 ### Fase 1 — Modelo de dados e persistência
-- [x] T1.1 Formato `<nome>.<method>.json` com campos `name`, `method`, `url`, `headers`, `query`, `data_parameter`, `data_string` (`url` acrescentada: o manifest a lista como feature, mas não a inclui no exemplo do JSON).
+- [x] T1.1 Formato `<nome>.<method>.json` com campos `name`, `method`, `url`, `headers`, `query`, `data_parameter`, `data_string` (`url` e `description` acrescentados; ver Decisões fechadas). PATCH incluído, na cor marrom; `data_string` removido por ora.
 - [x] T1.2 Funções de leitura/escrita/validação do JSON via jq (o exemplo do manifest não tem vírgulas; o JSON gravado deve ser válido) e detecção de JSON inválido por edição manual, apenas reportando o erro.
 - [x] T1.3 Arquivo `.req` do projeto: lista de diretórios que compõem o projeto; parser e localização no diretório atual.
 - [x] T1.4 Listagem de um diretório distinguindo subdiretórios reais de arquivos de request.
@@ -45,12 +51,12 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 ### Fase 3 — Navegação interativa
 - T3.1 Loop infinito de menu: setas cima/baixo, Enter, Esc (captura de sequências de escape com `read -rsn`).
 - T3.2 Menu raiz com os diretórios do `.req`; entrar em diretório lista subdiretórios e requests, com ícone/rótulo distinguindo cada um.
-- T3.3 Tela de detalhes da request (url, params, headers); Enter dispara, Esc volta; na raiz Esc não faz nada.
+- T3.3 Tela de detalhes da request (url, description, params, headers); Enter dispara, Esc volta; na raiz Esc não faz nada.
 - T3.4 Cores por método na listagem e nos detalhes.
 
 ### Fase 4 — Modo comando e gestão de requests
 - T4.1 Entrada em modo comando com `:`; Esc cancela.
-- T4.2 `:n` — wizard: nome e método, depois campos opcionais (header, querystring, parâmetros post/put/delete, body).
+- T4.2 `:n` — wizard: nome (slug), método e url, depois campos opcionais (description, header, querystring, parâmetros post/put/patch).
 - T4.3 Wizard simplificado com presets de formato popular (headers para json, text, html).
 - T4.4 `:e` — editar a request selecionada.
 - T4.5 `:d` — duplicar a request selecionada e abrir edição.
@@ -74,6 +80,11 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - T7.2 shellcheck e revisão: tudo em funções, sem dependências extras.
 - T7.3 Documentação de uso, formato de arquivos e ambientes.
 - T7.4 Teste ponta a ponta do fluxo completo.
+
+### Fase 8 — Extras (a detalhar ao final do projeto)
+- T8.1 Opções por request: `timeout`, `follow_redirects`, `insecure`.
+- T8.2 `data_string` e envio de arquivos / corpo bruto, com a regra de precedência em relação a `data_parameter`.
+- T8.3 Valores aninhados em `data_parameter` e `query` (objetos e listas).
 
 ## Arquivos críticos (a criar)
 `bin/req`, `lib/{core,ui,store,http,nav,cmd,env,log}.sh`, `tests/*`, `README.md`, `TASKS.md`.
