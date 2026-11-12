@@ -5,9 +5,14 @@ REQ_VERSION="0.1.0"
 REQ_REQUIRED_BASH_MAJOR=4
 REQ_REQUIRED_CMDS=(curl jq)
 
+# req_err <mensagem> - imprime erro em stderr sem encerrar o programa.
+req_err() {
+    printf 'req: erro: %s\n' "$*" >&2
+}
+
 # req_die <mensagem> - imprime erro em stderr e encerra com status 1.
 req_die() {
-    printf 'req: erro: %s\n' "$*" >&2
+    req_err "$@"
     exit 1
 }
 

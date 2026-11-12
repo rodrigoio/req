@@ -25,12 +25,15 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - [x] T0.3 Módulo utilitário: cores ANSI (verde GET, azul POST, laranja PUT, vermelho DELETE), mensagens de erro, restauração do terminal (`trap`).
 - [x] T0.4 README mínimo, manter `.gitignore` como está (ignora `manifest`), definir framework de testes (bats ou script próprio sem dependência).
 
+### Extra — Makefile (feito antes da Fase 2)
+- [x] `make test`, `make lint`, `make check`, `make install` e `make uninstall` (link simbólico em `~/.local/bin`, configurável via `PREFIX`/`BINDIR`).
+
 ### Fase 1 — Modelo de dados e persistência
-- T1.1 Formato `<nome>.<method>.json` com campos `name`, `method`, `headers`, `query`, `data_parameter`, `data_string`.
-- T1.2 Funções de leitura/escrita/validação do JSON via jq (o exemplo do manifest não tem vírgulas; o JSON gravado deve ser válido) e detecção de JSON inválido por edição manual, apenas reportando o erro.
-- T1.3 Arquivo `.req` do projeto: lista de diretórios que compõem o projeto; parser e localização no diretório atual.
-- T1.4 Listagem de um diretório distinguindo subdiretórios reais de arquivos de request.
-- T1.5 Testes das funções de persistência e listagem.
+- [x] T1.1 Formato `<nome>.<method>.json` com campos `name`, `method`, `headers`, `query`, `data_parameter`, `data_string`.
+- [x] T1.2 Funções de leitura/escrita/validação do JSON via jq (o exemplo do manifest não tem vírgulas; o JSON gravado deve ser válido) e detecção de JSON inválido por edição manual, apenas reportando o erro.
+- [x] T1.3 Arquivo `.req` do projeto: lista de diretórios que compõem o projeto; parser e localização no diretório atual.
+- [x] T1.4 Listagem de um diretório distinguindo subdiretórios reais de arquivos de request.
+- [x] T1.5 Testes das funções de persistência e listagem.
 
 ### Fase 2 — Execução de requisições (núcleo curl)
 - T2.1 Montar o comando curl a partir da request (url, querystring com encode, headers, body em `data_parameter` ou `data_string`).
@@ -69,7 +72,7 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 ### Fase 7 — Portabilidade, qualidade e entrega
 - T7.1 Validar em debian, centos e rhel (containers) com bash 4+.
 - T7.2 shellcheck e revisão: tudo em funções, sem dependências extras.
-- T7.3 Instalação (`install.sh` ou `make install`) e documentação de uso, formato de arquivos e ambientes.
+- T7.3 Documentação de uso, formato de arquivos e ambientes.
 - T7.4 Teste ponta a ponta do fluxo completo.
 
 ## Arquivos críticos (a criar)

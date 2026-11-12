@@ -18,6 +18,8 @@ main() {
     source "$REQ_HOME/lib/core.sh"
     # shellcheck source=../lib/ui.sh
     source "$REQ_HOME/lib/ui.sh"
+    # shellcheck source=../lib/store.sh
+    source "$REQ_HOME/lib/store.sh"
 
     case ${1-} in
         -v|--version) printf 'req %s\n' "$REQ_VERSION"; return 0 ;;
