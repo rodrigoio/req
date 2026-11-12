@@ -20,6 +20,8 @@ main() {
     source "$REQ_HOME/lib/ui.sh"
     # shellcheck source=../lib/store.sh
     source "$REQ_HOME/lib/store.sh"
+    # shellcheck source=../lib/http.sh
+    source "$REQ_HOME/lib/http.sh"
 
     case ${1-} in
         -v|--version) printf 'req %s\n' "$REQ_VERSION"; return 0 ;;
@@ -29,7 +31,16 @@ main() {
     req_check_deps
     req_setup_traps
 
-    printf 'req %s: navegação interativa ainda não implementada.\n' "$REQ_VERSION"
+    case ${1-} in
+        run)
+            [[ -n ${2-} ]] || req_die "uso: req run <arquivo.<método>.json>"
+            req_run_request "$2"
+            ;;
+        *)
+            printf 'req %s: navegação interativa ainda não implementada.\n' "$REQ_VERSION"
+            printf 'uso: req run <arquivo.<método>.json> | req --version\n'
+            ;;
+    esac
 }
 
 main "$@"

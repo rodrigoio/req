@@ -76,8 +76,13 @@ test_invalid_manual() {
     out=$(req_request_check "$d/f.get.json" 2>&1)
     assert_contains "raiz deve ser um objeto" "$out" "raiz não objeto"
 
+    printf '{"name":"h","method":"GET","url":42}\n' >"$d/h.get.json"
+    out=$(req_request_check "$d/h.get.json" 2>&1)
+    assert_contains '"url" deve ser texto' "$out" "url com tipo errado"
+
     printf '{"name":"g","method":"GET"}\n' >"$d/g.get.json"
     req_request_check "$d/g.get.json" 2>&1; assert_eq "0" "$?" "campos opcionais podem faltar"
+    assert_eq "" "$(req_request_get "$d/g.get.json" url 2>/dev/null)" "url ausente vira vazio"
 }
 
 test_project() {

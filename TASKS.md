@@ -29,18 +29,18 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - [x] `make test`, `make lint`, `make check`, `make install` e `make uninstall` (link simbólico em `~/.local/bin`, configurável via `PREFIX`/`BINDIR`).
 
 ### Fase 1 — Modelo de dados e persistência
-- [x] T1.1 Formato `<nome>.<method>.json` com campos `name`, `method`, `headers`, `query`, `data_parameter`, `data_string`.
+- [x] T1.1 Formato `<nome>.<method>.json` com campos `name`, `method`, `url`, `headers`, `query`, `data_parameter`, `data_string` (`url` acrescentada: o manifest a lista como feature, mas não a inclui no exemplo do JSON).
 - [x] T1.2 Funções de leitura/escrita/validação do JSON via jq (o exemplo do manifest não tem vírgulas; o JSON gravado deve ser válido) e detecção de JSON inválido por edição manual, apenas reportando o erro.
 - [x] T1.3 Arquivo `.req` do projeto: lista de diretórios que compõem o projeto; parser e localização no diretório atual.
 - [x] T1.4 Listagem de um diretório distinguindo subdiretórios reais de arquivos de request.
 - [x] T1.5 Testes das funções de persistência e listagem.
 
 ### Fase 2 — Execução de requisições (núcleo curl)
-- T2.1 Montar o comando curl a partir da request (url, querystring com encode, headers, body em `data_parameter` ou `data_string`).
-- T2.2 Executar e exibir resposta no terminal sem gravar arquivos (stdout/pipe), com formatação para JSON, texto e HTML.
-- T2.3 Perfil de tempo por etapa via `curl -w` (DNS, conexão, TLS, TTFB, total) exibido em barra horizontal por etapa.
-- T2.4 Separador visual (`---` ou `===`) entre resultado e o menu remontado.
-- T2.5 Testes com servidor local simples ou mock.
+- [x] T2.1 Montar o comando curl a partir da request (url, querystring com encode, headers, body em `data_parameter` ou `data_string`).
+- [x] T2.2 Executar e exibir resposta no terminal sem gravar arquivos (stdout/pipe), com formatação para JSON, texto e HTML.
+- [x] T2.3 Perfil de tempo por etapa via `curl -w` (DNS, conexão, TLS, TTFB, total) exibido em barra horizontal por etapa.
+- [x] T2.4 Separador visual (`---` ou `===`) entre resultado e o menu remontado.
+- [x] T2.5 Testes com servidor local simples ou mock.
 
 ### Fase 3 — Navegação interativa
 - T3.1 Loop infinito de menu: setas cima/baixo, Enter, Esc (captura de sequências de escape com `read -rsn`).

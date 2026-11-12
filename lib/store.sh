@@ -2,9 +2,9 @@
 # store.sh - persistência de requests (<nome>.<método>.json) e do arquivo .req.
 #
 # Formato de uma request:
-#   {"name": "...", "method": "GET", "headers": {}, "query": {},
+#   {"name": "...", "method": "GET", "url": "...", "headers": {}, "query": {},
 #    "data_parameter": {}, "data_string": ""}
-# `name` e `method` são obrigatórios; os demais campos são opcionais.
+# `name` e `method` são obrigatórios; os demais são opcionais (`url` é exigida ao executar).
 
 REQ_METHODS=(GET POST PUT DELETE)
 REQ_PROJECT_FILE=.req
@@ -61,6 +61,7 @@ req_request_check() {
         else
             (if (.name | type) != "string" or .name == "" then "campo \"name\" obrigatório (texto)" else empty end),
             (if (.method | type) != "string" then "campo \"method\" obrigatório (texto)" else empty end),
+            (.url            // "" | if type != "string" then "campo \"url\" deve ser texto" else empty end),
             (.headers        // {} | if type != "object" then "campo \"headers\" deve ser objeto" else empty end),
             (.query          // {} | if type != "object" then "campo \"query\" deve ser objeto" else empty end),
             (.data_parameter // {} | if type != "object" then "campo \"data_parameter\" deve ser objeto" else empty end),
@@ -90,7 +91,7 @@ req_request_check() {
 # req_request_template <nome> <método> - imprime uma request vazia em JSON.
 req_request_template() {
     jq -n --arg name "$1" --arg method "${2^^}" '{
-        name: $name, method: $method,
+        name: $name, method: $method, url: "",
         headers: {}, query: {}, data_parameter: {}, data_string: ""
     }'
 }
@@ -117,7 +118,7 @@ req_request_write() {
 }
 
 # req_request_get <arquivo> <campo> - imprime o valor de um campo (texto cru).
-# Campos ausentes viram {} (headers, query, data_parameter) ou vazio.
+# Campos ausentes viram {} (headers, query, data_parameter) ou vazio (url, data_string).
 req_request_get() {
     case $2 in
         headers|query|data_parameter) jq -c --arg f "$2" '.[$f] // {}' "$1" ;;
