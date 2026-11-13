@@ -9,6 +9,7 @@ REQ_RESP_STATUS=""      # HTTP status code of the last response
 REQ_RESP_CTYPE=""       # Content-Type of the last response
 REQ_RESP_TIMES=()       # dns connect tls pretransfer ttfb total (seconds, cumulative)
 REQ_BAR_WIDTH=30
+REQ_VERBOSE=${REQ_VERBOSE:-0}   # 1: show what is sent (>>) and received (<<); :v toggles it
 
 # Metadata appended by curl at the end of the output; the Content-Type goes last
 # because it can contain any character except a line break.
@@ -200,6 +201,28 @@ req_print_body() {
     printf '%s\n' "$body"
 }
 
+# req_verbose_on - succeeds when the verbose mode is on.
+req_verbose_on() {
+    [[ $REQ_VERBOSE == 1 ]]
+}
+
+# req_verbose_request - with the verbose mode on, shows the data sent (set by
+# req_build_curl_args), one ">>" line per form field or per line of raw_data. Prints
+# nothing without data (a GET, or no parameters and no raw_data).
+req_verbose_request() {
+    local line
+    req_verbose_on || return 0
+    {
+        if (( REQ_P_RAWSET )); then
+            printf '%s\n' "$REQ_BODY"
+        else
+            for line in "${REQ_P_FORM[@]}"; do printf '%s\n' "$line"; done
+        fi
+    } | while IFS= read -r line || [[ -n $line ]]; do
+        req_color dim; printf '>>'; req_color reset; printf ' %s\n' "${line%$'\r'}"
+    done
+}
+
 # req_run_request <file> - validates, runs and shows: response, timing profile
 # and a line of "=" that separates the result from the menu redrawn after it. Before
 # sending, every ${key} in the url, headers, query, parameters and raw_data is replaced
@@ -218,6 +241,7 @@ req_run_request() {
 
     req_method_color "$REQ_P_METHOD"; printf '%s' "$REQ_P_METHOD"; req_color reset
     printf ' %s\n' "$REQ_P_URL"
+    req_verbose_request
 
     req_curl_exec; status=$?
     if (( status != 0 )); then

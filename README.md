@@ -163,6 +163,10 @@ Settings are `key=value` lines in two files: `~/.req/projects/<id>/config` (or u
 
 The position is saved per project in `~/.req/projects/<id>/cursor` when you leave (`:q`, end of input, Ctrl-C). If the directory or the item is gone when you come back, `req` falls back to the nearest existing directory or to the first item.
 
+## Verbose
+
+With `REQ_VERBOSE=1` in the environment, `req` also shows the data it sends: right under the `METHOD url` line, every form field of `parameters` (`a=1`) or every line of `raw_data` gets a dim `>>` in front. A request without data shows nothing extra. Values are the real ones, after `${key}` is replaced. The received response is added in a later step (T6.5), and `:v` will switch the mode inside the menu (T6.6).
+
 ## Log
 
 With `log=yes` (`:config log=yes` for the project, `:config -g log=yes` for every project; the default is `no`) each request that runs is appended to `~/.req/projects/<id>/req.log`, just before it is sent. A line per request, in plain text, with line breaks inside a value written as `\n`:

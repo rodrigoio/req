@@ -250,6 +250,30 @@ test_execute() {
     unset DEFAULT_BASE DEFAULT_TOK
     if [[ -n $saved_cfg ]]; then export REQ_CONFIG_DIR=$saved_cfg; else unset REQ_CONFIG_DIR; fi
 
+    # Verbose: the data sent, with >> (T6.4).
+    export DEFAULT_BASE=$base DEFAULT_TOK=s3cret
+    # shellcheck disable=SC2016  # the placeholders are single-quoted on purpose
+    printf '{"name":"form","method":"POST","url":"${base}/echo","parameters":{"a":"1","b":"two words"}}\n' >"$TMP/form.post.json"
+    # shellcheck disable=SC2016  # the placeholders are single-quoted on purpose
+    printf '{"name":"multi","method":"PUT","url":"${base}/echo","raw_data":"line one\\nline two"}\n' >"$TMP/multi.put.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" 2>&1)
+    [[ $out != *'>>'* ]]; assert_eq "0" "$?" "verbose off: nothing is marked with >>"
+    REQ_VERBOSE=1
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" 2>&1)
+    assert_contains '>> {"who":"s3cret"}' "$out" "verbose on: raw_data is shown with its substituted values"
+    assert_eq "POST $base/echo" "$(head -n 1 <<<"$out")" "after the method and url"
+    assert_eq '>> {"who":"s3cret"}' "$(sed -n 2p <<<"$out")" "and before the response"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/form.post.json" 2>&1)
+    assert_contains $'>> a=1\n>> b=two words' "$out" "parameters are shown one per line"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/multi.put.json" 2>&1)
+    assert_contains $'>> line one\n>> line two' "$out" "each line of a multi-line body has its own >>"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/users.get.json" 2>&1)
+    [[ $out != *'>>'* ]]; assert_eq "0" "$?" "a request without data shows none"
+    out=$(REQ_COLORS=1 COLUMNS=20 req_run_request "$TMP/form.post.json" 2>&1 | grep -c $'\033\[2m>>')
+    assert_eq "2" "$out" "with colors every marker is dim"
+    REQ_VERBOSE=0
+    unset DEFAULT_BASE DEFAULT_TOK
+
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"
     assert_contains '"url"' "$out" "tells how to set the url"
