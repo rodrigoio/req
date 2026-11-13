@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Tests for lib/env.sh.
+# shellcheck disable=SC2016  # the ${key} placeholders are single-quoted on purpose
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$ROOT/tests/helpers.sh"
@@ -101,7 +102,7 @@ test_legacy() {
 test_resolve() {
     echo "env: resolving a key"
     local out
-    rm -rf "$REQ_CONFIG_DIR/env"       # the old secrets.json of the previous test
+    rm -f "$REQ_CONFIG_DIR/env/dev/secrets.json"       # left by the previous test
     rm -f "$REQ_CONFIG_DIR/projects/$ID/vars"
     varsfile $'region=eu\ntoken=from-vars\nonly_vars=v'
     envfile dev $'url=http://dev\ntoken=from-env\nempty='
@@ -135,9 +136,52 @@ test_resolve() {
     req_resolve_key dev url; assert_eq "1" "$?" "without loaded variables only the process variable can answer"
 }
 
+test_subst() {
+    echo "env: substituting \${key}"
+    local err
+    varsfile $'region=eu\ntoken=from-vars'
+    envfile dev $'url=http://dev\nsecret=s3'
+    req_secrets_load dev $ID
+
+    req_subst 'GET ${url}/users?r=${region}' dev $ID; assert_eq "0" "$?" "a text with known keys is substituted"
+    assert_eq "GET http://dev/users?r=eu" "$REQ_SUBST_OUT" "every placeholder is replaced"
+    req_subst 'no placeholders here' dev $ID
+    assert_eq "no placeholders here" "$REQ_SUBST_OUT" "a text without placeholders is unchanged"
+    req_subst '' dev $ID; assert_eq "0|" "$?|$REQ_SUBST_OUT" "an empty text stays empty"
+    req_subst '${url}${url}' dev $ID; assert_eq "http://devhttp://dev" "$REQ_SUBST_OUT" "a repeated key and adjacent placeholders"
+    req_subst $'a\n${region}\n\n' dev $ID; assert_eq $'a\neu\n\n' "$REQ_SUBST_OUT" "line breaks, including the trailing ones, are kept"
+    req_subst '{"k":"${secret}","n":1}' dev $ID; assert_eq '{"k":"s3","n":1}' "$REQ_SUBST_OUT" "it works inside JSON text"
+
+    req_subst 'price $5 and ${not valid} and ${} and $${url} and ${1x}' dev $ID
+    assert_eq 'price $5 and ${not valid} and ${} and $http://dev and ${1x}' "$REQ_SUBST_OUT" "only a valid name in braces is a placeholder; the rest is untouched"
+
+    export DEV_LOOP='${url}'
+    req_subst 'x=${loop}' dev $ID; assert_eq 'x=${url}' "$REQ_SUBST_OUT" "a value is not expanded again"
+    unset DEV_LOOP
+    export DEV_TOKEN=from-process
+    req_subst '${token}' dev $ID; assert_eq "from-process" "$REQ_SUBST_OUT" "the usual precedence applies"
+    unset DEV_TOKEN
+
+    err=$(req_subst 'a ${missing} b ${url} ${other} c ${missing}' dev $ID 2>&1 >/dev/null); assert_eq "1" "$?" "missing keys fail"
+    req_subst 'a ${missing} b ${url} ${other} c ${missing}' dev $ID 2>/dev/null
+    assert_eq "" "$REQ_SUBST_OUT" "and nothing is produced"
+    assert_contains 'req: error: no value for missing, other in environment "dev"' "$err" "the error lists each missing key once, in order"
+    assert_contains "missing: set the variable DEV_MISSING, or add missing=... to $REQ_CONFIG_DIR/projects/$ID/env/dev" "$err" "and says what to define and where"
+    assert_contains "(or $REQ_CONFIG_DIR/projects/$ID/vars for every environment)" "$err" "including the variables of the project"
+    assert_contains "other: set the variable DEV_OTHER" "$err" "for every missing key"
+    err=$(req_subst '${x}' pre-prod $ID 2>&1); assert_contains "PRE_PROD_X" "$err" "the variable name follows the environment"
+    err=$(req_subst '${x}' dev "" 2>&1)
+    assert_contains "set the variable DEV_X" "$err" "without a project only the variable is suggested"
+    [[ $err != *"add x=..."* ]]; assert_eq "0" "$?" "and no file"
+    REQ_PROJECT_ID=$ID; err=$(req_subst '${x}' dev 2>&1)
+    assert_contains "env/dev" "$err" "the project defaults to REQ_PROJECT_ID"
+    REQ_PROJECT_ID=""
+}
+
 test_paths
 test_load
 test_invalid
 test_legacy
 test_resolve
+test_subst
 test_summary
