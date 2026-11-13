@@ -98,8 +98,46 @@ test_legacy() {
     out=$(req_secrets_load prod $ID 2>&1); assert_not_contains "no longer read" "$out" "other environments are not warned about"
 }
 
+test_resolve() {
+    echo "env: resolving a key"
+    local out
+    rm -rf "$REQ_CONFIG_DIR/env"       # the old secrets.json of the previous test
+    rm -f "$REQ_CONFIG_DIR/projects/$ID/vars"
+    varsfile $'region=eu\ntoken=from-vars\nonly_vars=v'
+    envfile dev $'url=http://dev\ntoken=from-env\nempty='
+    req_secrets_load dev $ID
+
+    assert_eq "DEV_URL" "$(req_env_var_name dev url)" "the variable name is ENV_KEY in capitals"
+    assert_eq "PRE_PROD_TOKEN" "$(req_env_var_name pre-prod token)" "hyphens of the environment become underscores"
+    assert_eq "DEV_MY_KEY" "$(req_env_var_name dev my_key)" "underscores in the key stay"
+
+    assert_eq "http://dev" "$(req_resolve_key dev url)" "a key of the environment file"
+    assert_eq "eu" "$(req_resolve_key dev region)" "a key only the project variables define"
+    assert_eq "from-env" "$(req_resolve_key dev token)" "the environment file wins over the project variables"
+    out=$(req_resolve_key dev empty); assert_eq "0|" "$?|$out" "an empty value is a value"
+    out=$(req_resolve_key dev missing); assert_eq "1|" "$?|$out" "an undefined key fails and prints nothing"
+
+    export DEV_TOKEN=from-process DEV_URL=""
+    assert_eq "from-process" "$(req_resolve_key dev token)" "a process variable wins over the files"
+    out=$(req_resolve_key dev url); assert_eq "0|" "$?|$out" "even an empty process variable wins"
+    export DEV_ONLY_PROCESS=p
+    assert_eq "p" "$(req_resolve_key dev only_process)" "and it can define a key by itself"
+    unset DEV_TOKEN DEV_URL DEV_ONLY_PROCESS
+
+    export PROD_TOKEN=prod-process
+    assert_eq "from-env" "$(req_resolve_key dev token)" "the variable of another environment is ignored"
+    unset PROD_TOKEN
+    assert_eq "from-env" "$(req_resolve_key dev token)" "unsetting it restores the file value"
+
+    req_resolve_key dev "bad key"; assert_eq "1" "$?" "a key that is not a valid name fails"
+    req_resolve_key dev ""; assert_eq "1" "$?" "an empty key fails"
+    REQ_SECRETS=()
+    req_resolve_key dev url; assert_eq "1" "$?" "without loaded variables only the process variable can answer"
+}
+
 test_paths
 test_load
 test_invalid
 test_legacy
+test_resolve
 test_summary

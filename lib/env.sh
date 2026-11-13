@@ -63,3 +63,29 @@ req_secrets_load() {
     for k in "${!loaded[@]}"; do REQ_SECRETS[$k]=${loaded[$k]}; done
     return 0
 }
+
+# req_env_var_name <env> <key> - the name of the process variable that overrides a key in
+# an environment: both in capitals, hyphens of the environment turned into underscores
+# ("dev" and "url" give DEV_URL, "pre-prod" and "token" give PRE_PROD_TOKEN).
+req_env_var_name() {
+    local env=${1^^} key=${2^^}
+    printf '%s_%s' "${env//-/_}" "$key"
+}
+
+# req_resolve_key <env> <key> - prints the value of a key for an environment and succeeds,
+# or fails (printing nothing) when nothing defines it. Precedence: the process variable
+# <ENV>_<KEY> (req_env_var_name), then the environment file, then the project variables;
+# the last two come from REQ_SECRETS, so req_secrets_load <env> must have run for that
+# environment. A set but empty process variable counts as a value.
+req_resolve_key() {
+    local env=$1 key=$2 name
+    req_kv_valid_key "$key" || return 1
+    name=$(req_env_var_name "$env" "$key")
+    if [[ -n ${!name+x} ]]; then
+        printf '%s\n' "${!name}"
+    elif [[ -n ${REQ_SECRETS[$key]+x} ]]; then
+        printf '%s\n' "${REQ_SECRETS[$key]}"
+    else
+        return 1
+    fi
+}
