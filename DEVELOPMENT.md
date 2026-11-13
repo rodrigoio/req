@@ -14,7 +14,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR2.1** (`key=value` file helpers). Review 2 changes where environments live (one
+Next task: **TR2.2** (central directory and `current` pointer; TR2.1, the `key=value` helpers, is done). Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
 
@@ -132,11 +132,20 @@ Descendants listed in the `.req` are not cleaned up (same limit as the rename).
 - Outside a terminal nothing is erased and no colors are used, which is what the
   tests rely on.
 
+`key=value` files (`lib/home.sh`, TR2.1): everything in `~/.req` is made of them. `req_kv_get`,
+`req_kv_list`, `req_kv_check`, `req_kv_set` and `req_kv_unset` take the file as the first argument.
+One `key=value` per line, key `[A-Za-z_][A-Za-z0-9_]*`, value = the rest after the first `=` (it may
+contain `=`), trimmed, one line, no quotes. Blank lines and `#` lines are ignored; a duplicated
+key is won by its first line and `req_kv_set` keeps only that one. Writes keep comments, blank
+lines and order, rewrite the file in place (mode and symlinks survive) and create new files as
+0600 inside 0700 directories. `req_kv_check` reports bad lines with absolute path and line number;
+get and list silently skip them, so callers that want to complain call check first.
+
 ## Testing
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 710 asserts at the time of writing.
+`assert_contains`, `test_summary`). 750 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

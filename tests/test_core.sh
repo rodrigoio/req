@@ -64,7 +64,7 @@ test_editor() {
     assert_eq "raw_data.json" "$(<"$TMP/name")" "the temporary file carries the suffix"
     assert_eq '{"a":1}' "$(<"$TMP/seen")" "the editor sees the initial text"
     assert_eq "0" "$(find "$TMP/ed-tmp" -mindepth 1 | wc -l)" "the temporary files are removed"
-    VISUAL="$bin/spy --" req_edit_text 'x'
+    VISUAL="env REQ_X=1 $bin/spy" req_edit_text 'x'
     assert_eq "0" "$?" "an editor command with arguments works"
     VISUAL="$bin/spy" req_edit_text ''
     assert_eq "" "$REQ_EDIT_TEXT" "an emptied text comes back empty"

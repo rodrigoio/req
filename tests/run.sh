@@ -6,7 +6,9 @@ main() {
     dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
     for t in "$dir"/test_*.sh; do
         printf '== %s\n' "$(basename "$t")"
-        bash "$t" || failed=1
+        # stdin is closed on purpose: a test that waits for the keyboard (an editor, a
+        # prompt) must fail instead of hanging the whole run.
+        bash "$t" </dev/null || failed=1
     done
     return "$failed"
 }
