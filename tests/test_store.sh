@@ -83,7 +83,7 @@ test_write_read() {
 
 test_invalid_manual() {
     echo "store: manually edited JSON"
-    local d=$TMP/m out before after
+    local d=$TMP/m out before after v
     mkdir -p "$d"
     printf '{"name": "a" "method": "GET"}\n' >"$d/a.get.json"
     before=$(cat "$d/a.get.json")
@@ -141,7 +141,15 @@ test_invalid_manual() {
     printf '{"name":"o","method":"POST","url":"http://x","data_parameter":{"a":"1"}}\n' >"$d/o.post.json"
     assert_contains '"data_parameter" was renamed to "parameters"' "$(check_out "$d/o.post.json")" "the old name points to the new one"
     printf '{"name":"l","method":"POST","url":"http://x","data_string":"x"}\n' >"$d/l.post.json"
-    assert_contains '"data_string" is not supported yet' "$(check_out "$d/l.post.json")" "data_string is reserved"
+    assert_contains '"data_string" was renamed to "raw_data"' "$(check_out "$d/l.post.json")" "the old data_string points to raw_data"
+    for v in '{"a":{"b":[1]}}' '[1,"x"]' '"free text"' '""'; do
+        printf '{"name":"r","method":"POST","url":"http://x","raw_data":%s}\n' "$v" >"$d/r.post.json"
+        assert_eq "0" "$(req_request_check "$d/r.post.json" 2>/dev/null; echo $?)" "raw_data $v is valid"
+    done
+    for v in 5 true null; do
+        printf '{"name":"r","method":"POST","url":"http://x","raw_data":%s}\n' "$v" >"$d/r.post.json"
+        assert_contains 'must be an object, a list or a string' "$(check_out "$d/r.post.json")" "raw_data $v is invalid"
+    done
 
     printf '{"name":"m","method":"GET","url":"http://x","description":5}\n' >"$d/m.get.json"
     assert_contains '"description" must be a string' "$(check_out "$d/m.get.json")" "description with a wrong type"

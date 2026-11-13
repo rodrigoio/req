@@ -3,13 +3,14 @@
 #
 # Request format:
 #   {"name": "list-users", "method": "GET", "url": "https://api/users",
-#    "description": "...", "headers": {}, "query": {}, "parameters": {}}
+#    "description": "...", "headers": {}, "query": {}, "parameters": {}, "raw_data": ...}
 #
 # - `name` is a slug (lowercase letters, digits and hyphens) identical to the
 #   file name; it is also the label shown in the menu.
 # - `name`, `method` and `url` are required; the other fields are optional.
 # - headers, query and parameters are objects with simple values (string,
 #   number or boolean).
+# - raw_data is the raw body: an object or list (JSON) or a string (any other text).
 # Any unknown field or wrong type invalidates the request; the file is never
 # changed, the error is only reported.
 
@@ -25,12 +26,12 @@ def check_map($lbl; $item):
     if type != "object" then "field \"\($lbl)\" must be an object"
     else to_entries[] | select((.value | scalar) | not)
          | "\($item) \"\(.key)\": the value must be a string, number or boolean" end;
-["name", "method", "url", "description", "headers", "query", "parameters"] as $allowed
+["name", "method", "url", "description", "headers", "query", "parameters", "raw_data"] as $allowed
 | if type != "object" then "the root must be an object"
   else
     (keys[] | select(. as $k | $allowed | index($k) | not)
         | if . == "data_parameter" then "field \"data_parameter\" was renamed to \"parameters\""
-          elif . == "data_string" then "field \"data_string\" is not supported yet"
+          elif . == "data_string" then "field \"data_string\" was renamed to \"raw_data\""
           else "unknown field \"\(.)\" (allowed: \($allowed | join(", ")))" end),
     (if (.name | type) != "string" then "field \"name\" is required (string)"
      elif (.name | test("^[a-z0-9]+(-[a-z0-9]+)*$") | not)
@@ -52,7 +53,9 @@ def check_map($lbl; $item):
          else empty end)
      else empty end),
     (if has("query") then (.query | check_map("query"; "query")) else empty end),
-    (if has("parameters") then (.parameters | check_map("parameters"; "parameters")) else empty end)
+    (if has("parameters") then (.parameters | check_map("parameters"; "parameters")) else empty end),
+    (if has("raw_data") and ((.raw_data | type) as $t | $t != "object" and $t != "array" and $t != "string")
+         then "field \"raw_data\" must be an object, a list or a string" else empty end)
   end'
 
 # req_valid_method <method> - succeeds for a supported method (any case).

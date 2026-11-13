@@ -14,14 +14,18 @@ REQ_BAR_WIDTH=30
 # because it can contain any character except a line break.
 REQ_CURL_FORMAT=$'\n%{http_code}|%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_pretransfer}|%{time_starttransfer}|%{time_total}|%{content_type}'
 
-# Request preparation in a single jq call, as "tag NUL value NUL" records:
-# method, url with the url-encoded querystring, headers and body. The body (only
-# for POST, PUT and PATCH) comes out as compact JSON and as key=value form pairs.
+# Request preparation in a single jq call, as "tag NUL value NUL" records: method,
+# url with the url-encoded querystring, headers and body. The body exists only for
+# POST, PUT and PATCH. A non-empty raw_data (object, list or non-empty string) is the
+# body ("raw", plus "rawjson" when it was an object or list) and wins over parameters,
+# which otherwise come out as key=value form pairs.
 # shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
 REQ_PREPARE_JQ='
 ((.method // "") | ascii_upcase) as $m
 | (.headers // {}) as $h
 | (.parameters // {}) as $d
+| (.raw_data // "") as $r
+| ($m == "POST" or $m == "PUT" or $m == "PATCH") as $body
 | (["method", $m],
    ["url", ((.url // "") as $u
             | ((.query // {}) | to_entries
@@ -30,31 +34,31 @@ REQ_PREPARE_JQ='
               elif ($u | contains("?")) then $u + "&" + $q
               else $u + "?" + $q end)],
    ($h | to_entries[] | ["header", "\(.key): \(.value)"]),
-   ["jsontype", ($h | to_entries
-                 | any((.key | ascii_downcase) == "content-type"
-                       and (.value | tostring | ascii_downcase | contains("json")))
-                 | tostring)],
-   (if ($m == "POST" or $m == "PUT" or $m == "PATCH") and ($d | length) > 0
-    then ["bodyjson", ($d | tojson)],
-         ($d | to_entries[] | ["form", "\(.key)=\(.value | tostring)"])
+   ["hasctype", ($h | keys | any(ascii_downcase == "content-type") | tostring)],
+   (if $body and $r != "" then
+        ["raw", (if ($r | type) == "string" then $r else ($r | tojson) end)],
+        ["rawjson", (($r | type) != "string" | tostring)]
+    elif $body and ($d | length) > 0 then
+        ($d | to_entries[] | ["form", "\(.key)=\(.value | tostring)"])
     else empty end))
 | .[] | (., "\u0000")'
 
-REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_JSONTYPE=false
-REQ_P_BODYJSON=""; REQ_P_FORM=()
+REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
+REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=()
 
 # req_prepare_request <json> - fills REQ_P_* from the request. Fails without a url.
 req_prepare_request() {
     local tag val
-    REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_JSONTYPE=false
-    REQ_P_BODYJSON=""; REQ_P_FORM=()
+    REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
+    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=()
     while IFS= read -r -d '' tag && IFS= read -r -d '' val; do
         case $tag in
             method)   REQ_P_METHOD=$val ;;
             url)      REQ_P_URL=$val ;;
             header)   REQ_P_HEADERS+=("$val") ;;
-            jsontype) REQ_P_JSONTYPE=$val ;;
-            bodyjson) REQ_P_BODYJSON=$val ;;
+            hasctype) REQ_P_HASCTYPE=$val ;;
+            raw)      REQ_P_RAW=$val; REQ_P_RAWSET=1 ;;
+            rawjson)  REQ_P_RAWJSON=$val ;;
             form)     REQ_P_FORM+=("$val") ;;
         esac
     done < <(jq -j "$REQ_PREPARE_JQ" <<<"$1")
@@ -71,10 +75,11 @@ req_build_url() {
 }
 
 # req_build_curl_args <json> - fills REQ_P_*, REQ_CURL_ARGS and REQ_BODY.
-# Body (POST, PUT and PATCH only): parameters, sent as JSON if the Content-Type
-# is JSON, or as an url-encoded form otherwise. The JSON body goes through stdin
-# and the form uses "key=value", so values starting with "@" are never read as
-# files by curl.
+# Body (POST, PUT and PATCH only): a non-empty raw_data is sent as it is, through
+# stdin; an object or list gets "Content-Type: application/json" when the request
+# has no Content-Type, and free text gets none (curl'"'"'s default one is removed).
+# Without raw_data, parameters are sent as an url-encoded form, always. The form
+# uses "key=value", so values starting with "@" are never read as files by curl.
 req_build_curl_args() {
     local line
     req_prepare_request "$1" || return 1
@@ -89,15 +94,20 @@ req_build_curl_args() {
         REQ_CURL_ARGS+=(-H "$line")
     done
 
-    if [[ -n $REQ_P_BODYJSON ]]; then
-        if [[ $REQ_P_JSONTYPE == true ]]; then
-            REQ_BODY=$REQ_P_BODYJSON
-            REQ_CURL_ARGS+=(--data-binary @-)
-        else
-            for line in "${REQ_P_FORM[@]}"; do
-                REQ_CURL_ARGS+=(--data-urlencode "$line")
-            done
+    if (( REQ_P_RAWSET )); then
+        REQ_BODY=$REQ_P_RAW
+        REQ_CURL_ARGS+=(--data-binary @-)
+        if [[ $REQ_P_HASCTYPE != true ]]; then
+            if [[ $REQ_P_RAWJSON == true ]]; then
+                REQ_CURL_ARGS+=(-H "Content-Type: application/json")
+            else
+                REQ_CURL_ARGS+=(-H "Content-Type:")
+            fi
         fi
+    else
+        for line in "${REQ_P_FORM[@]}"; do
+            REQ_CURL_ARGS+=(--data-urlencode "$line")
+        done
     fi
     REQ_CURL_ARGS+=("$REQ_P_URL")
 }

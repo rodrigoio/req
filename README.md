@@ -113,10 +113,14 @@ Each request is a file `<slug>.<method>.json` (methods: GET, POST, PUT, PATCH, D
 }
 ```
 
-- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query` and `parameters`.
+- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters` and `raw_data`.
 - `headers`, `query` and `parameters` are objects with simple values (string, number or boolean).
 - `query` is appended to the url, url-encoded.
-- Body (sent only with POST, PUT and PATCH): `parameters` is sent as JSON when the `Content-Type` header contains `json`, and as an url-encoded form otherwise.
+- `raw_data` is the raw body: an object or list (JSON) or a string (any other text).
+- Body (sent only with POST, PUT and PATCH; GET and DELETE never send one):
+  - `parameters` are form fields, always sent url-encoded.
+  - A non-empty `raw_data` is sent as it is and wins over `parameters`. An object or list is sent as compact JSON, with `Content-Type: application/json` unless the request already sets a `Content-Type`; free text gets no automatic `Content-Type`. An empty string means no raw body.
+  - Files with the old names `data_parameter` and `data_string` are not migrated; the validation points to the new names.
 - Unknown fields or fields with a wrong type invalidate the request.
 
 Subdirectories of the project are real directories.

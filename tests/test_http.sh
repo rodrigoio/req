@@ -47,12 +47,33 @@ test_args() {
     has_arg -X && has_arg PATCH && has_arg "a=@/etc/passwd"; assert_eq "0" "$?" "PATCH; a value with @ stays literal"
 
     req_build_curl_args '{"method":"POST","url":"http://x","headers":{"content-type":"application/json"},"parameters":{"a":1,"b":"x"}}'
-    assert_eq '{"a":1,"b":"x"}' "$REQ_BODY" "parameters becomes JSON with a JSON Content-Type"
+    has_arg --data-urlencode && has_arg "a=1" && has_arg "b=x"
+    assert_eq "0" "$?" "parameters is a form even with a JSON Content-Type"
+    assert_eq "" "$REQ_BODY" "and does not use stdin"
 
     req_build_curl_args '{"method":"PUT","url":"http://x","parameters":{"a":1,"b":"x y"}}'
     has_arg --data-urlencode && has_arg "a=1" && has_arg "b=x y"
-    assert_eq "0" "$?" "parameters becomes a form without a JSON Content-Type"
+    assert_eq "0" "$?" "parameters becomes a form"
     assert_eq "" "$REQ_BODY" "a form does not use stdin"
+
+    # raw_data: object, list or string; wins over parameters.
+    req_build_curl_args '{"method":"POST","url":"http://x","raw_data":{"a":[1,2],"b":"x"},"parameters":{"p":1}}'
+    assert_eq '{"a":[1,2],"b":"x"}' "$REQ_BODY" "an object raw_data is the body, as compact JSON"
+    has_arg --data-binary && has_arg "Content-Type: application/json"; assert_eq "0" "$?" "JSON without a Content-Type is sent as application/json"
+    has_arg --data-urlencode; assert_eq "1" "$?" "raw_data takes precedence over parameters"
+    req_build_curl_args '{"method":"PUT","url":"http://x","raw_data":[1,{"a":2}]}'
+    assert_eq '[1,{"a":2}]' "$REQ_BODY" "a list raw_data is the body"
+    req_build_curl_args '{"method":"POST","url":"http://x","headers":{"content-type":"application/vnd.api+json"},"raw_data":{"a":1}}'
+    has_arg "Content-Type: application/json"; assert_eq "1" "$?" "an existing Content-Type is kept (no extra header)"
+    req_build_curl_args '{"method":"PATCH","url":"http://x","raw_data":"line 1\nline 2\n"}'
+    assert_eq $'line 1\nline 2\n' "$REQ_BODY" "a string raw_data is sent as it is"
+    has_arg "Content-Type:" && ! has_arg "Content-Type: application/json"; assert_eq "0" "$?" "free text gets no automatic Content-Type"
+    req_build_curl_args '{"method":"POST","url":"http://x","headers":{"Content-Type":"text/plain"},"raw_data":"hi"}'
+    has_arg "Content-Type:"; assert_eq "1" "$?" "free text with its own Content-Type adds nothing"
+    req_build_curl_args '{"method":"POST","url":"http://x","raw_data":"","parameters":{"p":"1"}}'
+    has_arg --data-urlencode && has_arg "p=1"; assert_eq "0" "$?" "an empty raw_data falls back to parameters"
+    req_build_curl_args '{"method":"GET","url":"http://x","raw_data":{"a":1}}'
+    has_arg --data-binary; assert_eq "1" "$?" "GET sends no raw_data"
 }
 
 test_timing() {
@@ -113,8 +134,13 @@ test_execute() {
     assert_eq "ola" "$(jq -r .x_test <<<"$REQ_RESP_BODY")" "header arrived"
     assert_eq "6" "${#REQ_RESP_TIMES[@]}" "six timings captured"
 
-    req_execute "{\"method\":\"POST\",\"url\":\"$base/p\",\"headers\":{\"Content-Type\":\"application/json\"},\"parameters\":{\"a\":1}}"
-    assert_eq '{"a":1}' "$(jq -r .body <<<"$REQ_RESP_BODY")" "POST with a JSON body"
+    req_execute "{\"method\":\"POST\",\"url\":\"$base/p\",\"raw_data\":{\"a\":1}}"
+    assert_eq '{"a":1}' "$(jq -r .body <<<"$REQ_RESP_BODY")" "POST with a JSON raw_data"
+    assert_eq "application/json" "$(jq -r .content_type <<<"$REQ_RESP_BODY")" "the JSON content-type arrived"
+
+    req_execute "{\"method\":\"POST\",\"url\":\"$base/p\",\"raw_data\":\"a=1&b\"}"
+    assert_eq 'a=1&b' "$(jq -r .body <<<"$REQ_RESP_BODY")" "POST with a text raw_data"
+    assert_eq "" "$(jq -r '.content_type // ""' <<<"$REQ_RESP_BODY")" "free text arrives without a content-type"
 
     req_execute "{\"method\":\"PUT\",\"url\":\"$base/p\",\"parameters\":{\"k\":\"v 1\"}}"
     # curl versions differ: a space comes out as %20 or +; both are valid.

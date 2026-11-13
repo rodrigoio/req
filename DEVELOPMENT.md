@@ -13,7 +13,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR.4** (`raw_data`: format and sending; TR.1 to TR.3 are done). Phase 5 resumes at T5.2 after TR.15. See
+Next task: **TR.5** (details screen shows `raw_data`; TR.1 to TR.4 are done). Phase 5 resumes at T5.2 after TR.15. See
 "Review 1 findings" below.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
@@ -50,13 +50,15 @@ Running a request: `req_run_request` → `req_request_check` (validate) →
 
 `<slug>.<method>.json` (GET, POST, PUT, PATCH, DELETE); `name` equals the slug and is
 the menu label. Required: `name`, `method`, `url`. Optional: `description`, `headers`,
-`query`, `parameters` (objects of simple values). Unknown or mistyped fields
-invalidate the request; invalid files are reported, never rewritten. `data_string` is
-reserved (Phase 8). The body is only sent with POST, PUT and PATCH.
-
-`data_parameter` was renamed `parameters` (TR.3; the old name is a validation error that
-points to the new one, files are not migrated). `raw_data` replaces the reserved
-`data_string` in TR.4, which updates this section.
+`query`, `parameters` (objects of simple values), `raw_data` (object, list or string). Unknown or mistyped fields
+invalidate the request; invalid files are reported, never rewritten. The body is only
+sent with POST, PUT and PATCH. A non-empty `raw_data` is the body and wins over
+`parameters`, which are always an url-encoded form (TR.4). An object or list is sent as
+compact JSON, with `Content-Type: application/json` only when the request has no
+`Content-Type` header; a string is sent as it is with no automatic header (curl's
+default one is removed with `-H "Content-Type:"`). The old names `data_parameter` and
+`data_string` are validation errors that point to `parameters` and `raw_data`; files are
+not migrated.
 
 ## Conventions
 
@@ -79,7 +81,7 @@ points to the new one, files are not migrated). `raw_data` replaces the reserved
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 479 asserts at the time of writing.
+`assert_contains`, `test_summary`). 500 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed
