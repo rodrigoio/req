@@ -115,9 +115,17 @@ req_restore_terminal() {
     return 0
 }
 
+REQ_EXIT_HOOK=""        # function to run first when the process exits (the menu saves its cursor)
+
+# req_on_exit - the EXIT trap: runs the hook, if any, then restores the terminal.
+req_on_exit() {
+    [[ -z $REQ_EXIT_HOOK ]] || "$REQ_EXIT_HOOK"
+    req_restore_terminal
+}
+
 # req_setup_traps - restores the terminal on normal exit, error or signal.
 req_setup_traps() {
-    trap req_restore_terminal EXIT
+    trap req_on_exit EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
 }

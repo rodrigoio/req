@@ -156,6 +156,25 @@ test_current() {
     req_current_get >/dev/null; assert_eq "1" "$?" "a hand-edited pointer outside the slug rule is ignored"
 }
 
+test_cursor() {
+    echo "home: cursor file"
+    local cfg=$REQ_CONFIG_DIR f
+    REQ_CONFIG_DIR=$TMP/cur-cfg
+    f=$(req_cursor_file shop)
+    assert_eq "$TMP/cur-cfg/projects/shop/cursor" "$f" "the cursor lives in the project's folder"
+    req_cursor_save shop "api/v2" "api/v2/list.get.json"; assert_eq "0" "$?" "saving works without the folder existing"
+    assert_eq $'dir=api/v2\nitem=api/v2/list.get.json' "$(<"$f")" "it holds dir and item as key=value"
+    req_cursor_save shop "" ""
+    assert_eq "" "$(req_kv_get "$f" dir)$(req_kv_get "$f" item)" "the root with nothing selected is saved as empty values"
+    assert_eq "dir=
+item=" "$(<"$f")" "in place of the old lines"
+    req_cursor_save shop "a" $'b\nc' 2>/dev/null; assert_eq "1" "$?" "a value with a line break is refused"
+    chmod 000 "$TMP/cur-cfg/projects/shop"
+    req_cursor_save shop "a" "b" 2>/dev/null; assert_eq "1" "$?" "an unwritable folder fails"
+    chmod 700 "$TMP/cur-cfg/projects/shop"
+    REQ_CONFIG_DIR=$cfg
+}
+
 test_activate() {
     echo "home: project activation"
     local a=$TMP/act/one b=$TMP/act/two out status cfg=$REQ_CONFIG_DIR
@@ -277,6 +296,7 @@ test_kv_write
 test_central_dir
 test_projects
 test_current
+test_cursor
 test_activate
 test_init_command
 test_workspace

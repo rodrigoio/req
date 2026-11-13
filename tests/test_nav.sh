@@ -877,6 +877,35 @@ test_workspace_flow() {
     assert_eq "" "$(find "$p" -mindepth 1 -maxdepth 1 ! -name requests ! -name other ! -name readme.txt ! -name .req)" "nothing was created outside the workspace"
 }
 
+test_cursor_saved() {
+    echo "nav: the cursor is saved on exit"
+    local f out
+    make_project
+    req_project_activate "$PROJ" || return
+    f=$(req_cursor_file "$REQ_PROJECT_ID")
+
+    { keys enter; keys down; keys : q enter; } | req_nav_run "$PROJ/.req" >/dev/null 2>&1
+    assert_eq $'dir=api\nitem=api/broken.get.json' "$(<"$f")" ":q saves the directory and the selected item"
+    assert_eq "" "$REQ_EXIT_HOOK" "and the exit hook is cleared"
+
+    rm -f "$f"
+    { keys down; } | req_nav_run "$PROJ/.req" >/dev/null 2>&1
+    assert_eq $'dir=\nitem=auth' "$(<"$f")" "the end of the input saves too (the root, second item)"
+
+    rm -f "$f"
+    ( req_setup_traps; req_nav_init "$PROJ/.req"; REQ_EXIT_HOOK=req_nav_save_cursor; REQ_SEL=1
+      kill -TERM "$BASHPID" ) 2>/dev/null
+    assert_eq $'dir=\nitem=auth' "$(<"$f")" "a signal saves it as well"
+
+    rm -f "$f"; REQ_PROJECT_ID=""
+    { keys : q enter; } | req_nav_run "$PROJ/.req" >/dev/null 2>&1
+    [[ ! -e $f ]]; assert_eq "0" "$?" "without a registered project nothing is written"
+
+    REQ_PROJECT_ID=ghost
+    out=$({ keys : q enter; } | req_nav_run "$PROJ/.req" 2>&1); assert_eq "0" "$?" "a project folder that cannot be written does not stop the menu"
+    REQ_PROJECT_ID=""
+}
+
 test_start_init() {
     echo "nav: init prompt"
     local d=$TMP/fresh out
@@ -913,6 +942,7 @@ test_command_remove_dir
 test_command_flow
 test_review_flow
 test_workspace_flow
+test_cursor_saved
 test_start_init
 test_end_to_end
 test_summary

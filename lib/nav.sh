@@ -132,6 +132,18 @@ req_nav_init() {
     req_nav_load
 }
 
+# req_nav_save_cursor - saves where the menu is (directory and selected item, relative
+# to the workspace) in the project's cursor file. Does nothing without a registered
+# project; a write that fails is ignored, since the cursor is only a convenience.
+req_nav_save_cursor() {
+    local dir="" item=""
+    [[ -n $REQ_PROJECT_ID && -n $REQ_NAV_ROOT ]] || return 0
+    [[ -z $REQ_CUR_DIR ]] || dir=$(req_nav_rel "$REQ_CUR_DIR")
+    (( ${#REQ_ITEM_PATH[@]} > REQ_SEL )) && item=$(req_nav_rel "${REQ_ITEM_PATH[REQ_SEL]}")
+    req_cursor_save "$REQ_PROJECT_ID" "$dir" "$item" 2>/dev/null || true
+    return 0
+}
+
 # req_nav_refresh <path> - reloads the current directory (or the project root) and
 # selects <path> in it, if present.
 req_nav_refresh() {
@@ -375,9 +387,12 @@ req_nav_overlay() {
     fi
 }
 
-# req_nav_run <.req file> - main loop; ends at end of input or on :q.
+# req_nav_run <.req file> - main loop; ends at end of input or on :q. The menu position
+# is saved in the project's cursor file when the loop ends or the process is signaled.
+# shellcheck disable=SC2034  # REQ_EXIT_HOOK is read by req_on_exit (core.sh)
 req_nav_run() {
     req_nav_init "$1" || return 1
+    REQ_EXIT_HOOK=req_nav_save_cursor      # a signal ends the process: save the cursor then too
     [[ -t 1 ]] && printf '\033[?25l'
     [[ -t 0 ]] && stty -echo 2>/dev/null
     while :; do
@@ -399,6 +414,7 @@ req_nav_run() {
         req_nav_handle "$REQ_KEY"
         (( REQ_QUIT )) && break
     done
+    req_nav_save_cursor; REQ_EXIT_HOOK=""      # :q and the end of the input
     [[ -t 0 ]] && stty echo 2>/dev/null
     [[ -t 1 ]] && printf '\033[?25h'
     return 0

@@ -250,6 +250,20 @@ req_project_activate() {
     REQ_PROJECT_ID=$id
 }
 
+# req_cursor_file <id> - the file where a project keeps the last position of its menu.
+req_cursor_file() {
+    req_project_state_dir "$1" cursor
+}
+
+# req_cursor_save <id> <dir> <item> - writes the position: the directory shown and the
+# item selected in it, both relative to the workspace ("" is the workspace itself, or no
+# item). Fails when the file cannot be written.
+req_cursor_save() {
+    local file
+    file=$(req_cursor_file "$1")
+    req_kv_set "$file" dir "$2" && req_kv_set "$file" item "$3"
+}
+
 # --- the .req file: workspace ---------------------------------------------------
 
 # req_project_workspace <.req file> - prints the absolute path of the project's workspace,
