@@ -32,13 +32,11 @@ folder itself may be reached through a link: only the workspace part is checked.
 | 0 Foundation, 1 Data model, 2 curl execution, 3 Navigation, 4 Command mode | done |
 | Review 1, usability findings (TR.1 to TR.15) | done, except TR.14 (postponed, needs the user's decision) |
 | Review 3, R11 (`.req` with `workspace`, dynamic root; TR3.1 to TR3.7) | TR3.1 to TR3.7 done |
-| Review 2, R8 to R10 (central project control in `~/.req`, `:config`, cursor; TR2.1 to TR2.10) | pending; TR2.1 to TR2.4 come before Phase 5 |
+| Review 2, R8 to R10 (central project control in `~/.req`, `:config`, cursor; TR2.1 to TR2.10) | done |
 | 5 Environments and secrets | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR2.10** (Review 2 verification; TR2.5 to TR2.9, the global configuration, `:config`, the `time_stats` keys and the cursor save and restore, are done; Review 3 and TR2.4 are done). Order agreed: the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
-directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
-waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
+Next task: **T5.2** (key resolution: `<ENV>_<KEY>` variable, then the environment file, then the project variables). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 5".
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - One task = one behavior, about 100 to 200 lines including tests, one commit.
@@ -182,7 +180,7 @@ line (`req_warn` in `core.sh`) and returns 1; `req init` and the menu carry on w
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 1012 asserts at the time of writing.
+`assert_contains`, `test_summary`). 1023 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

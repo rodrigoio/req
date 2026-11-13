@@ -968,6 +968,41 @@ test_cursor_restore() {
     assert_eq $'dir=api\nitem=api/v2' "$(<"$f")" "the loop reopens at the cursor and saves the same place"
 }
 
+test_review2_flow() {
+    echo "nav: Review 2 through the main loop"
+    local p=$TMP/rev2 out id cfg=$REQ_CONFIG_DIR
+    REQ_CONFIG_DIR=$TMP/rev2-cfg; REQ_CONFIG=()
+    mkdir -p "$p/api/v2" "$p/auth"
+    printf '# project\nworkspace=.\n' >"$p/.req"
+    req_request_write "$p/api" ping GET http://x/ping >/dev/null
+    req_request_write "$p/api" status GET http://x/status >/dev/null
+
+    # Opening a project registers it in the central directory and makes it current.
+    req_project_activate "$p"; id=$REQ_PROJECT_ID
+    assert_eq "$id" "$(req_current_get)" "the opened project is the current one"
+    assert_eq "$p" "$(req_kv_get "$(req_project_state_dir "$id" project)" path)" "and is registered with its path"
+
+    # First session: go into api, select the second request, change a setting, quit.
+    out=$({ keys enter; keys down down; keys : c o n f i g enter; keys x
+            keys : c o n f i g ' ' t i m e _ s t a t s = n o enter; keys : q enter
+          } | req_nav_run "$p/.req" 2>&1)
+    assert_contains "time_stats" "$out" ":config listed the settings"
+    assert_contains "time_stats=no saved" "$out" "and :config key=value saved one"
+    assert_eq "no" "$(req_kv_get "$REQ_CONFIG_DIR/config" time_stats)" "in the global file"
+    assert_eq $'dir=api\nitem=api/status.get.json' "$(<"$(req_cursor_file "$id")")" ":q saved the cursor"
+
+    # Second session (a new start): the setting is read and the menu reopens in place.
+    req_config_load; REQ_PROJECT_ID=""; req_project_activate "$p"
+    assert_eq "$id" "$REQ_PROJECT_ID" "reopening finds the same project"
+    assert_eq "no" "$(req_config_get time_stats)" "the setting is still in effect"
+    out=$({ keys : q enter; } | req_nav_run "$p/.req" 2>&1)
+    assert_contains "req /api" "$out" "the menu reopens in the saved directory"
+    assert_contains "req /api (3/3)" "$out" "with the third item (the saved request) selected"
+    assert_eq $'dir=api\nitem=api/status.get.json' "$(<"$(req_cursor_file "$id")")" "and leaving again keeps the place"
+
+    REQ_CONFIG_DIR=$cfg; REQ_CONFIG=()
+}
+
 test_start_init() {
     echo "nav: init prompt"
     local d=$TMP/fresh out
@@ -1006,6 +1041,7 @@ test_review_flow
 test_workspace_flow
 test_cursor_saved
 test_cursor_restore
+test_review2_flow
 test_start_init
 test_end_to_end
 test_summary
