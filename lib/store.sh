@@ -275,10 +275,78 @@ req_project_add_dir() {
         return 1
     fi
     mkdir -p "$base/$name" 2>/dev/null || { req_err "cannot create $base/$name"; return 1; }
+    req_project_append_entry "$pfile" "$name"
+}
+
+# --- .req entries ------------------------------------------------------------
+# Helpers to change the .req without touching comments, blank lines or the order
+# of the other lines. An entry is matched by the directory it stands for (relative
+# to the .req or absolute, with or without a trailing slash).
+
+# req_project_entry_dir <base> <line> - prints the directory a .req line stands for.
+# Fails for blank and comment lines.
+req_project_entry_dir() {
+    local base=$1 line=${2%$'\r'}
+    line=${line#"${line%%[![:space:]]*}"}
+    line=${line%"${line##*[![:space:]]}"}
+    [[ -z $line || $line == \#* ]] && return 1
+    line=${line%/}
+    [[ $line == /* ]] || line=$base/$line
+    req_abs_path "$line"
+}
+
+# req_project_has_entry <.req file> <directory> - succeeds when the directory is listed.
+req_project_has_entry() {
+    local pfile=$1 base dir line
+    [[ -f $pfile ]] || return 1
+    base=$(cd -P "$(dirname "$pfile")" && pwd)
+    dir=$(req_abs_path "$2")
+    while IFS= read -r line || [[ -n $line ]]; do
+        [[ $(req_project_entry_dir "$base" "$line") == "$dir" ]] && return 0
+    done <"$pfile"
+    return 1
+}
+
+# req_project_append_entry <.req file> <entry> - adds a line at the end.
+req_project_append_entry() {
+    local pfile=$1
     # Make sure the last line ends with a newline before appending.
     if [[ -s $pfile && -n $(tail -c1 "$pfile") ]]; then printf '\n' >>"$pfile"; fi
-    printf '%s\n' "$name" >>"$pfile"
+    printf '%s\n' "$2" >>"$pfile"
 }
+
+# req_project_rewrite <.req file> <directory> <replace|remove> [entry] - replaces the
+# line that lists the directory with [entry], or removes it. Every other line stays
+# as it was. A directory listed twice keeps only the replaced line. The file is
+# rewritten in place (mode and symlinks are kept). Fails when it is not listed.
+req_project_rewrite() {
+    local pfile=$1 mode=$3 text=${4-} base dir line tmp found=0
+    [[ -f $pfile ]] || { req_err "project file not found: $pfile"; return 1; }
+    base=$(cd -P "$(dirname "$pfile")" && pwd)
+    dir=$(req_abs_path "$2")
+    tmp=$(mktemp "$base/.req.XXXXXX") || { req_err "cannot write to $base"; return 1; }
+    while IFS= read -r line || [[ -n $line ]]; do
+        if [[ $(req_project_entry_dir "$base" "$line") == "$dir" ]]; then
+            [[ $mode == replace && $found == 0 ]] && printf '%s\n' "$text"
+            found=1
+            continue
+        fi
+        printf '%s\n' "$line"
+    done <"$pfile" >"$tmp"
+    if (( ! found )); then
+        rm -f "$tmp"
+        req_err "$dir is not listed in $pfile"
+        return 1
+    fi
+    cat "$tmp" >"$pfile" || { rm -f "$tmp"; req_err "cannot write $pfile"; return 1; }
+    rm -f "$tmp"
+}
+
+# req_project_replace_entry <.req file> <directory> <new entry>
+req_project_replace_entry() { req_project_rewrite "$1" "$2" replace "$3"; }
+
+# req_project_remove_entry <.req file> <directory>
+req_project_remove_entry() { req_project_rewrite "$1" "$2" remove; }
 
 # req_project_dirs <.req file> - prints the project directories, one per line.
 # .req format: one directory per line, relative to the .req itself; blank lines

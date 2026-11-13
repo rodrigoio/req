@@ -189,6 +189,54 @@ test_project() {
     req_project_dirs "$p/none" >/dev/null 2>&1;  assert_eq "1" "$?" "missing .req"
 }
 
+test_project_entries() {
+    echo "store: .req entry helpers"
+    local p=$TMP/entries f out
+    mkdir -p "$p/api" "$p/auth" "$p/ext"
+    f=$p/.req
+    printf '# my project\napi\n\n  auth/  \n# trailing note\n%s\n' "$p/ext" >"$f"
+
+    req_project_has_entry "$f" "$p/api"; assert_eq "0" "$?" "finds a relative entry"
+    req_project_has_entry "$f" "$p/auth"; assert_eq "0" "$?" "finds an entry with spaces and a slash"
+    req_project_has_entry "$f" "$p/ext"; assert_eq "0" "$?" "finds an absolute entry"
+    req_project_has_entry "$f" "$p/other"; assert_eq "1" "$?" "a directory that is not listed"
+    req_project_has_entry "$f" "$p/api/../api"; assert_eq "0" "$?" "paths are normalized before comparing"
+
+    req_project_replace_entry "$f" "$p/auth" "login"
+    assert_eq $'# my project\napi\n\nlogin\n# trailing note\n'"$p/ext" "$(<"$f")" "replaces one line and keeps comments, blanks and order"
+    req_project_has_entry "$f" "$p/auth"; assert_eq "1" "$?" "the old directory is no longer listed"
+    req_project_replace_entry "$f" "$p/ext" "ext2"
+    assert_eq $'# my project\napi\n\nlogin\n# trailing note\next2' "$(<"$f")" "replaces an absolute entry"
+
+    req_project_remove_entry "$f" "$p/api"
+    assert_eq $'# my project\n\nlogin\n# trailing note\next2' "$(<"$f")" "removes only the matching line"
+    out=$(req_project_remove_entry "$f" "$p/api" 2>&1); assert_eq "1" "$?" "removing an unlisted directory fails"
+    assert_contains "is not listed" "$out" "and says why"
+    out=$(req_project_replace_entry "$f" "$p/api" x 2>&1); assert_eq "1" "$?" "replacing an unlisted directory fails"
+    assert_eq $'# my project\n\nlogin\n# trailing note\next2' "$(<"$f")" "a failure leaves the file untouched"
+
+    req_project_append_entry "$f" "new-dir"
+    assert_eq "new-dir" "$(tail -n1 "$f")" "appends an entry"
+    printf 'a\nb' >"$p/nonl"
+    req_project_append_entry "$p/nonl" c
+    assert_eq $'a\nb\nc' "$(<"$p/nonl")" "appends after a last line without a newline"
+
+    printf 'dup\nx\ndup/\n' >"$p/dups"
+    req_project_replace_entry "$p/dups" "$p/dup" "renamed"
+    assert_eq $'renamed\nx' "$(<"$p/dups")" "a directory listed twice keeps only the replaced line"
+    printf 'dup\nx\ndup\n' >"$p/dups"
+    req_project_remove_entry "$p/dups" "$p/dup"
+    assert_eq "x" "$(<"$p/dups")" "removing drops every line of the directory"
+
+    printf 'api\r\nauth\r\n' >"$p/crlf"
+    req_project_replace_entry "$p/crlf" "$p/api" "svc"
+    assert_eq $'svc\nauth\r' "$(<"$p/crlf")" "CRLF lines still match; untouched lines are kept as they were"
+
+    chmod 640 "$f"; req_project_remove_entry "$f" "$p/ext" 2>/dev/null; req_project_remove_entry "$f" "$p/ext2"
+    assert_eq "640" "$(stat -c %a "$f")" "the file mode is kept"
+    assert_eq "" "$(compgen -G "$p/.req.*")" "no temporary files left"
+}
+
 test_init() {
     echo "store: project initialization"
     local d=$TMP/init out
@@ -228,6 +276,7 @@ test_names
 test_write_read
 test_invalid_manual
 test_project
+test_project_entries
 test_init
 test_list
 test_summary
