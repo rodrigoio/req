@@ -304,27 +304,20 @@ req_wizard_duplicate() {
     return 0
 }
 
-# req_wizard_mkdir <parent> [.req file] [name] - creates a directory. With a .req
-# file (the project root) the directory is created next to it and listed in it;
-# otherwise it is created inside <parent>. The name is asked for unless given.
+# req_wizard_mkdir <parent> [name] - creates a directory inside <parent> (the workspace at
+# the menu root). The name is asked for unless given. REQ_LAST_DIR is the new directory.
 req_wizard_mkdir() {
-    local parent=$1 pfile=${2-} name=${3-} base
+    local parent=$1 name=${2-}
     if [[ -z $name ]]; then
         req_ask_name "" "Directory name" || { req_cancelled; return 1; }
         name=$REQ_REPLY
     fi
-    if [[ -n $pfile ]]; then
-        req_project_add_dir "$pfile" "$name" || return 1
-        base=$(cd -P "$(dirname "$pfile")" && pwd)
-        REQ_LAST_DIR=$base/$name
-    else
-        req_valid_name "$name" || {
-            req_err "invalid directory name: \"$name\" (use a slug: lowercase letters, digits and hyphens)"
-            return 1; }
-        [[ ! -e $parent/$name ]] || { req_err "$parent/$name already exists"; return 1; }
-        mkdir "$parent/$name" 2>/dev/null || { req_err "cannot create $parent/$name"; return 1; }
-        REQ_LAST_DIR=$parent/$name
-    fi
+    req_valid_name "$name" || {
+        req_err "invalid directory name: \"$name\" (use a slug: lowercase letters, digits and hyphens)"
+        return 1; }
+    [[ ! -e $parent/$name ]] || { req_err "$parent/$name already exists"; return 1; }
+    mkdir "$parent/$name" 2>/dev/null || { req_err "cannot create $parent/$name"; return 1; }
+    REQ_LAST_DIR=$parent/$name
     printf 'Created directory %s\n' "$REQ_LAST_DIR"
 }
 

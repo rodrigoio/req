@@ -63,7 +63,7 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 
 | Command | Action |
 |---|---|
-| `:n` | new request in the current directory: asks for the name (a slug), method and url, then optionally for a description, a format preset (json, text, html), headers and query. For POST, PUT and PATCH with a preset, it offers to write the body (`raw_data`) in your editor; declining, or choosing no preset, asks for `parameters` instead |
+| `:n` | new request in the current directory (the workspace at the root): asks for the name (a slug), method and url, then optionally for a description, a format preset (json, text, html), headers and query. For POST, PUT and PATCH with a preset, it offers to write the body (`raw_data`) in your editor; declining, or choosing no preset, asks for `parameters` instead |
 | `:nd [name]` | new directory (alias `:mkdir`). it creates a real subdirectory of the current directory (the workspace at the root) |
 | `:ed [name]` | rename the directory under the cursor (asks for the name unless given). The contents move with it; only the last path component changes |
 | `:c [name]` | copy the directory under the cursor with everything inside (default name `<name>-copy`, symbolic links are copied as links). |

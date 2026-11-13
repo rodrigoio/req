@@ -171,13 +171,9 @@ req_cmd_remove() {
 }
 
 req_cmd_new() {
-    if [[ -z $REQ_CUR_DIR ]]; then
-        REQ_STATUS="open a directory first (or create one with :nd)"
-        return 0
-    fi
     req_nav_prompt_begin
-    printf 'New request in /%s\n' "$(req_nav_rel "$REQ_CUR_DIR")"
-    if req_wizard_new "$REQ_CUR_DIR"; then
+    printf 'New request in %s\n' "$(req_nav_crumb)"
+    if req_wizard_new "${REQ_CUR_DIR:-$REQ_NAV_ROOT}"; then
         REQ_VIEW=list
         req_nav_refresh "$REQ_LAST_FILE"
         REQ_STATUS="created ${REQ_LAST_FILE##*/}"
@@ -187,7 +183,7 @@ req_cmd_new() {
 
 req_cmd_mkdir() {
     req_nav_prompt_begin
-    if req_wizard_mkdir "${REQ_CUR_DIR:-$REQ_NAV_ROOT}" "" "$1"; then
+    if req_wizard_mkdir "${REQ_CUR_DIR:-$REQ_NAV_ROOT}" "$1"; then
         REQ_VIEW=list
         req_nav_refresh "$REQ_LAST_DIR"
         REQ_STATUS="created directory ${REQ_LAST_DIR##*/}"

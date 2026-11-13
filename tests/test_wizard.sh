@@ -300,22 +300,15 @@ test_mkdir() {
     assert_eq "0" "$STATUS" "creates a subdirectory"
     [[ -d $D/sub-dir ]]; assert_eq "0" "$?" "the directory exists"
     assert_eq "$D/sub-dir" "$REQ_LAST_DIR" "REQ_LAST_DIR points to it"
-    run req_wizard_mkdir "$D" "" "given"; assert_eq "0" "$STATUS" "a name given as argument skips the prompt"
-    IN=$'sub-dir\n'; run req_wizard_mkdir "$D" "" "sub-dir"
+    run req_wizard_mkdir "$D" "given"; assert_eq "0" "$STATUS" "a name given as argument skips the prompt"
+    IN=$'sub-dir\n'; run req_wizard_mkdir "$D" "sub-dir"
     assert_eq "1" "$STATUS" "refuses an existing directory"
     assert_contains "already exists" "$OUT" "says why"
-    IN='<EOF>'; run req_wizard_mkdir "$D" "" "Bad Name"; assert_eq "1" "$STATUS" "refuses an invalid name"
+    IN='<EOF>'; run req_wizard_mkdir "$D" "Bad Name"; assert_eq "1" "$STATUS" "refuses an invalid name"
+    assert_contains "invalid directory name" "$OUT" "says why"
     IN=$'\n'; run req_wizard_mkdir "$D"; assert_eq "1" "$STATUS" "an empty name cancels"
-
-    printf '# project\napi' >"$D/.req"; mkdir "$D/api"
-    IN=$'auth\n'; run req_wizard_mkdir "$D" "$D/.req"
-    assert_eq "0" "$STATUS" "creates a project directory"
-    assert_eq $'# project\napi\nauth' "$(<"$D/.req")" "lists it in the .req (even without a trailing newline)"
-    assert_eq "$D/api"$'\n'"$D/auth" "$(req_project_dirs "$D/.req")" "the .req parses"
-    IN='<EOF>'; run req_wizard_mkdir "$D" "$D/.req" "auth"
-    assert_eq "1" "$STATUS" "refuses a directory that is already listed"
-    assert_contains "already listed" "$OUT" "says why"
-    assert_eq "$D/auth" "$REQ_LAST_DIR" "REQ_LAST_DIR is still the last created one"
+    IN='<EOF>'; run req_wizard_mkdir "$D"; assert_eq "1" "$STATUS" "end of input cancels"
+    assert_eq "2" "$(find "$D" -mindepth 1 | wc -l | tr -d ' ')" "only the two valid directories were created"
 }
 
 test_rename_dir() {

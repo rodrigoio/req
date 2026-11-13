@@ -371,8 +371,6 @@ test_command_mode() {
     assert_eq "1" "$REQ_QUIT" ":q quits"
     REQ_QUIT=0
 
-    type_keys : n enter
-    assert_contains "open a directory first" "$REQ_STATUS" ":n at the root explains itself"
     type_keys : e enter
     assert_contains "select a request first" "$REQ_STATUS" ":e on a directory explains itself"
     type_keys : d enter
@@ -698,6 +696,17 @@ test_dynamic_root() {
     [[ -d $p/content/newdir && ! -e $p/newdir ]]; assert_eq "0" "$?" ":nd at the root creates inside the workspace"
     assert_eq "api newdir" "${REQ_ITEM_LABEL[*]}" "and it is listed"
     assert_eq "workspace=content" "$(<"$p/.req")" "without touching the .req"
+
+    # :n at the root creates the request in the workspace and lists it.
+    REQ_INPUT_FD=3
+    type_keys : n
+    req_nav_handle enter 3<<<$'root-req\nGET\nhttp://x/r\nn\n' >"$TMP/new.out" 2>&1
+    out=$(<"$TMP/new.out")
+    REQ_INPUT_FD=0
+    assert_contains "New request in /" "$out" ":n at the root says where it creates the request"
+    [[ -f $p/content/root-req.get.json && ! -e $p/root-req.get.json ]]; assert_eq "0" "$?" ":n at the root creates the request inside the workspace"
+    assert_eq "api newdir root-req" "${REQ_ITEM_LABEL[*]}" "the request is listed after the directories"
+    assert_eq "d d r" "${REQ_ITEM_KIND[*]}" "with its type"
 
     # An invalid workspace stops the menu with the reason.
     printf 'workspace=../elsewhere\n' >"$p/.req"

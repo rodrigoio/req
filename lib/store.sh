@@ -261,24 +261,6 @@ req_project_init() {
     fi
 }
 
-# req_project_add_dir <.req file> <name> - creates the directory next to the .req
-# and lists it in the .req. Fails if the name is not a slug or is already listed.
-req_project_add_dir() {
-    local pfile=$1 name=$2 base listed
-    req_valid_name "$name" || {
-        req_err "invalid directory name: \"$name\" (use a slug: lowercase letters, digits and hyphens)"
-        return 1; }
-    [[ -f $pfile ]] || { req_err "project file not found: $pfile"; return 1; }
-    base=$(cd -P "$(dirname "$pfile")" && pwd)
-    listed=$(req_project_dirs "$pfile" 2>/dev/null)
-    if grep -qxF -- "$base/$name" <<<"$listed"; then
-        req_err "\"$name\" is already listed in $pfile"
-        return 1
-    fi
-    mkdir -p "$base/$name" 2>/dev/null || { req_err "cannot create $base/$name"; return 1; }
-    req_project_append_entry "$pfile" "$name"
-}
-
 # --- .req entries ------------------------------------------------------------
 # Helpers to change the .req without touching comments, blank lines or the order
 # of the other lines. An entry is matched by the directory it stands for (relative
