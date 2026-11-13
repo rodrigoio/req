@@ -13,7 +13,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR.13** (`:rm` on a directory; TR.1 to TR.12 are done). Phase 5 resumes at T5.2 after TR.15. See
+Next task: **TR.15** (Review 1 verification; TR.14 stays postponed; TR.1 to TR.13 are done). Phase 5 resumes at T5.2 after TR.15. See
 "Review 1 findings" below.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
@@ -103,8 +103,14 @@ there, and the copy is removed if the `.req` cannot be written.
 
 Request removal (`req_wizard_remove_request`, `:rm`, TR.12): shows the full path, asks `[y/N]` (default no,
 end of input means no) and removes the file. It works for invalid requests, from the list and from the
-details screen; afterwards the list is shown with the selection kept near the removed row. On a
-directory `:rm` says to select a request until TR.13.
+details screen; afterwards the list is shown with the selection kept near the removed row.
+
+Directory removal (`req_wizard_remove_dir`, TR.13): red warning with the full path and the count of
+files and subdirectories, `[y/N]` (default no), then `rm -rf`. The safety rule: only a directory
+**strictly inside** the folder of the `.req` (physical path, `cd -P`) that is **not a symbolic link**
+is deleted; the project folder, its parents, outside directories and links never are. A listed
+outside directory or link can only be unlisted. A listed directory loses its `.req` entry.
+Descendants listed in the `.req` are not cleaned up (same limit as the rename).
 
 ## Conventions
 
@@ -128,7 +134,7 @@ directory `:rm` says to select a request until TR.13.
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 663 asserts at the time of writing.
+`assert_contains`, `test_summary`). 703 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed
@@ -179,9 +185,9 @@ worth observing in usability sessions; each one is cheap to change.
    Ctrl-C. Esc does **not** cancel inside the wizard prompts (an empty name or Ctrl-D does).
 5. **Command mode**: no tab completion or history; unknown commands only show a
    one-line status message; `:q` never asks for confirmation.
-6. **No way to delete or rename a request or directory** from the menu (the manifest
-   lists none). `:e` renames a request only by changing its name field. This is the
-   most likely gap users will report.
+6. **Deleting and renaming** came from the first usage review: `:rm`, `:ed` and `:c` exist
+   now (TR.10 to TR.13). Still open: moving a request or directory elsewhere (TA.2); `:e`
+   renames a request only by changing its name field.
 7. **Requests cannot be created at the root**, only inside a directory (the root is
    the list of directories in `.req`). `:n` there explains it and suggests `:nd`.
 8. **Directory names are slugs** (no uppercase, dots or underscores), same as requests.

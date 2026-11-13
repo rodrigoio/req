@@ -605,10 +605,40 @@ test_command_remove() {
     req_nav_handle enter 3<<<"y" >/dev/null
     assert_eq "$(( ${#REQ_ITEM_KIND[@]} - 1 ))" "$REQ_SEL" "removing the last item selects the new last one"
 
-    # On a directory there is nothing to remove yet.
-    REQ_SEL=0
+    # In an empty directory there is nothing to remove.
+    mkdir -p "$PROJ/auth/empty"
+    REQ_INPUT_FD=0
+    req_nav_handle esc; REQ_SEL=1; req_nav_handle enter       # auth (no requests)
+    REQ_INPUT_FD=3
+    REQ_SEL=0; req_nav_handle enter                           # auth/empty
     type_keys : r m; req_nav_handle enter >/dev/null
-    assert_contains "select a request" "$REQ_STATUS" ":rm on a directory explains itself"
+    assert_contains "select a request or a directory" "$REQ_STATUS" ":rm with nothing selected explains itself"
+    REQ_INPUT_FD=0
+}
+
+test_command_remove_dir() {
+    echo "nav: :rm on a directory"
+    make_project
+    req_nav_init "$PROJ/.req"
+    REQ_INPUT_FD=3
+
+    REQ_SEL=0
+    type_keys : r m
+    req_nav_handle enter 3<<<"n" >/dev/null
+    [[ -d $PROJ/api/v2 ]]; assert_eq "0" "$?" "answering n keeps the directory"
+
+    type_keys : r m
+    req_nav_handle enter 3<<<"y" >/dev/null
+    [[ ! -e $PROJ/api ]]; assert_eq "0" "$?" ":rm removes the directory under the cursor after y"
+    assert_eq "auth" "$(<"$PROJ/.req")" "and its .req entry"
+    assert_eq "auth" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed"
+    assert_eq "0" "$REQ_SEL" "with a valid selection"
+    assert_contains "removed api" "$REQ_STATUS" "status mentions it"
+
+    type_keys : r m
+    req_nav_handle enter 3<<<"y" >/dev/null
+    assert_eq "0" "${#REQ_ITEM_KIND[@]}" "the last directory can go too"
+    [[ -f $PROJ/.req ]]; assert_eq "0" "$?" "and the project file stays"
     REQ_INPUT_FD=0
 }
 
@@ -657,6 +687,7 @@ test_help
 test_command_rename_dir
 test_command_copy_dir
 test_command_remove
+test_command_remove_dir
 test_command_flow
 test_start_init
 test_end_to_end

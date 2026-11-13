@@ -442,6 +442,75 @@ test_remove_request() {
     assert_eq "1" "$STATUS" "a missing request fails"
 }
 
+test_remove_dir() {
+    echo "wizard: remove directory"
+    fresh rd
+    local proj=$D/proj out
+    mkdir -p "$proj/api/v2" "$proj/auth" "$D/outside/inner"
+    printf '# project\napi\nauth\n%s\n' "$D/outside" >"$proj/.req"
+    req_request_write "$proj/api" ping GET http://x >/dev/null
+    req_request_write "$proj/api/v2" deep GET http://x >/dev/null
+    printf 'keep' >"$D/outside/precious.txt"
+
+    IN=$'\n'; run req_wizard_remove_dir "$proj/api" "$proj/.req"
+    assert_eq "1" "$STATUS" "Enter keeps the directory (the default is no)"
+    assert_contains "[y/N]" "$OUT" "the prompt shows the default"
+    assert_contains "Remove the directory $proj/api" "$OUT" "the warning has the full path"
+    assert_contains "2 files in 1 subdirectories" "$OUT" "and the size of the contents"
+    [[ -f $proj/api/v2/deep.get.json ]]; assert_eq "0" "$?" "nothing was removed"
+    IN=$'n\n'; run req_wizard_remove_dir "$proj/api" "$proj/.req"; assert_eq "1" "$STATUS" "n keeps it"
+    IN='<EOF>'; run req_wizard_remove_dir "$proj/api" "$proj/.req"; assert_eq "1" "$STATUS" "end of input keeps it"
+    [[ -d $proj/api ]]; assert_eq "0" "$?" "still there"
+
+    REQ_COLORS=1; IN=$'n\n'; run req_wizard_remove_dir "$proj/api" "$proj/.req"; REQ_COLORS=0
+    assert_contains $'\033[31mRemove the directory' "$OUT" "the warning is red"
+
+    IN=$'y\n'; run req_wizard_remove_dir "$proj/api" "$proj/.req"
+    assert_eq "0" "$STATUS" "y removes a listed directory"
+    [[ ! -e $proj/api ]]; assert_eq "0" "$?" "with everything inside"
+    assert_eq "$proj/api" "$REQ_LAST_DIR" "REQ_LAST_DIR is the directory"
+    assert_eq $'# project\nauth\n'"$D/outside" "$(<"$proj/.req")" "and its .req entry is removed, the rest is kept"
+    [[ -d $proj/auth ]]; assert_eq "0" "$?" "other directories are untouched"
+
+    # A subdirectory that is not listed.
+    mkdir -p "$proj/auth/sub"; printf 'x' >"$proj/auth/sub/f"
+    before=$(<"$proj/.req")
+    IN=$'y\n'; run req_wizard_remove_dir "$proj/auth/sub" "$proj/.req"
+    assert_eq "0" "$STATUS" "removes a subdirectory"
+    [[ ! -e $proj/auth/sub && -d $proj/auth ]]; assert_eq "0" "$?" "only that one"
+    assert_eq "$before" "$(<"$proj/.req")" "the .req is untouched"
+
+    # Outside the project: the files are never deleted, only the entry can go.
+    IN=$'y\n'; run req_wizard_remove_dir "$D/outside" "$proj/.req"
+    assert_eq "0" "$STATUS" "an outside directory can be unlisted"
+    assert_contains "never deleted" "$OUT" "and the warning says its files are safe"
+    [[ -f $D/outside/precious.txt && -d $D/outside/inner ]]; assert_eq "0" "$?" "its files are kept"
+    assert_eq $'# project\nauth' "$(<"$proj/.req")" "the entry is gone from the .req"
+    IN='<EOF>'; run req_wizard_remove_dir "$D/outside" "$proj/.req"
+    assert_eq "1" "$STATUS" "an outside directory that is not listed is refused"
+    assert_contains "refusing to remove" "$OUT" "with an explanation"
+    [[ -f $D/outside/precious.txt ]]; assert_eq "0" "$?" "still safe"
+
+    # The project folder itself, its parents and symbolic links are never removed.
+    IN=$'y\n'; run req_wizard_remove_dir "$proj" "$proj/.req"
+    assert_eq "1" "$STATUS" "the project folder is refused"
+    [[ -f $proj/.req ]]; assert_eq "0" "$?" "and still there"
+    IN=$'y\n'; run req_wizard_remove_dir "$D" "$proj/.req"
+    assert_eq "1" "$STATUS" "a parent of the project is refused"
+    ln -s "$D/outside" "$proj/auth/link"
+    printf '%s\n' "auth/link" >>"$proj/.req"
+    IN=$'y\n'; run req_wizard_remove_dir "$proj/auth/link" "$proj/.req"
+    [[ -f $D/outside/precious.txt ]]; assert_eq "0" "$?" "a symbolic link never deletes its target"
+    assert_eq $'# project\nauth' "$(<"$proj/.req")" "a listed link is only unlisted"
+    ln -s "$D/outside" "$proj/auth/link2"
+    IN=$'y\n'; run req_wizard_remove_dir "$proj/auth/link2" "$proj/.req"
+    assert_eq "1" "$STATUS" "an unlisted link is refused"
+    [[ -f $D/outside/precious.txt && -L $proj/auth/link2 ]]; assert_eq "0" "$?" "and nothing changed"
+
+    run req_wizard_remove_dir "$proj/ghost" "$proj/.req"
+    assert_eq "1" "$STATUS" "a missing directory fails"
+}
+
 test_pairs_and_presets
 test_new
 test_edit
@@ -451,4 +520,5 @@ test_mkdir
 test_rename_dir
 test_copy_dir
 test_remove_request
+test_remove_dir
 test_summary

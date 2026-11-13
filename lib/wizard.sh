@@ -417,3 +417,53 @@ req_wizard_remove_request() {
     REQ_LAST_FILE=$file
     printf 'Removed %s\n' "$file"
 }
+
+# req_wizard_remove_dir <directory> <.req file> - removes a directory and everything
+# inside it, after a red warning with the full path and the size of the contents and
+# a "[y/N]" question (default no). Only a directory strictly inside the project (the
+# folder of the .req, physical path) is ever deleted. A directory outside it, or a
+# symbolic link, is never deleted: when it is listed in the .req, the user can only
+# unlist it. A listed directory loses its .req entry when removed. Returns 0 after
+# changing something; REQ_LAST_DIR is the directory.
+req_wizard_remove_dir() {
+    local dir=${1%/} pfile=$2 abs base listed=0 inside=0 files dirs red reset
+    [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
+    abs=$(req_abs_path "$dir")
+    base=$(cd -P "$(dirname "$pfile")" && pwd) || { req_err "project folder not found"; return 1; }
+    req_project_has_entry "$pfile" "$abs" && listed=1
+    [[ ! -L $dir && $abs == "$base"/?* ]] && inside=1
+    red=$(req_color err); reset=$(req_color reset)
+
+    if (( ! inside )); then
+        if (( ! listed )); then
+            req_err "refusing to remove $abs: it is not a directory inside the project ($base)"
+            return 1
+        fi
+        printf '%s%s is outside the project or a symbolic link: its files are never deleted.%s\n' "$red" "$abs" "$reset"
+        if ! req_confirm "Remove it from the $REQ_PROJECT_FILE only?" n; then
+            printf 'Kept.\n'
+            return 1
+        fi
+        req_project_remove_entry "$pfile" "$abs" || return 1
+        REQ_LAST_DIR=$dir
+        printf 'Unlisted %s\n' "$abs"
+        return 0
+    fi
+
+    files=$(find "$abs" -mindepth 1 ! -type d | wc -l)
+    dirs=$(find "$abs" -mindepth 1 -type d | wc -l)
+    printf '%sRemove the directory %s and everything inside it: %d files in %d subdirectories. This cannot be undone.%s\n' \
+        "$red" "$abs" "${files//[[:space:]]/}" "${dirs//[[:space:]]/}" "$reset"
+    if ! req_confirm "Remove it?" n; then
+        printf 'Kept.\n'
+        return 1
+    fi
+    rm -rf -- "$abs" 2>/dev/null
+    [[ ! -e $abs ]] || { req_err "could not remove everything in $abs"; return 1; }
+    if (( listed )); then
+        req_project_remove_entry "$pfile" "$abs" ||
+            req_err "the directory was removed but its entry is still in $pfile"
+    fi
+    REQ_LAST_DIR=$dir
+    printf 'Removed %s\n' "$abs"
+}

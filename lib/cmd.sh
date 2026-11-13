@@ -6,7 +6,7 @@
 #   :nd [name]    new directory (alias :mkdir); at the root it is also listed in the .req
 #   :ed [name]    rename the selected directory (also updates the .req entry)
 #   :c [name]     copy the selected directory with its contents (default <name>-copy)
-#   :rm           remove the selected request, after a [y/N] confirmation
+#   :rm           remove the selected request or directory (with its contents), after a [y/N] confirmation
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
@@ -33,7 +33,7 @@ REQ_HELP_ROWS=(
     ":nd [name]|new directory (alias :mkdir)"
     ":ed [name]|rename the directory under the cursor"
     ":c [name]|copy the directory under the cursor, with its contents"
-    ":rm|remove the selected request (asks y/N first)"
+    ":rm|remove the selected request or directory, with a y/N question first"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
     ":h|this help (alias :help)"
@@ -147,13 +147,21 @@ req_cmd_copy_dir() {
 }
 
 req_cmd_remove() {
-    local file sel=$REQ_SEL
-    file=$(req_nav_selected_request) || { REQ_STATUS="select a request first"; return 0; }
+    local target sel=$REQ_SEL kind=request
+    if target=$(req_nav_selected_request); then :
+    elif target=$(req_nav_selected_dir); then kind=directory
+    else REQ_STATUS="select a request or a directory first"; return 0
+    fi
     req_nav_prompt_begin
-    if req_wizard_remove_request "$file"; then
+    if [[ $kind == directory ]]; then
+        req_wizard_remove_dir "$target" "$REQ_NAV_BASE/$REQ_PROJECT_FILE" && REQ_LAST_FILE=$REQ_LAST_DIR || REQ_LAST_FILE=""
+    else
+        req_wizard_remove_request "$target" || REQ_LAST_FILE=""
+    fi
+    if [[ -n $REQ_LAST_FILE ]]; then
         REQ_VIEW=list
         req_nav_refresh ""
-        # Stay near where the removed request was.
+        # Stay near where the removed row was.
         (( sel >= ${#REQ_ITEM_KIND[@]} )) && sel=$(( ${#REQ_ITEM_KIND[@]} - 1 ))
         (( sel < 0 )) && sel=0
         REQ_SEL=$sel
