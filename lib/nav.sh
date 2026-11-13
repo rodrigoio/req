@@ -22,7 +22,7 @@ REQ_NAV_ROOTS=()       # directories listed in the .req
 REQ_CUR_DIR=""          # directory being shown ("" = project root)
 REQ_STACK_DIR=()        # navigation stack: previous directories and selections
 REQ_STACK_SEL=()
-REQ_VIEW=list           # list | detail
+REQ_VIEW=list           # list | detail | help
 REQ_DETAIL_FILE=""
 REQ_DETAIL_VALID=0
 
@@ -198,7 +198,7 @@ req_nav_build_list() {
     fi
 
     if req_utf8; then arrows="↑↓"; else arrows="up/down"; fi
-    hint="$arrows navigate   Enter open   : commands"
+    hint="$arrows move   Enter open   : commands   :h help"
     [[ ${#REQ_STACK_DIR[@]} -gt 0 ]] && hint+="   Esc back"
     REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $((cols - 1)))${c_reset}")
 }
@@ -241,7 +241,28 @@ req_nav_build_detail() {
         *) req_nav_detail_section "Parameters (not sent with $REQ_F_METHOD)" "$width" "${REQ_F_PARAMS[@]}" ;;
     esac
 
-    REQ_SCREEN_LINES+=("${c_dim}Enter run   : commands   Esc back${c_reset}")
+    REQ_SCREEN_LINES+=("${c_dim}Enter run   : commands   :h help   Esc back${c_reset}")
+}
+
+# req_nav_build_help - builds REQ_SCREEN_LINES with the help screen, from REQ_HELP_ROWS.
+req_nav_build_help() {
+    local cols row keys w=0 c_dim c_bold c_reset
+    cols=$(req_term_cols)
+    c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
+    REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
+    for row in "${REQ_HELP_ROWS[@]}"; do
+        [[ $row == *'|'* ]] && { keys=${row%%|*}; (( ${#keys} > w )) && w=${#keys}; }
+    done
+    REQ_SCREEN_LINES+=("${c_bold}req${c_reset} help")
+    for row in "${REQ_HELP_ROWS[@]}"; do
+        if [[ $row == *'|'* ]]; then
+            keys=$(printf '%-*s' "$w" "${row%%|*}")
+            REQ_SCREEN_LINES+=("  $(req_trunc "$keys  ${row#*|}" $((cols - 3)))")
+        else
+            REQ_SCREEN_LINES+=("${c_dim}${row}${c_reset}")
+        fi
+    done
+    REQ_SCREEN_LINES+=("${c_dim}Press any key to go back${c_reset}")
 }
 
 # req_nav_detail_section <title> <width> [line...]
@@ -298,6 +319,10 @@ req_nav_handle() {
         req_cmd_key "$key"
         return 0
     fi
+    if [[ $REQ_VIEW == help ]]; then
+        REQ_VIEW=$REQ_HELP_BACK     # any key closes the help
+        return 0
+    fi
     if [[ $key == : ]]; then
         REQ_CMD_ACTIVE=1; REQ_CMD_BUF=""
         REQ_NAV_DIRTY=0
@@ -337,7 +362,11 @@ req_nav_run() {
     [[ -t 0 ]] && stty -echo 2>/dev/null
     while :; do
         if (( REQ_NAV_DIRTY )); then
-            if [[ $REQ_VIEW == detail ]]; then req_nav_build_detail; else req_nav_build_list; fi
+            case $REQ_VIEW in
+                detail) req_nav_build_detail ;;
+                help)   req_nav_build_help ;;
+                *)      req_nav_build_list ;;
+            esac
             REQ_BASE_LINES=("${REQ_SCREEN_LINES[@]}"); REQ_BASE_EXTRA=$REQ_SCREEN_EXTRA
             REQ_NAV_DIRTY=0
         else

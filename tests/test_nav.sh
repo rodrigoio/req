@@ -429,6 +429,37 @@ q
     REQ_INPUT_FD=0
 }
 
+test_help() {
+    echo "nav: help screen"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local out row i
+    type_keys : h enter
+    assert_eq "help" "$REQ_VIEW" ":h opens the help"
+    REQ_NAV_DIRTY=1; req_nav_build_help; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
+    assert_contains "Enter  " "$out" "lists Enter"
+    assert_contains ":nd [name]" "$out" "lists a command with its argument"
+    assert_contains "Press any key" "$out" "says how to go back"
+    for row in ":n" ":nd" ":e" ":d" ":h" ":q"; do
+        assert_contains "$row" "$out" "every command is listed: $row"
+    done
+    req_nav_handle x
+    assert_eq "list" "$REQ_VIEW" "any key returns to the list"
+    req_nav_handle enter                                        # api/
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "(a request is open)"
+    type_keys : help enter; req_nav_handle up
+    assert_eq "detail" "$REQ_VIEW" ":help returns to the details it was opened from"
+    REQ_VIEW=list
+    req_nav_build_list; assert_contains ":h help" "${REQ_SCREEN_LINES[-1]}" "list footer points to :h"
+    REQ_VIEW=detail; req_nav_build_detail
+    assert_contains ":h help" "${REQ_SCREEN_LINES[-1]}" "details footer points to :h"
+    REQ_VIEW=list
+    type_keys : z enter
+    assert_contains ":h" "$REQ_STATUS" "unknown command points to :h"
+}
+
 test_command_flow() {
     echo "nav: command flow through the main loop"
     local p=$TMP/flow out
@@ -469,6 +500,7 @@ test_truncate_scroll
 test_empty_project
 test_command_mode
 test_command_actions
+test_help
 test_command_flow
 test_start_init
 test_end_to_end

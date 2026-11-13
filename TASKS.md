@@ -6,8 +6,8 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.gitignore` permanece.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **TR.2** (Revisão 1: ajuda `:h`). A TR.1 está feita. A Fase 5 é retomada na **T5.2** depois da TR.15.
-- Suíte: `make check` com 462 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **TR.3** (Revisão 1: renomear `data_parameter` para `parameters`). TR.1 e TR.2 estão feitas. A Fase 5 é retomada na **T5.2** depois da TR.15.
+- Suíte: `make check` com 478 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - A seção "Revisão 1" (TR.1 a TR.15) reúne os achados confirmados na primeira validação de uso e vem antes da Fase 5. A TR.14 está adiada: confirmar com o usuário antes de implementar.
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
@@ -102,7 +102,7 @@ Achados:
 
 Tarefas:
 - [x] TR.1 (R7) Erro de dependências: uma linha que só nomeia os pacotes faltantes, em laranja, sem `sudo` nem `install`.
-- TR.2 (R5) `:h` (alias `:help`): tela de ajuda com todas as teclas e comandos, a partir de uma tabela única; qualquer tecla volta. O aviso de comando desconhecido e os rodapés passam a apontar para `:h`.
+- [x] TR.2 (R5) `:h` (alias `:help`): tela de ajuda com todas as teclas e comandos, a partir de uma tabela única; qualquer tecla volta. O aviso de comando desconhecido e os rodapés passam a apontar para `:h`.
 - TR.3 (R6) Renomear `data_parameter` para `parameters`, sem mudar o envio; o nome antigo vira erro de validação que indica o novo.
 - TR.4 (R6) `raw_data` no formato e no envio: objeto, lista ou string; precedência sobre `parameters`, que passa a ser sempre formulário url-encoded; JSON sem `Content-Type` sai com `application/json`.
 - TR.5 (R6) Tela de detalhes mostra o `raw_data` (JSON indentado ou texto, com teto de linhas) e avisa quando `parameters` não é enviado.

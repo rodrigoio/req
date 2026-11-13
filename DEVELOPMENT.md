@@ -13,7 +13,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR.2** (`:h` help screen; TR.1, the orange dependency error, is done). Phase 5 resumes at T5.2 after TR.15. See
+Next task: **TR.3** (rename `data_parameter` to `parameters`; TR.1 and TR.2 are done). Phase 5 resumes at T5.2 after TR.15. See
 "Review 1 findings" below.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
@@ -79,7 +79,7 @@ This section describes the code as it is. Review 1 changes the body fields:
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 462 asserts at the time of writing.
+`assert_contains`, `test_summary`). 478 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

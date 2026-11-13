@@ -66,6 +66,7 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 | `:nd [name]` | new directory (alias `:mkdir`). At the root it is also added to the `.req`; inside a directory it creates a real subdirectory |
 | `:e` | edit the selected request (or the one open on the details screen) through a field menu; changing the name or the method renames the file |
 | `:d` | duplicate the selected request under a new name and open the edit menu on the copy |
+| `:h` | help: lists every key and command (alias `:help`); any key goes back. A new command is added to the `REQ_HELP_ROWS` table in `lib/cmd.sh` |
 | `:q` | quit, without asking for confirmation |
 
 In the prompts, Enter accepts the default shown in brackets and an empty name cancels. In the key/value prompts, `key: value` (headers) or `key=value` (query and parameters) sets an entry, `-key` removes it and an empty line finishes. Directory and request names are slugs: lowercase letters, digits and hyphens.

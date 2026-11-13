@@ -7,6 +7,7 @@
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
+#   :h            help: every key and command (alias :help)
 # Esc leaves command mode; Backspace on an empty line does too.
 
 # shellcheck disable=SC2034  # the REQ_* state below is shared with nav.sh
@@ -15,6 +16,24 @@ REQ_CMD_ACTIVE=0        # 1 while a command is being typed
 REQ_CMD_BUF=""          # the command typed so far
 REQ_STATUS=""           # one-shot message shown under the menu
 REQ_QUIT=0              # set by :q, ends the main loop
+
+# The help screen (:h) is built from this single table, "keys|description"; a line
+# without "|" is a section title. Every new key or command gets a row here.
+REQ_HELP_ROWS=(
+    "Keys"
+    "up/down|move the selection (wraps around)"
+    "Enter|open a directory or request; on the details, run it"
+    "Esc|go back (details, then list, then parent directory)"
+    ":|command mode (Esc cancels)"
+    "Commands"
+    ":n|new request in the current directory"
+    ":nd [name]|new directory (alias :mkdir)"
+    ":e|edit the selected request (alias :edit)"
+    ":d|duplicate the selected request (alias :dup)"
+    ":h|this help (alias :help)"
+    ":q|quit (alias :quit)"
+)
+REQ_HELP_BACK=list      # view to return to when the help screen closes
 
 # req_cmd_key <key> - handles one key while in command mode.
 req_cmd_key() {
@@ -56,7 +75,8 @@ req_cmd_run() {
         nd|mkdir)     req_cmd_mkdir "$arg" ;;
         e|edit)       req_cmd_edit ;;
         d|dup)        req_cmd_dup ;;
-        *)            REQ_STATUS="unknown command :$cmd (try :n :nd :e :d :q)" ;;
+        h|help)       REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=help ;;
+        *)            REQ_STATUS="unknown command :$cmd (:h lists the commands)" ;;
     esac
     return 0
 }
