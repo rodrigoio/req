@@ -23,16 +23,22 @@ USAGE
 
 main() {
     REQ_HOME=$(req_resolve_home)
-    # shellcheck source=../lib/core.sh
+    # shellcheck source=lib/core.sh
     source "$REQ_HOME/lib/core.sh"
-    # shellcheck source=../lib/ui.sh
+    # shellcheck source=lib/ui.sh
     source "$REQ_HOME/lib/ui.sh"
-    # shellcheck source=../lib/store.sh
+    # shellcheck source=lib/store.sh
     source "$REQ_HOME/lib/store.sh"
-    # shellcheck source=../lib/http.sh
+    # shellcheck source=lib/http.sh
     source "$REQ_HOME/lib/http.sh"
-    # shellcheck source=../lib/nav.sh
+    # shellcheck source=lib/nav.sh
     source "$REQ_HOME/lib/nav.sh"
+    # shellcheck source=lib/wizard.sh
+    source "$REQ_HOME/lib/wizard.sh"
+    # shellcheck source=lib/cmd.sh
+    source "$REQ_HOME/lib/cmd.sh"
+    # shellcheck source=lib/env.sh
+    source "$REQ_HOME/lib/env.sh"
 
     case ${1-} in
         -v|--version) printf 'req %s\n' "$REQ_VERSION"; return 0 ;;

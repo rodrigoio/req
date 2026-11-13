@@ -8,7 +8,10 @@ source "$ROOT/lib/ui.sh"
 source "$ROOT/lib/store.sh"
 source "$ROOT/lib/http.sh"
 source "$ROOT/lib/nav.sh"
+source "$ROOT/lib/wizard.sh"
+source "$ROOT/lib/cmd.sh"
 
+# shellcheck disable=SC2031  # lib/store.sh sets LC_ALL in a subshell on purpose
 export LC_ALL=C COLUMNS=60 LINES=24
 TMP=$(mktemp -d)
 SERVER_PID=""
@@ -57,6 +60,8 @@ test_keys() {
     assert_eq "up,down,enter,esc,x," "$out" "arrows, Enter, bare Esc and a character"
     out=$(printf '\033OA\033[C' | { while req_read_key; do printf '%s,' "$REQ_KEY"; done; })
     assert_eq "up,other," "$out" "arrow in application mode and an ignored key"
+    out=$(printf '\177\b' | { while req_read_key; do printf '%s,' "$REQ_KEY"; done; })
+    assert_eq "backspace,backspace," "$out" "DEL and ^H are backspace"
     out=$(printf '\r' | { req_read_key; printf '%s' "$REQ_KEY"; })
     assert_eq "enter" "$out" "carriage return counts as Enter"
     req_read_key </dev/null; assert_eq "1" "$?" "end of input returns status 1"
@@ -201,9 +206,30 @@ test_detail_invalid() {
     assert_eq "0" "$REQ_DETAIL_VALID" "an invalid request is flagged"
     assert_contains "Invalid request" "$out" "shows the problem"
     assert_contains 'unknown field "timeout"' "$out" "shows the reason"
+    assert_eq "$PROJ/api/broken.get.json" "${REQ_SCREEN_LINES[1]}" "the absolute path is on its own line, ready to copy"
+    assert_eq "0" "$REQ_SCREEN_EXTRA" "a path that fits adds no extra rows"
     assert_eq "" "$(req_nav_handle enter 2>&1)" "Enter does not run an invalid request"
     assert_eq "detail" "$REQ_VIEW" "stays on the details"
     req_nav_handle esc; assert_eq "list" "$REQ_VIEW" "Esc goes back"
+}
+
+test_invalid_long_path() {
+    echo "nav: invalid request with a long path"
+    make_project
+    req_nav_init "$PROJ/.req"; req_nav_handle enter
+    local i path len
+    for i in "${!REQ_ITEM_LABEL[@]}"; do
+        [[ ${REQ_ITEM_LABEL[i]} == broken ]] && REQ_SEL=$i
+    done
+    req_nav_handle enter
+    COLUMNS=20 screen detail
+    path=$PROJ/api/broken.get.json; len=${#path}
+    assert_eq "$path" "${REQ_SCREEN_LINES[1]}" "the path is never truncated, even on a narrow terminal"
+    assert_eq "$(( (len - 1) / 20 ))" "$REQ_SCREEN_EXTRA" "the rows its wrapping takes are counted for the redraw"
+    assert_eq "1" "$(( REQ_SCREEN_EXTRA > 0 ))" "and a long path does wrap here"
+    # The redraw count covers lines plus wrapped rows (only tracked on a terminal).
+    COLUMNS=20 req_nav_build_list
+    assert_eq "0" "$REQ_SCREEN_EXTRA" "other screens reset the extra rows"
 }
 
 test_truncate_scroll() {
@@ -267,6 +293,156 @@ test_end_to_end() {
     assert_eq "3" "$(grep -c '^Enter run' <<<"$out")" "details redrawn after each result"
 }
 
+# type <chars...> - sends each character to the handler, as the main loop would.
+type_keys() { local c; for c in "$@"; do req_nav_handle "$c"; done; }
+
+test_command_mode() {
+    echo "nav: command mode"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_nav_handle ":"
+    assert_eq "1" "$REQ_CMD_ACTIVE" ": enters command mode"
+    type_keys n d
+    assert_eq "nd" "$REQ_CMD_BUF" "typed characters build the command"
+    assert_eq "0" "$REQ_NAV_DIRTY" "typing does not rebuild the screen"
+    req_nav_handle backspace
+    assert_eq "n" "$REQ_CMD_BUF" "Backspace deletes a character"
+    req_nav_handle up; req_nav_handle other
+    assert_eq "n" "$REQ_CMD_BUF" "arrows are ignored while typing"
+    assert_eq "0" "$REQ_SEL" "the selection does not move while typing"
+    req_nav_handle esc
+    assert_eq "0" "$REQ_CMD_ACTIVE" "Esc leaves command mode"
+    assert_eq "" "$REQ_CMD_BUF" "and clears what was typed"
+    req_nav_handle ":"; req_nav_handle backspace
+    assert_eq "0" "$REQ_CMD_ACTIVE" "Backspace on an empty line leaves command mode"
+
+    req_nav_handle ":"
+    REQ_CMD_BUF="x"; REQ_NAV_DIRTY=0
+    req_nav_build_list; req_nav_overlay
+    assert_eq ":x_" "${REQ_SCREEN_LINES[-1]}" "the prompt replaces the hint line"
+    req_nav_handle esc
+
+    type_keys : z z enter
+    assert_contains "unknown command :zz" "$REQ_STATUS" "an unknown command is reported"
+    req_nav_overlay; assert_eq "" "$REQ_STATUS" "the status is shown once"
+    type_keys : enter
+    assert_eq "0" "$REQ_CMD_ACTIVE" "an empty command just leaves command mode"
+    type_keys : q enter
+    assert_eq "1" "$REQ_QUIT" ":q quits"
+    REQ_QUIT=0
+
+    type_keys : n enter
+    assert_contains "open a directory first" "$REQ_STATUS" ":n at the root explains itself"
+    type_keys : e enter
+    assert_contains "select a request first" "$REQ_STATUS" ":e on a directory explains itself"
+    type_keys : d enter
+    assert_contains "select a request first" "$REQ_STATUS" ":d on a directory explains itself"
+    req_nav_handle "$(printf ':')"; assert_eq "1" "$REQ_CMD_ACTIVE" "command mode works on the root"
+    req_nav_handle esc
+}
+
+test_command_actions() {
+    echo "nav: commands that change the project"
+    make_project
+    req_nav_init "$PROJ/.req"
+    REQ_INPUT_FD=3
+    local i out
+
+    # :nd at the root creates a project directory and lists it in the .req.
+    type_keys : n d
+    req_nav_handle enter 3<<<"billing" >/dev/null
+    assert_eq "$PROJ/billing" "$REQ_LAST_DIR" ":nd at the root creates the directory"
+    assert_contains "billing" "$(<"$PROJ/.req")" "and lists it in the .req"
+    assert_eq "api auth billing" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed"
+    assert_eq "2" "$REQ_SEL" "and the new directory is selected"
+    assert_contains "created directory billing" "$REQ_STATUS" "status mentions it"
+
+    req_nav_handle enter; req_nav_handle esc    # enter and leave billing
+    REQ_SEL=0; req_nav_handle enter             # api
+    # :nd inside a directory creates a real subdirectory
+    type_keys :
+    REQ_CMD_BUF="nd orders"
+    req_nav_handle enter >/dev/null
+    [[ -d $PROJ/api/orders ]]; assert_eq "0" "$?" ":nd <name> creates a subdirectory without prompting"
+    assert_eq "orders" "${REQ_ITEM_LABEL[REQ_SEL]}" "and selects it"
+
+    # :n creates a request here
+    type_keys : n
+    req_nav_handle enter 3<<<$'fresh-one
+PATCH
+http://x/f
+n
+' >/dev/null
+    [[ -f $PROJ/api/fresh-one.patch.json ]]; assert_eq "0" "$?" ":n creates a request in the current directory"
+    assert_eq "fresh-one" "${REQ_ITEM_LABEL[REQ_SEL]}" "and selects it"
+    assert_contains "created fresh-one.patch.json" "$REQ_STATUS" "status mentions it"
+    assert_eq "list" "$REQ_VIEW" "back on the list"
+
+    # :e renames the selected request
+    type_keys : e
+    req_nav_handle enter 3<<<$'1
+renamed
+s
+' >/dev/null
+    [[ -f $PROJ/api/renamed.patch.json && ! -e $PROJ/api/fresh-one.patch.json ]]
+    assert_eq "0" "$?" ":e saves the edit (and renames the file)"
+    assert_eq "renamed" "${REQ_ITEM_LABEL[REQ_SEL]}" "the list follows the rename"
+
+    # :e from the details screen keeps showing the (renamed) request
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "opens the details"
+    type_keys : e
+    req_nav_handle enter 3<<<$'1
+renamed-again
+s
+' >/dev/null
+    assert_eq "$PROJ/api/renamed-again.patch.json" "$REQ_DETAIL_FILE" "the details screen follows the rename"
+    req_nav_handle esc
+
+    # :e cancelled leaves everything as it was
+    type_keys : e
+    req_nav_handle enter 3<<<$'q
+' >/dev/null
+    [[ -f $PROJ/api/renamed-again.patch.json ]]; assert_eq "0" "$?" "a cancelled edit changes nothing"
+
+    # :d duplicates and edits the copy
+    type_keys : d
+    req_nav_handle enter 3<<<$'twin
+s
+' >/dev/null
+    [[ -f $PROJ/api/twin.patch.json && -f $PROJ/api/renamed-again.patch.json ]]
+    assert_eq "0" "$?" ":d creates the copy and keeps the original"
+    assert_eq "twin" "${REQ_ITEM_LABEL[REQ_SEL]}" "the copy is selected"
+    type_keys : d
+    req_nav_handle enter 3<<<$'twin-2
+q
+' >/dev/null
+    [[ -f $PROJ/api/twin-2.patch.json ]]; assert_eq "0" "$?" "cancelling the edit of a copy keeps the copy"
+    assert_eq "twin-2" "${REQ_ITEM_LABEL[REQ_SEL]}" "and selects it"
+
+    # an invalid request cannot be edited or duplicated
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == broken ]] && REQ_SEL=$i; done
+    type_keys : e
+    out=$(req_nav_handle enter 3<<<$'q
+' 2>&1)
+    assert_contains "fix the file first" "$out" ":e refuses an invalid request"
+    REQ_INPUT_FD=0
+}
+
+test_command_flow() {
+    echo "nav: command flow through the main loop"
+    local p=$TMP/flow out
+    mkdir -p "$p/svc"; printf 'svc\n' >"$p/.req"
+    # Keys and the wizard's answers arrive on the same stream, as they do on a terminal.
+    out=$({ keys enter; keys : n enter; printf 'ping\nGET\nhttp://x/p\nn\n'; keys : q enter; } | req_nav_run "$p/.req" 2>&1)
+    assert_contains "Created $p/svc/ping.get.json" "$out" "the wizard ran inside the loop"
+    assert_contains "created ping.get.json" "$out" "the status appeared on the next screen"
+    [[ -f $p/svc/ping.get.json ]]; assert_eq "0" "$?" "the request exists"
+    assert_eq "0" "$(req_request_check "$p/svc/ping.get.json" 2>/dev/null; echo $?)" "and is valid"
+    out=$({ keys : q enter; keys enter; } | req_nav_run "$p/.req" 2>&1)
+    [[ $out != *"req /svc"* ]]; assert_eq "0" "$?" ":q ends the loop (a later Enter is never handled)"
+}
+
 test_start_init() {
     echo "nav: init prompt"
     local d=$TMP/fresh out
@@ -288,8 +464,12 @@ test_selection_highlight
 test_detail_screen
 test_detail_params
 test_detail_invalid
+test_invalid_long_path
 test_truncate_scroll
 test_empty_project
+test_command_mode
+test_command_actions
+test_command_flow
 test_start_init
 test_end_to_end
 test_summary

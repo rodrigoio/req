@@ -17,7 +17,7 @@ test: ## Run all tests
 lint: ## Run shellcheck (if installed) and check syntax
 	@bash -n bin/req lib/*.sh tests/*.sh
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck -x bin/req lib/*.sh; \
+		shellcheck bin/req lib/*.sh tests/*.sh; \
 	else \
 		echo "shellcheck not found; only the syntax was checked"; \
 	fi

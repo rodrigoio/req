@@ -5,14 +5,17 @@
 # block) without clearing the screen. A request's result stays visible and the
 # menu is redrawn right below it. Outside a terminal nothing is erased (used by tests).
 #
-# Keys: up/down move the selection, Enter opens/runs, Esc goes back (does nothing at the root).
+# Keys: up/down move the selection, Enter opens/runs, Esc goes back (does nothing at the root),
+# ":" enters command mode (see cmd.sh).
 
 REQ_ESC_TIMEOUT=0.05    # wait for bytes after ESC to tell an arrow key from a bare Esc
 REQ_INPUT_FD=0          # descriptor the keys are read from
 REQ_KEY=""              # last key read: up, down, enter, esc, or the character itself
 
 REQ_SCREEN_LINES=()     # lines of the current block
-REQ_SCREEN_DRAWN=0      # lines of the block already printed in the terminal
+REQ_SCREEN_DRAWN=0      # rows of the block already printed in the terminal
+REQ_SCREEN_EXTRA=0      # rows beyond one per line, from long lines that wrap
+REQ_BASE_EXTRA=0
 
 REQ_NAV_BASE=""         # directory of the .req file
 REQ_NAV_ROOTS=()       # directories listed in the .req
@@ -30,6 +33,9 @@ REQ_ITEM_PATH=()
 REQ_SEL=0
 REQ_TOP=0
 
+REQ_NAV_DIRTY=1         # 1 when the screen must be rebuilt (0 while only the prompt changes)
+REQ_BASE_LINES=()       # last built screen, reused while nothing but the prompt changes
+
 # req_read_key - reads a key into REQ_KEY. Fails (status 1) at end of input.
 req_read_key() {
     local k rest=""
@@ -37,6 +43,7 @@ req_read_key() {
     IFS= read -rsn1 -u "$REQ_INPUT_FD" k || return 1
     case $k in
         ''|$'\r') REQ_KEY=enter ;;
+        $'\177'|$'\b') REQ_KEY=backspace ;;
         $'\e')
             IFS= read -rsn2 -t "$REQ_ESC_TIMEOUT" -u "$REQ_INPUT_FD" rest
             case $rest in
@@ -64,7 +71,17 @@ req_screen_erase() {
 req_screen_draw() {
     req_screen_erase
     printf '%s\n' "${REQ_SCREEN_LINES[@]}"
-    [[ -t 1 ]] && REQ_SCREEN_DRAWN=${#REQ_SCREEN_LINES[@]}
+    [[ -t 1 ]] && REQ_SCREEN_DRAWN=$(( ${#REQ_SCREEN_LINES[@]} + REQ_SCREEN_EXTRA ))
+    return 0
+}
+
+# req_screen_add_long <text> - appends a line that is never truncated (so it can be
+# copied whole). If it wraps, the extra terminal rows are counted for the redraw.
+req_screen_add_long() {
+    local cols
+    cols=$(req_term_cols)
+    REQ_SCREEN_LINES+=("$1")
+    (( ${#1} > cols )) && REQ_SCREEN_EXTRA=$(( REQ_SCREEN_EXTRA + (${#1} - 1) / cols ))
     return 0
 }
 
@@ -114,7 +131,24 @@ req_nav_init() {
     done < <(req_project_dirs "$pfile")
     REQ_CUR_DIR=""; REQ_STACK_DIR=(); REQ_STACK_SEL=()
     REQ_VIEW=list; REQ_DETAIL_FILE=""; REQ_DETAIL_VALID=0
+    REQ_CMD_ACTIVE=0; REQ_CMD_BUF=""; REQ_STATUS=""; REQ_QUIT=0; REQ_NAV_DIRTY=1
     req_nav_load
+}
+
+# req_nav_refresh <path> - reloads the current directory (or the project root) and
+# selects <path> in it, if present.
+req_nav_refresh() {
+    local want=$1 i dir
+    if [[ -z $REQ_CUR_DIR ]]; then
+        REQ_NAV_ROOTS=()
+        while IFS= read -r dir; do
+            REQ_NAV_ROOTS+=("$dir")
+        done < <(req_project_dirs "$REQ_NAV_BASE/$REQ_PROJECT_FILE" 2>/dev/null)
+    fi
+    req_nav_load
+    for i in "${!REQ_ITEM_PATH[@]}"; do
+        [[ ${REQ_ITEM_PATH[i]} == "$want" ]] && REQ_SEL=$i
+    done
 }
 
 # --- screen building --------------------------------------------------
@@ -126,12 +160,12 @@ req_nav_crumb() {
 
 # req_nav_build_list - builds REQ_SCREEN_LINES with the current directory's list.
 req_nav_build_list() {
-    local n=${#REQ_ITEM_KIND[@]} cols rows visible i end width marker pos
+    local n=${#REQ_ITEM_KIND[@]} cols rows visible i end width pos
     local c_dim c_bold c_reset c_sel arrows hint tag label
     cols=$(req_term_cols); rows=$(req_term_rows)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     c_sel=$(req_color sel)
-    REQ_SCREEN_LINES=()
+    REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
 
     pos=""
     (( n > 0 )) && pos=" ($((REQ_SEL + 1))/$n)"
@@ -164,7 +198,7 @@ req_nav_build_list() {
     fi
 
     if req_utf8; then arrows="↑↓"; else arrows="up/down"; fi
-    hint="$arrows navigate   Enter open"
+    hint="$arrows navigate   Enter open   : commands"
     [[ ${#REQ_STACK_DIR[@]} -gt 0 ]] && hint+="   Esc back"
     REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $((cols - 1)))${c_reset}")
 }
@@ -172,18 +206,18 @@ req_nav_build_list() {
 # req_nav_build_detail - builds REQ_SCREEN_LINES with the open request's details.
 # Invalid requests show their problems instead of the fields and do not run.
 req_nav_build_detail() {
-    local f=$REQ_DETAIL_FILE cols width c_dim c_bold c_reset problems line
+    local f=$REQ_DETAIL_FILE abs cols width c_dim c_bold c_reset problems line
     cols=$(req_term_cols); width=$(( cols - 4 ))
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
-    REQ_SCREEN_LINES=()
+    REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
 
-    problems=$(req_request_check "$f" 2>&1)
-    if [[ $? -ne 0 ]]; then
+    if ! problems=$(req_request_check "$f" 2>&1); then
         REQ_DETAIL_VALID=0
-        REQ_SCREEN_LINES+=("${c_bold}$(req_trunc "${f##*/}" $((cols - 1)))${c_reset}")
+        abs=$(req_abs_path "$f")
         REQ_SCREEN_LINES+=("$(req_color err)Invalid request:${c_reset}")
+        req_screen_add_long "$abs"      # whole and on its own line, ready to copy
         while IFS= read -r line; do
-            line=${line#"req: error: $f: "}
+            line=${line#"req: error: $abs: "}
             line=${line#"req: error: "}
             REQ_SCREEN_LINES+=("  $(req_trunc "$line" "$width")")
         done <<<"$problems"
@@ -207,7 +241,7 @@ req_nav_build_detail() {
         *) req_nav_detail_section "Parameters (not sent with $REQ_F_METHOD)" "$width" "${REQ_F_PARAMS[@]}" ;;
     esac
 
-    REQ_SCREEN_LINES+=("${c_dim}Enter run   Esc back${c_reset}")
+    REQ_SCREEN_LINES+=("${c_dim}Enter run   : commands   Esc back${c_reset}")
 }
 
 # req_nav_detail_section <title> <width> [line...]
@@ -259,6 +293,16 @@ req_nav_execute() {
 # req_nav_handle <key> - applies a key to the current state.
 req_nav_handle() {
     local key=$1 n=${#REQ_ITEM_KIND[@]}
+    REQ_NAV_DIRTY=1
+    if (( REQ_CMD_ACTIVE )); then
+        req_cmd_key "$key"
+        return 0
+    fi
+    if [[ $key == : ]]; then
+        REQ_CMD_ACTIVE=1; REQ_CMD_BUF=""
+        REQ_NAV_DIRTY=0
+        return 0
+    fi
     if [[ $REQ_VIEW == detail ]]; then
         case $key in
             enter) (( REQ_DETAIL_VALID )) && req_nav_execute ;;
@@ -275,16 +319,35 @@ req_nav_handle() {
     return 0
 }
 
-# req_nav_run <.req file> - main loop; ends at end of input.
+# req_nav_overlay - puts the command prompt and the one-shot status on the screen.
+req_nav_overlay() {
+    local last=$(( ${#REQ_SCREEN_LINES[@]} - 1 )) cursor='_'
+    req_utf8 && cursor='█'
+    (( REQ_CMD_ACTIVE )) && REQ_SCREEN_LINES[last]=":${REQ_CMD_BUF}${cursor}"
+    if [[ -n $REQ_STATUS ]]; then
+        REQ_SCREEN_LINES+=("$(req_color dim)${REQ_STATUS}$(req_color reset)")
+        REQ_STATUS=""
+    fi
+}
+
+# req_nav_run <.req file> - main loop; ends at end of input or on :q.
 req_nav_run() {
     req_nav_init "$1" || return 1
     [[ -t 1 ]] && printf '\033[?25l'
     [[ -t 0 ]] && stty -echo 2>/dev/null
     while :; do
-        if [[ $REQ_VIEW == detail ]]; then req_nav_build_detail; else req_nav_build_list; fi
+        if (( REQ_NAV_DIRTY )); then
+            if [[ $REQ_VIEW == detail ]]; then req_nav_build_detail; else req_nav_build_list; fi
+            REQ_BASE_LINES=("${REQ_SCREEN_LINES[@]}"); REQ_BASE_EXTRA=$REQ_SCREEN_EXTRA
+            REQ_NAV_DIRTY=0
+        else
+            REQ_SCREEN_LINES=("${REQ_BASE_LINES[@]}"); REQ_SCREEN_EXTRA=$REQ_BASE_EXTRA
+        fi
+        req_nav_overlay
         req_screen_draw
         req_read_key || break
         req_nav_handle "$REQ_KEY"
+        (( REQ_QUIT )) && break
     done
     [[ -t 0 ]] && stty echo 2>/dev/null
     [[ -t 1 ]] && printf '\033[?25h'

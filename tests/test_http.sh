@@ -73,7 +73,7 @@ test_print() {
     out=$(req_print_body text/html '<h1>x</h1>'); assert_eq "<h1>x</h1>" "$out" "raw HTML"
     out=$(req_print_body application/json '{broken'); assert_eq "{broken" "$out" "invalid JSON comes out raw"
     out=$(req_print_body text/plain ''); assert_eq "(no body)" "$out" "empty body"
-    out=$(COLUMNS=10 req_rule =); assert_eq "==========" "$out" "line as wide as the terminal"
+    out=$(COLUMNS=10 req_rule '='); assert_eq "==========" "$out" "line as wide as the terminal"
     out=$(COLUMNS=5 req_rule -); assert_eq "-----" "$out" "line with another character"
 
     REQ_RESP_TIMES=(0.010 0.030 0 0.030 0.130 0.150)
@@ -89,8 +89,7 @@ start_server() {
     command -v python3 >/dev/null 2>&1 || return 1
     python3 -I "$ROOT/tests/mock_server.py" >"$TMP/port" 2>/dev/null &
     SERVER_PID=$!
-    local i
-    for i in {1..50}; do
+    for _ in {1..50}; do
         [[ -s $TMP/port ]] && { PORT=$(<"$TMP/port"); return 0; }
         sleep 0.1
     done

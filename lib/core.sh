@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # core.sh - dependency checks, errors and terminal restoration.
 
+# shellcheck disable=SC2034  # read by bin/req
 REQ_VERSION="0.1.0"
 REQ_REQUIRED_BASH_MAJOR=4
 REQ_REQUIRED_CMDS=(curl jq)
@@ -8,6 +9,27 @@ REQ_REQUIRED_CMDS=(curl jq)
 # req_err <message> - prints an error to stderr without exiting.
 req_err() {
     printf 'req: error: %s\n' "$*" >&2
+}
+
+# req_trim <text> - prints the text without leading and trailing whitespace.
+req_trim() {
+    local s=$1
+    s=${s#"${s%%[![:space:]]*}"}
+    s=${s%"${s##*[![:space:]]}"}
+    printf '%s' "$s"
+}
+
+# req_abs_path <path> - prints the absolute (physical) path of a file or directory.
+# The file itself does not need to exist; its directory does, otherwise the path
+# is printed as given.
+req_abs_path() {
+    local p=$1 dir
+    if [[ -d $p ]]; then
+        (cd -P "$p" && pwd)
+        return
+    fi
+    dir=$(cd -P "$(dirname "$p")" 2>/dev/null && pwd) || { printf '%s' "$p"; return; }
+    printf '%s/%s' "$dir" "${p##*/}"
 }
 
 # req_die <message> - prints an error to stderr and exits with status 1.

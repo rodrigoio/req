@@ -18,6 +18,7 @@ REQ_PROJECT_FILE=.req
 REQ_PROJECT_DEFAULT_DIR=requests
 
 # Content checks (independent of the file name): prints one problem per line.
+# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
 REQ_SCHEMA_JQ='
 def scalar: type == "string" or type == "number" or type == "boolean";
 def check_map($lbl; $item):
@@ -105,6 +106,7 @@ REQ_FIELDS_JQ='
 REQ_F_NAME=""; REQ_F_METHOD=""; REQ_F_URL=""; REQ_F_DESC=""
 REQ_F_HEADERS=(); REQ_F_QUERY=(); REQ_F_PARAMS=()
 
+# shellcheck disable=SC2034  # REQ_F_* are read by nav.sh
 # req_request_fields <file> - reads the fields of an already validated request in
 # a single jq call and fills REQ_F_NAME, REQ_F_METHOD, REQ_F_URL, REQ_F_DESC and
 # the arrays REQ_F_HEADERS ("key: value"), REQ_F_QUERY and REQ_F_PARAMS ("key=value").
@@ -129,14 +131,15 @@ req_request_fields() {
 # with the file name. Prints each problem to stderr; succeeds if there are none.
 # Invalid JSON is only reported, the file is never changed.
 req_request_check() {
-    local file=$1 out status line parsed stem fmethod jname jmethod
+    local file=$1 abs out status line parsed stem fmethod jname jmethod
     local lines=() problems=()
+    abs=$(req_abs_path "$file")     # messages carry the absolute path, easy to copy
     out=$(jq -r "$REQ_CHECK_JQ" "$file" 2>&1); status=$?
     if (( status != 0 )) && [[ $out == *"parse error"* ]]; then
-        req_err "$file: invalid JSON: $out"
+        req_err "$abs: invalid JSON: $out"
         return 1
     elif (( status != 0 )); then
-        req_err "$file: cannot validate: $out"
+        req_err "$abs: cannot validate: $out"
         return 1
     fi
     mapfile -t lines <<<"$out"
@@ -164,7 +167,7 @@ req_request_check() {
 
     (( ${#problems[@]} == 0 )) && return 0
     for line in "${problems[@]}"; do
-        req_err "$file: $line"
+        req_err "$abs: $line"
     done
     return 1
 }
@@ -195,7 +198,7 @@ req_request_write() {
     target=$dir/$(req_request_filename "$name" "$method")
     tmp=$(mktemp "$dir/.req.XXXXXX") || { req_err "cannot write to $dir"; return 1; }
     if ! jq --arg name "$name" --arg method "${method^^}" --arg url "$url" \
-            '. + {name: $name, method: $method, url: $url}' <<<"$json" >"$tmp" 2>/dev/null; then
+            '{name: $name, method: $method, url: $url} + del(.name, .method, .url)' <<<"$json" >"$tmp" 2>/dev/null; then
         rm -f "$tmp"
         req_err "the JSON of request \"$name\" is invalid; nothing was written"
         return 1
@@ -235,10 +238,32 @@ req_project_init() {
     file=$dir/$REQ_PROJECT_FILE
     [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
     [[ ! -e $file ]] || { req_err "$file already exists"; return 1; }
-    mkdir -p "$dir/$REQ_PROJECT_DEFAULT_DIR" 2>/dev/null &&
-        printf '# req project: one directory per line, relative to this file.\n%s\n' \
-            "$REQ_PROJECT_DEFAULT_DIR" >"$file" 2>/dev/null ||
-        { req_err "cannot write to $dir"; return 1; }
+    if ! { mkdir -p "$dir/$REQ_PROJECT_DEFAULT_DIR" &&
+            printf '# req project: one directory per line, relative to this file.\n%s\n' \
+                "$REQ_PROJECT_DEFAULT_DIR" >"$file"; } 2>/dev/null; then
+        req_err "cannot write to $dir"
+        return 1
+    fi
+}
+
+# req_project_add_dir <.req file> <name> - creates the directory next to the .req
+# and lists it in the .req. Fails if the name is not a slug or is already listed.
+req_project_add_dir() {
+    local pfile=$1 name=$2 base listed
+    req_valid_name "$name" || {
+        req_err "invalid directory name: \"$name\" (use a slug: lowercase letters, digits and hyphens)"
+        return 1; }
+    [[ -f $pfile ]] || { req_err "project file not found: $pfile"; return 1; }
+    base=$(cd -P "$(dirname "$pfile")" && pwd)
+    listed=$(req_project_dirs "$pfile" 2>/dev/null)
+    if grep -qxF -- "$base/$name" <<<"$listed"; then
+        req_err "\"$name\" is already listed in $pfile"
+        return 1
+    fi
+    mkdir -p "$base/$name" 2>/dev/null || { req_err "cannot create $base/$name"; return 1; }
+    # Make sure the last line ends with a newline before appending.
+    if [[ -s $pfile && -n $(tail -c1 "$pfile") ]]; then printf '\n' >>"$pfile"; fi
+    printf '%s\n' "$name" >>"$pfile"
 }
 
 # req_project_dirs <.req file> - prints the project directories, one per line.
@@ -255,7 +280,7 @@ req_project_dirs() {
         line=${line%"${line##*[![:space:]]}"}
         [[ -z $line || $line == \#* ]] && continue
         line=${line%/}
-        [[ $line == /* ]] && dir=$line || dir=$base/$line
+        if [[ $line == /* ]]; then dir=$line; else dir=$base/$line; fi
         if [[ -d $dir ]]; then
             printf '%s\n' "$dir"
         else

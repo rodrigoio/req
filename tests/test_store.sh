@@ -55,8 +55,10 @@ test_write_read() {
     assert_eq "updates" "$(req_request_get "$d/create-user.patch.json" description)" "writes description"
     assert_eq '{"Content-Type":"application/json","X-N":5}' "$(req_request_get "$d/create-user.patch.json" headers)" "writes headers"
     assert_eq '{"a":1,"b":true}' "$(req_request_get "$d/create-user.patch.json" data_parameter)" "writes data_parameter"
-    assert_eq "" "$(ls -A "$d" | grep '^\.req\.')" "no temporary files left"
+    assert_eq "" "$(compgen -G "$d/.req.*")" "no temporary files left"
 
+    req_request_write "$d" ordered PUT http://x '{"data_parameter":{"a":"1"},"description":"d"}' >/dev/null
+    assert_eq '["name","method","url"]' "$(jq -c 'keys_unsorted[0:3]' "$d/ordered.put.json")" "name, method and url come first in the file"
     out=$(req_request_write "$d" x GET http://x '{"name":"other","url":"http://other"}' 2>&1)
     assert_eq "http://x" "$(req_request_get "$d/x.get.json" url)" "arguments win over the json"
     assert_eq "x" "$(req_request_get "$d/x.get.json" name)" "name follows the argument"
@@ -69,7 +71,7 @@ test_write_read() {
     assert_eq "1" "$?" "a wrong type is not written"
     assert_contains "header \"X\"" "$out" "error names the header"
     [[ ! -e $d/bad2.get.json ]]; assert_eq "0" "$?" "invalid file was not created"
-    assert_eq "" "$(ls -A "$d" | grep '^\.req\.')" "no temporary files after a failure"
+    assert_eq "" "$(compgen -G "$d/.req.*")" "no temporary files after a failure"
 
     out=$(req_request_write "$d" "My Name" GET http://x 2>&1);  assert_eq "1" "$?" "a name outside the slug format is refused"
     assert_contains "slug" "$out" "error mentions the slug"
@@ -91,10 +93,16 @@ test_invalid_manual() {
     after=$(cat "$d/a.get.json")
     assert_eq "$before" "$after" "file was not changed"
 
+    out=$(cd "$d" && req_request_check a.get.json 2>&1)
+    assert_contains "req: error: $d/a.get.json: invalid JSON" "$out" "a relative path is reported as an absolute one"
+
     printf '{"name":"b","method":"GET","url":"http://x","headers":[],"query":"x"}\n' >"$d/b.get.json"
     out=$(check_out "$d/b.get.json")
     assert_contains 'field "headers" must be an object' "$out" "headers with a wrong type"
     assert_contains 'field "query" must be an object' "$out" "query with a wrong type"
+
+    out=$(cd "$d" && req_request_check b.get.json 2>&1)
+    assert_contains "req: error: $d/b.get.json: field \"headers\" must be an object" "$out" "each problem carries the absolute path"
 
     printf '{"name":"c","method":"POST","url":"http://x"}\n' >"$d/c.get.json"
     assert_contains "differs from the file name" "$(check_out "$d/c.get.json")" "method differs from the file"

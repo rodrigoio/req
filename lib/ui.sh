@@ -97,16 +97,38 @@ req_rule() {
     printf '%s\n' "${line// /$ch}"
 }
 
-# req_confirm <question> - asks "[Y/n]" and succeeds on yes. Enter means yes;
-# end of input means no. Reads from REQ_INPUT_FD (default: stdin).
+# req_confirm <question> [y|n] - asks "[Y/n]" (or "[y/N]" when the default is n) and
+# succeeds on yes. Enter picks the default; end of input means no. Reads from
+# REQ_INPUT_FD (default: stdin).
 req_confirm() {
-    local answer
+    local def=${2:-y} hint answer
+    if [[ $def == n ]]; then hint='[y/N]'; else hint='[Y/n]'; fi
     while :; do
-        printf '%s [Y/n] ' "$1"
+        printf '%s %s ' "$1" "$hint"
         IFS= read -r -u "${REQ_INPUT_FD:-0}" answer || { printf '\n'; return 1; }
         case ${answer,,} in
-            ''|y|yes) return 0 ;;
-            n|no)     return 1 ;;
+            '') [[ $def == n ]] && return 1 || return 0 ;;
+            y|yes) return 0 ;;
+            n|no)  return 1 ;;
         esac
     done
+}
+
+# req_prompt <label> [default] - asks for one line and leaves it in REQ_REPLY
+# (the default when the answer is empty). Fails at end of input. Uses readline
+# editing when reading from a terminal.
+REQ_REPLY=""
+# shellcheck disable=SC2034  # REQ_REPLY is read by the callers
+req_prompt() {
+    local label=$1 def=${2-} line prompt fd=${REQ_INPUT_FD:-0}
+    prompt=$label
+    [[ -n $def ]] && prompt+=" [$def]"
+    prompt+=": "
+    if [[ -t $fd ]]; then
+        IFS= read -r -e -p "$prompt" -u "$fd" line || return 1
+    else
+        printf '%s' "$prompt"
+        IFS= read -r -u "$fd" line || { printf '\n'; return 1; }
+    fi
+    REQ_REPLY=${line:-$def}
 }

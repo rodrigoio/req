@@ -66,9 +66,44 @@ test_confirm() {
     assert_eq "2" "$(grep -o 'Go? \[Y/n\]' <<<"$out" | wc -l)" "asks again on an unrecognized answer"
 }
 
+test_trim_prompt() {
+    echo "core: trim"
+    assert_eq "a b" "$(req_trim "   a b  ")" "trims both ends"
+    assert_eq "" "$(req_trim "   ")" "only whitespace"
+    assert_eq "x" "$(req_trim "x")" "nothing to trim"
+    echo "ui: prompt and confirm defaults"
+    local out
+    REQ_INPUT_FD=3 req_prompt "Name" "def" 3<<<"typed" >/dev/null
+    assert_eq "typed" "$REQ_REPLY" "an answer replaces the default"
+    REQ_INPUT_FD=3 req_prompt "Name" "def" 3<<<"" >/dev/null
+    assert_eq "def" "$REQ_REPLY" "Enter picks the default"
+    out=$(REQ_INPUT_FD=3 req_prompt "Name" "def" 3<<<"" )
+    assert_eq "Name [def]: " "$out" "the prompt shows the default"
+    REQ_INPUT_FD=3 req_prompt "Name" "" 3</dev/null >/dev/null; assert_eq "1" "$?" "end of input fails"
+    REQ_INPUT_FD=3 req_confirm "Go?" n 3<<<"" >/dev/null; assert_eq "1" "$?" "Enter means no when the default is n"
+    REQ_INPUT_FD=3 req_confirm "Go?" n 3<<<"y" >/dev/null; assert_eq "0" "$?" "y means yes when the default is n"
+    out=$(REQ_INPUT_FD=3 req_confirm "Go?" n 3<<<"n"); assert_contains "[y/N]" "$out" "the hint shows the default"
+}
+
+test_abs_path() {
+    echo "core: absolute paths"
+    local d
+    d=$(mktemp -d); mkdir -p "$d/sub"; : >"$d/sub/f.json"; ln -s "$d/sub" "$d/link"
+    assert_eq "$d/sub/f.json" "$(req_abs_path "$d/sub/f.json")" "an absolute path stays"
+    assert_eq "$d/sub/f.json" "$(cd "$d/sub" && req_abs_path f.json)" "a bare file name is resolved against the cwd"
+    assert_eq "$d/sub/f.json" "$(cd "$d" && req_abs_path ./sub/../sub/f.json)" "dots are normalized"
+    assert_eq "$d/sub/f.json" "$(req_abs_path "$d/link/f.json")" "directory symlinks are resolved"
+    assert_eq "$d/sub/new.json" "$(req_abs_path "$d/sub/new.json")" "the file does not need to exist"
+    assert_eq "$d/sub" "$(req_abs_path "$d/link")" "works for directories"
+    assert_eq "/nope/x.json" "$(req_abs_path /nope/x.json)" "a missing directory leaves the path as given"
+    rm -rf "$d"
+}
+
 test_missing_deps
 test_check_deps_message
 test_bash_check
 test_colors
 test_confirm
+test_trim_prompt
+test_abs_path
 test_summary

@@ -17,6 +17,7 @@ REQ_CURL_FORMAT=$'\n%{http_code}|%{time_namelookup}|%{time_connect}|%{time_appco
 # Request preparation in a single jq call, as "tag NUL value NUL" records:
 # method, url with the url-encoded querystring, headers and body. The body (only
 # for POST, PUT and PATCH) comes out as compact JSON and as key=value form pairs.
+# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
 REQ_PREPARE_JQ='
 ((.method // "") | ascii_upcase) as $m
 | (.headers // {}) as $h

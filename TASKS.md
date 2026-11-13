@@ -5,6 +5,12 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 
 Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.gitignore` permanece.
 
+## Estado atual (para retomar)
+- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **T5.2** (resolução de uma chave: a variável `<ENV>_<CHAVE>` precede o arquivo).
+- Suíte: `make check` com 458 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Pendências abertas e ajustes pós-validação estão na seção "Adicionais" (TA.1 a TA.13), antes da Fase 8.
+- Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
+
 ## Decisões fechadas
 - **Shell:** bash 4+. **Dependências:** apenas `curl` e `jq`.
 - **Código:** organizado em funções, sem scripts procedurais soltos (boas práticas do manifest).
@@ -22,6 +28,8 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - **Corpo (por ora):** apenas `data_parameter` com valores simples, enviado apenas em POST, PUT e PATCH (GET e DELETE não levam corpo); `data_string` fica reservado para a Fase 8.
 - **Métodos:** GET (verde), POST (azul), PUT (laranja), PATCH (marrom), DELETE (vermelho).
 - **Secrets:** arquivo `~/.req/env/<env>/secrets.json` ou variáveis de ambiente com prefixo, `${url}` resolve para `DEV_URL` (ambiente `dev`, chave em maiúsculas).
+- **Tarefas prontas:** o que já está implementado conta como feito, sem nova validação; o trabalho segue apenas com o que falta.
+- **Tamanho das tarefas (revisão):** cada tarefa entrega um único comportamento, em cerca de 100 a 200 linhas contando os testes, e vira um commit. Infraestrutura (helpers) entra em commit próprio, antes da feature que a usa. Cada tarefa leva só os testes do seu comportamento; os cenários integrados ficam numa tarefa de verificação no fim da fase. Se uma tarefa estourar o tamanho, ela é dividida antes de commitar.
 
 ## Fases
 
@@ -59,37 +67,72 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - [x] T3.3 Tela de detalhes da request (url, description, params, headers); Enter dispara, Esc volta; na raiz Esc não faz nada.
 - [x] T3.4 Cores por método na listagem e nos detalhes.
 
-### Fase 4 — Modo comando e gestão de requests
-- T4.1 Entrada em modo comando com `:`; Esc cancela.
-- T4.2 `:n` — wizard: nome (slug), método e url, depois campos opcionais (description, header, querystring, parâmetros post/put/patch).
-- T4.3 Wizard simplificado com presets de formato popular (headers para json, text, html).
-- T4.4 `:e` — editar a request selecionada.
-- T4.5 `:d` — duplicar a request selecionada e abrir edição.
-- T4.6 `:q` — sair sem confirmação, restaurando o terminal.
+### Fase 4 — Modo comando e gestão de requests e diretórios
+- [x] T4.1 Helpers de entrada: `req_trim`, `req_prompt` (uma linha, com padrão) e `req_confirm` com padrão `[y/N]`.
+- [x] T4.2 Modo comando: `:` abre o prompt no rodapé, digitação, Backspace, Esc cancela, comando vazio ou desconhecido mostra mensagem de status.
+- [x] T4.3 `:q` sai sem pedir confirmação, restaurando o terminal.
+- [x] T4.4 `req_project_add_dir`: cria o diretório e o lista no `.req` (função e testes, sem UI).
+- [x] T4.5 `:nd [nome]` (alias `:mkdir`): na raiz cria e lista no `.req`; dentro de um diretório cria um subdiretório real; atualiza a lista e seleciona o novo.
+- [x] T4.6 `:n` mínimo: pergunta nome (slug), método e url e cria a request no diretório atual; erro amigável na raiz.
+- [x] T4.7 `:n` campos opcionais simples: description, querystring e parâmetros (só POST, PUT e PATCH).
+- [x] T4.8 `:n` headers: presets json, text e html e pares `chave: valor`.
+- [x] T4.9 `:e` campos simples: menu para name, method, url e description, com renomeio do arquivo e proteção contra sobrescrita.
+- [x] T4.10 `:e` coleções: headers, query e parâmetros (par `chave=valor` define, `-chave` remove).
+- [x] T4.11 `:d`: duplica a request selecionada e abre o menu de edição na cópia.
+- [x] T4.13 Caminho absoluto em requests inválidas: a tela de detalhes e as mensagens de validação mostram o caminho completo, em linha própria e sem truncar, para copiar e corrigir em outro terminal.
+- [x] T4.12 Verificação da fase: fluxo integrado pelo laço principal, demonstração em terminal real e seção de comandos no README.
 
 ### Fase 5 — Ambientes e secrets
-- T5.1 Estrutura `~/.req/env/<env>/secrets.json` (gerado como JSON válido) e leitura via jq; JSON inválido apenas indica o erro.
-- T5.2 Resolução via variável de ambiente com prefixo (`${url}` -> `DEV_URL`); variável precede arquivo.
-- T5.3 Substituição de `${chave}` em url, headers, query e body; erro amigável para ausentes, orientando o usuário (variável ou chave no secrets.json).
-- T5.4 `:env <nome>` troca o ambiente na sessão; ambiente ativo visível no cabeçalho do menu; validação de ambiente inexistente.
-- T5.5 Mascaramento de secrets em logs e verbose.
+- [x] T5.1 Leitura de `~/.req/env/<env>/secrets.json` via jq; JSON inválido apenas indica o erro.
+- T5.2 Resolução de uma chave: variável `<ENV>_<CHAVE>` precede o arquivo.
+- T5.3 Substituição de `${chave}` em um texto (função pura), com erro amigável que lista as chaves ausentes e orienta o usuário.
+- T5.4 Aplicar a substituição a url, headers, query e parâmetros antes de executar.
+- T5.5 Ambiente ativo (`REQ_ENV`, padrão `default`) exibido no cabeçalho do menu.
+- T5.6 `:env <nome>` troca o ambiente na sessão e valida ambiente inexistente.
+- T5.7 Mascaramento de valores secretos (função e testes), para uso em logs e verbose.
+- T5.8 Verificação da fase e documentação dos ambientes.
 
 ### Fase 6 — Logs e verbose
-- T6.1 Configuração global (`~/.req/config`) e local (no projeto) para habilitar logs; local sobrescreve global.
-- T6.2 Gravação de requisição e resposta em arquivo de log com timestamp.
-- T6.3 Modo verbose: parâmetros enviados (`>>`) e resultado (`<<`) no terminal.
-- T6.4 Comando para alternar logs/verbose em sessão (ex.: `:log`, `:v`).
+- T6.1 Configuração global (`~/.req/config`) e local (no projeto): formato, nomes dos arquivos e precedência (local vence).
+- T6.2 Log da requisição enviada, com timestamp, em arquivo.
+- T6.3 Log da resposta recebida, no mesmo arquivo.
+- T6.4 Verbose: parâmetros enviados com `>>` no terminal.
+- T6.5 Verbose: resposta (incluindo headers) com `<<` no terminal.
+- T6.6 `:log` e `:v` alternam logs e verbose na sessão.
+- T6.7 Verificação da fase e documentação.
 
 ### Fase 7 — Portabilidade, qualidade e entrega
-- T7.1 Validar em debian, centos e rhel (containers) com bash 4+.
-- T7.2 shellcheck e revisão: tudo em funções, sem dependências extras.
-- T7.3 Documentação de uso, formato de arquivos e ambientes.
-- T7.4 Teste ponta a ponta do fluxo completo.
+- T7.1 Validação em container debian com bash 4+ (`make check`).
+- T7.2 Validação em containers centos e rhel.
+- [x] T7.3 `shellcheck`: corrigir os avisos (feito: `make lint` limpo em `bin/`, `lib/` e `tests/`).
+- T7.4 Documentação de uso.
+- T7.5 Documentação do formato de arquivos e dos ambientes.
+- T7.6 Teste ponta a ponta do fluxo completo.
+
+### Adicionais — pendências e ajustes pós-validação (antes da Fase 8)
+Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das validações com usuários: confirmar a necessidade antes de implementar. Origem de cada ponto em `DEVELOPMENT.md`, seção "Open items to validate with users".
+- TA.1 Apagar request ou diretório pelo menu (por exemplo `:rm`), com confirmação. Hoje não há como; o manifest não pede, mas é a lacuna mais provável.
+- TA.2 Renomear ou mover request e diretório direto (por exemplo `:mv`), sem passar pelo campo `name` do menu de edição.
+- TA.3 Esc cancela os prompts dos assistentes (`:n`, `:e`, `:d`, `:nd`). Hoje só nome vazio ou Ctrl-D cancelam.
+- TA.4 Rever o Enter em duas etapas e a seleção que substitui a cor do método na linha destacada, conforme as validações (podem virar opção).
+- TA.5 Histórico e Tab no modo comando.
+- TA.6 Decidir se requests podem ser criadas na raiz do projeto (hoje só dentro de diretórios; `:n` na raiz explica e sugere `:nd`).
+- TA.7 Redimensionamento do terminal: o menu não trata `SIGWINCH`; verificar o redesenho e o apagamento ao redimensionar.
+- TA.8 Código de saída de `req run` para respostas 4xx e 5xx (hoje 0; só falha em erro de transporte). Decisão pendente.
+- TA.9 Teste em pseudo-terminal dentro da suíte (init, navegação, `:n`, `:q`), hoje só feito à mão; requer `python3` e é pulado sem ele.
+- TA.10 `REQ_ESC_TIMEOUT` (50 ms) em conexões lentas, como SSH: validar e documentar o ajuste.
+- TA.11 Validar em terminais reais sem UTF-8 e com `NO_COLOR`; os fallbacks existem, mas só foram testados em teste automatizado.
+- TA.12 Descrição com várias linhas na tela de detalhes (hoje as quebras viram espaço).
+- TA.13 Decidir se o próprio `TASKS.md` é traduzido para inglês (pergunta em aberto desde a tradução do projeto).
 
 ### Fase 8 — Extras (a detalhar ao final do projeto)
-- T8.1 Opções por request: `timeout`, `follow_redirects`, `insecure`.
-- T8.2 `data_string` e envio de arquivos / corpo bruto, com a regra de precedência em relação a `data_parameter`.
-- T8.3 Valores aninhados em `data_parameter` e `query` (objetos e listas).
+- T8.1 `timeout` por request.
+- T8.2 `follow_redirects` por request.
+- T8.3 `insecure` por request.
+- T8.4 `data_string` como corpo bruto, com a regra de precedência sobre `data_parameter`.
+- T8.5 Envio de arquivos.
+- T8.6 Valores aninhados em `query`.
+- T8.7 Valores aninhados em `data_parameter`.
 
 ## Arquivos críticos (a criar)
 `bin/req`, `lib/{core,ui,store,http,nav,cmd,env,log}.sh`, `tests/*`, `README.md`, `TASKS.md`.
