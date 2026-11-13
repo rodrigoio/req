@@ -131,7 +131,8 @@ Each request is a file `<slug>.<method>.json` (methods: GET, POST, PUT, PATCH, D
 }
 ```
 
-- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters` and `raw_data`.
+- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters`, `raw_data` and `timeout`.
+- `timeout` is the longest the whole request may take, in seconds (a positive number, such as `2.5`). Without it `REQ_TIMEOUT` applies, and then 60. A request that runs out of time fails with curl's exit code 28.
 - `headers`, `query` and `parameters` are objects with simple values (string, number or boolean).
 - `query` is appended to the url, url-encoded.
 - `raw_data` is the raw body: an object or list (JSON) or a string (any other text).

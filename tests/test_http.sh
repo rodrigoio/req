@@ -25,6 +25,15 @@ has_arg() {
     return 1
 }
 
+# arg_after <arg> - the curl argument that follows <arg>.
+arg_after() {
+    local i
+    for i in "${!REQ_CURL_ARGS[@]}"; do
+        [[ ${REQ_CURL_ARGS[$i]} == "$1" ]] && { printf '%s' "${REQ_CURL_ARGS[$(( i + 1 ))]}"; return 0; }
+    done
+    return 1
+}
+
 test_url() {
     echo "http: url and querystring"
     assert_eq "http://x/a?b=1&c=a%20b" "$(req_build_url '{"url":"http://x/a","query":{"b":1,"c":"a b"}}')" "appends the query with encoding"
@@ -40,6 +49,13 @@ test_args() {
     has_arg -X && has_arg GET && has_arg "X-A: 1" && has_arg "Accept: text/html" && has_arg http://x
     assert_eq "0" "$?" "method, headers and url"
     assert_eq "" "$REQ_BODY" "GET has no body"
+
+    req_build_curl_args '{"method":"get","url":"http://x"}'
+    assert_eq "60" "$(arg_after --max-time)" "the default maximum time is 60 s"
+    REQ_TIMEOUT=20 req_build_curl_args '{"method":"get","url":"http://x"}'
+    assert_eq "20" "$(arg_after --max-time)" "REQ_TIMEOUT changes it"
+    REQ_TIMEOUT=20 req_build_curl_args '{"method":"get","url":"http://x","timeout":2.5}'
+    assert_eq "2.5" "$(arg_after --max-time)" "the request's timeout wins over REQ_TIMEOUT"
 
     local m
     for m in GET DELETE; do
@@ -306,6 +322,14 @@ test_execute() {
     assert_eq "2" "$out" "with colors every marker is dim"
     REQ_VERBOSE=0
     unset DEFAULT_BASE DEFAULT_TOK
+
+    # Per-request timeout (T8.1): a 1.5 s answer against a 0.5 s limit, then against a 5 s one.
+    printf '{"name":"slow","method":"GET","url":"%s/sleep/1500","timeout":0.5}\n' "$base" >"$TMP/slow.get.json"
+    out=$(NO_COLOR=1 req_run_request "$TMP/slow.get.json" 2>&1); assert_eq "1" "$?" "a request slower than its timeout fails"
+    assert_contains "curl exit code 28" "$out" "with curl's timeout exit code"
+    printf '{"name":"slow","method":"GET","url":"%s/sleep/300","timeout":5}\n' "$base" >"$TMP/slow.get.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/slow.get.json" 2>&1); assert_eq "0" "$?" "a longer timeout lets it finish"
+    assert_contains "slept" "$out" "and shows the response"
 
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"

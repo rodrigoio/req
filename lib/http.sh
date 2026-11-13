@@ -28,6 +28,7 @@ REQ_PREPARE_JQ='
 | (.headers // {}) as $h
 | (.parameters // {}) as $d
 | (.raw_data // "") as $r
+| (.timeout // "") as $t
 | ($m == "POST" or $m == "PUT" or $m == "PATCH") as $body
 | (["method", $m],
    ["url", ((.url // "") as $u
@@ -38,6 +39,7 @@ REQ_PREPARE_JQ='
               else $u + "?" + $q end)],
    ($h | to_entries[] | ["header", "\(.key): \(.value)"]),
    ["hasctype", ($h | keys | any(ascii_downcase == "content-type") | tostring)],
+   (if $t != "" then ["timeout", ($t | tostring)] else empty end),
    (if $body and $r != "" then
         ["raw", (if ($r | type) == "string" then $r else ($r | tojson) end)],
         ["rawjson", (($r | type) != "string" | tostring)]
@@ -47,13 +49,13 @@ REQ_PREPARE_JQ='
 | .[] | (., "\u0000")'
 
 REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=()
+REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""
 
 # req_prepare_request <json> - fills REQ_P_* from the request. Fails without a url.
 req_prepare_request() {
     local tag val
     REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=()
+    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""
     while IFS= read -r -d '' tag && IFS= read -r -d '' val; do
         case $tag in
             method)   REQ_P_METHOD=$val ;;
@@ -63,6 +65,7 @@ req_prepare_request() {
             raw)      REQ_P_RAW=$val; REQ_P_RAWSET=1 ;;
             rawjson)  REQ_P_RAWJSON=$val ;;
             form)     REQ_P_FORM+=("$val") ;;
+            timeout)  REQ_P_TIMEOUT=$val ;;
         esac
     done < <(jq -j "$REQ_PREPARE_JQ" <<<"$1")
     if [[ -z $REQ_P_URL ]]; then
@@ -77,7 +80,8 @@ req_build_url() {
     printf '%s' "$REQ_P_URL"
 }
 
-# req_build_curl_args <json> - fills REQ_P_*, REQ_CURL_ARGS and REQ_BODY.
+# req_build_curl_args <json> - fills REQ_P_*, REQ_CURL_ARGS and REQ_BODY. The maximum
+# time of the whole request is the "timeout" field (seconds), else REQ_TIMEOUT, else 60.
 # Body (POST, PUT and PATCH only): a non-empty raw_data is sent as it is, through
 # stdin; an object or list gets "Content-Type: application/json" when the request
 # has no Content-Type, and free text gets none (curl'"'"'s default one is removed).
@@ -90,7 +94,7 @@ req_build_curl_args() {
     REQ_BODY=""
     REQ_CURL_ARGS=(-sS -g
         --connect-timeout "${REQ_CONNECT_TIMEOUT:-10}"
-        --max-time "${REQ_TIMEOUT:-60}"
+        --max-time "${REQ_P_TIMEOUT:-${REQ_TIMEOUT:-60}}"
         -X "$REQ_P_METHOD")
 
     for line in "${REQ_P_HEADERS[@]}"; do
