@@ -6,8 +6,8 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T5.7** (Fase 5: mascaramento de valores secretos).
-- Ordem combinada: a Fase 5 (T5.7 em diante) segue, pois a Revisão 2 está concluída.
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T5.8** (Fase 5: verificação e documentação; a T5.7 foi descartada).
+- Ordem combinada: a Fase 5 (T5.8 em diante) segue, pois a Revisão 2 está concluída.
 - Suíte: `make check` com 1117 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
@@ -36,7 +36,8 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 - **Ajuda:** `:h` lista todas as teclas e comandos; todo comando novo entra nela.
 - **Erro de dependências:** só nomeia os pacotes faltantes, em laranja, sem comandos de instalação.
 - **Métodos:** GET (verde), POST (azul), PUT (laranja), PATCH (marrom), DELETE (vermelho).
-- **Secrets:** arquivo `chave=valor` do ambiente do projeto (ver abaixo) ou variáveis de ambiente com prefixo; `${url}` resolve para `DEV_URL` (ambiente `dev`, chave em maiúsculas). O formato antigo `~/.req/env/<env>/secrets.json` (T5.1) é substituído pela TR2.4, sem migração.
+- **Variáveis (antes "secrets"):** arquivo `chave=valor` do ambiente do projeto (ver abaixo) ou variáveis de ambiente com prefixo; `${url}` resolve para `DEV_URL` (ambiente `dev`, chave em maiúsculas). O formato antigo `~/.req/env/<env>/secrets.json` (T5.1) é substituído pela TR2.4, sem migração.
+- **Sem distinção de secrets, sem mascaramento (decidido):** as variáveis de cada projeto ficam isoladas fisicamente em `~/.req/projects/<id>/`, então todas valem como secretas e não há um tipo "secret" à parte, nem na interpolação nem nos nomes (`req_vars_load`, `REQ_VARS`). As requests enviadas e as respostas são do conhecimento de quem usa o `req`, então nada é mascarado: a url mostrada ao executar, o verbose e os logs trazem os valores reais. Isso descarta a T5.7.
 - **Controle central de projetos (R10, a partir da TR2.1):** tudo que não é do repositório do usuário fica em `~/.req`, um diretório por projeto. Tudo é texto `chave=valor` (linhas em branco e `#` ignoradas), pois são só flags e variáveis simples. Layout (confirmado na TR2.2):
   ```
   ~/.req/
@@ -135,7 +136,7 @@ Tarefas:
 - TR.14 (R1) **Adiada: confirmar com o usuário antes de implementar.** Ao executar, os dados da request ficam acima e a resposta abaixo. Desenho preferido para o rodapé: compacto (nome da request e teclas), com Enter executando de novo.
 - [x] TR.15 Verificação da revisão: fluxo integrado pelo laço principal, demonstração em terminal real (pty) e revisão final do README e do `DEVELOPMENT.md`.
 
-### Fase 5 — Ambientes e secrets
+### Fase 5 — Ambientes e variáveis
 Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde ficam os ambientes de cada projeto. As tarefas abaixo já estão ajustadas a isso.
 - [x] T5.1 Leitura de `~/.req/env/<env>/secrets.json` via jq; JSON inválido apenas indica o erro. (Substituída pela TR2.4: o carregador passa a ler `chave=valor` do projeto.)
 - [x] T5.2 Resolução de uma chave, em ordem de precedência: variável `<ENV>_<CHAVE>`, arquivo do ambiente (`projects/<id>/env/<ambiente>`), variáveis do projeto (`projects/<id>/vars`).
@@ -143,7 +144,7 @@ Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde fi
 - [x] T5.4 Aplicar a substituição a url, headers, query, `parameters` e `raw_data` (incluindo as strings dentro do JSON nativo) antes de executar.
 - [x] T5.5 Projeto e ambiente ativos (`REQ_ENV`, padrão `default`) exibidos no cabeçalho do menu.
 - [x] T5.6 `:env <nome>` troca o ambiente na sessão e valida ambiente inexistente (arquivo em `projects/<id>/env/`); sem argumento lista os ambientes do projeto; entra na ajuda `:h`.
-- T5.7 Mascaramento de valores secretos (função e testes), para uso em logs, no verbose e na linha `MÉTODO url` mostrada ao executar.
+- ~~T5.7~~ Descartada (ver "Sem distinção de secrets, sem mascaramento"): o isolamento físico das variáveis por projeto dispensa o mascaramento. Em seu lugar, o código e os textos deixam de falar em "secrets" (`req_vars_load`, `REQ_VARS`).
 - T5.8 Verificação da fase e documentação dos ambientes e das variáveis de projeto.
 
 ### Fase 6 — Logs e verbose

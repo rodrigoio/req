@@ -33,10 +33,10 @@ folder itself may be reached through a link: only the workspace part is checked.
 | Review 1, usability findings (TR.1 to TR.15) | done, except TR.14 (postponed, needs the user's decision) |
 | Review 3, R11 (`.req` with `workspace`, dynamic root; TR3.1 to TR3.7) | TR3.1 to TR3.7 done |
 | Review 2, R8 to R10 (central project control in `~/.req`, `:config`, cursor; TR2.1 to TR2.10) | done |
-| 5 Environments and secrets | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.6 done; T5.7 and T5.8 pending |
+| 5 Environments and variables | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.6 done; T5.7 dropped (no masking); T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **T5.7** (masking of secret values; T5.2 to T5.6 are done). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 5".
+Next task: **T5.8** (Phase 5 verification and docs; T5.2 to T5.6 are done, T5.7 was dropped). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 5".
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - One task = one behavior, about 100 to 200 lines including tests, one commit.
@@ -63,7 +63,7 @@ else is functions in `lib/`, all prefixed `req_`.
 | `cmd.sh` | command mode (`:n :nd :ed :cp :rm :e :d :config :h :q`) on top of `nav.sh` |
 | `wizard.sh` | the prompts behind `:n`, `:e`, `:d` and `:nd` |
 | `config.sh` | the global `~/.req/config`: one table of known keys (`REQ_CONFIG_KEYS`, `_TYPE`, `_DEFAULT`, `_DESC`), `req_config_load` (or `req_config_load_file <file>`) fills `REQ_CONFIG` (unknown keys, bad values and bad lines are warnings with path and line, never errors), `req_config_get` falls back to the default |
-| `env.sh` | variable loading (`req_secrets_load <env> [id]` fills `REQ_SECRETS` from `projects/<id>/vars` and `env/<env>`, the environment winning; the old `secrets.json` only gets a warning) and key resolution (`req_resolve_key <env> <key>`: process variable `<ENV>_<KEY>` (`req_env_var_name`, hyphens become underscores), then `REQ_SECRETS`; a set but empty process variable counts) and substitution (`req_subst <text> <env> [id]` puts the text with every `${key}` replaced in `REQ_SUBST_OUT`, with no subshell so trailing line breaks survive, or fails listing every missing key once with the variable and files that define it; there is no escape for a literal `${key}` yet, see TA.14) and `req_subst_json <request json> <env> [id]`, the same for a request: it only touches the string values of `url`, `headers`, `query`, `parameters` and `raw_data` (walking native JSON too) with jq, resolves every key first so the error lists them all, and keeps the result valid JSON. `req_run_request` calls `req_secrets_load` and `req_subst_json` (environment `REQ_ENV`, default `default`) before building the curl command; `req run` looks up the project of the current folder without registering it; `req_env_list [id]` lists the files of `projects/<id>/env/` with a slug name and `req_env_exists <env> [id]` is true for those and for `default`, which `:env <name>` (`req_cmd_env` in `cmd.sh`) uses to validate before setting `REQ_ENV`; the choice lasts only for the session |
+| `env.sh` | variable loading (`req_vars_load <env> [id]` fills `REQ_VARS` from `projects/<id>/vars` and `env/<env>`, the environment winning; the old `secrets.json` only gets a warning) and key resolution (`req_resolve_key <env> <key>`: process variable `<ENV>_<KEY>` (`req_env_var_name`, hyphens become underscores), then `REQ_VARS`; a set but empty process variable counts) and substitution (`req_subst <text> <env> [id]` puts the text with every `${key}` replaced in `REQ_SUBST_OUT`, with no subshell so trailing line breaks survive, or fails listing every missing key once with the variable and files that define it; there is no escape for a literal `${key}` yet, see TA.14) and `req_subst_json <request json> <env> [id]`, the same for a request: it only touches the string values of `url`, `headers`, `query`, `parameters` and `raw_data` (walking native JSON too) with jq, resolves every key first so the error lists them all, and keeps the result valid JSON. `req_run_request` calls `req_vars_load` and `req_subst_json` (environment `REQ_ENV`, default `default`) before building the curl command; `req run` looks up the project of the current folder without registering it; `req_env_list [id]` lists the files of `projects/<id>/env/` with a slug name and `req_env_exists <env> [id]` is true for those and for `default`, which `:env <name>` (`req_cmd_env` in `cmd.sh`) uses to validate before setting `REQ_ENV`; the choice lasts only for the session |
 
 Data flow of a run: `req_nav_run` loops build screen → draw → read key → handle key.
 Running a request: `req_run_request` → `req_request_check` (validate) →
@@ -310,7 +310,7 @@ directory and pointer, TR2.3 project registration, TR2.4 per-project environment
 Phase 5: T5.2 key resolution, T5.3 pure `${key}` substitution with a friendly error
 that lists the missing keys and tells how to fix them, T5.4 apply it to url, headers,
 query, `parameters` and `raw_data`, T5.5 active environment (`REQ_ENV`, default
-`default`) in the menu header, T5.6 `:env <name>`, T5.7 secret masking helper, T5.8
+`default`) in the menu header, T5.6 `:env <name>`, T5.7 dropped (no secret masking, see TASKS.md), T5.8
 verification and docs.
 Environment variable names are `<ENV>_<KEY>` in upper case (`${url}` in `dev` is
 `DEV_URL`); the variable wins over the environment file, which wins over the project variables.

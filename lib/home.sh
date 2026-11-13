@@ -21,7 +21,7 @@
 # When a key appears twice, the first line wins; req_kv_set keeps only that one.
 # Writing keeps comments, blank lines and the order of the other lines, and the file
 # is rewritten in place (mode and symlinks are kept). New files and directories are
-# private (0600 and 0700), since they may hold secrets.
+# private (0600 and 0700), since they may hold credentials.
 
 REQ_KV_KEY=""       # set by req_kv_parse_line
 REQ_KV_VALUE=""

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# env.sh - environments and secrets.
+# env.sh - environments and variables.
 #
 # A project keeps its variables in the central directory (see home.sh):
 #   $REQ_CONFIG_DIR/projects/<id>/vars        variables shared by every environment
@@ -8,7 +8,7 @@
 # An invalid file is only reported, never fixed or overwritten. The old format
 # ($REQ_CONFIG_DIR/env/<env>/secrets.json, T5.1) is not read and not migrated.
 
-declare -gA REQ_SECRETS=()      # variables of the last loaded environment (key -> value)
+declare -gA REQ_VARS=()      # variables of the last loaded environment (key -> value)
 
 # req_env_file <project id> <env> - path of the file of an environment.
 req_env_file() {
@@ -25,17 +25,17 @@ req_env_legacy_file() {
     printf '%s/env/%s/secrets.json' "$(req_config_dir)" "$1"
 }
 
-# shellcheck disable=SC2034  # REQ_SECRETS is read by the callers
-# req_secrets_load <env> [project id] - loads the variables of the project (default: the
-# one in REQ_PROJECT_ID) and then those of the environment into REQ_SECRETS, so the
+# shellcheck disable=SC2034  # REQ_VARS is read by the callers
+# req_vars_load <env> [project id] - loads the variables of the project (default: the
+# one in REQ_PROJECT_ID) and then those of the environment into REQ_VARS, so the
 # environment wins. A missing file is not an error. Without a project (its state could
 # not be saved) nothing is loaded. If a file is invalid, every problem is reported with
-# its absolute path, REQ_SECRETS stays empty and the status is 1. When the old
+# its absolute path, REQ_VARS stays empty and the status is 1. When the old
 # secrets.json of the environment exists, a warning says where the variables live now.
-req_secrets_load() {
+req_vars_load() {
     local env=$1 id=${2-$REQ_PROJECT_ID} file legacy line
     local -A loaded=()
-    REQ_SECRETS=()
+    REQ_VARS=()
     req_valid_name "$env" || {
         req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
         return 1; }
@@ -60,7 +60,7 @@ req_secrets_load() {
         done < <(req_kv_list "$file")
     done
     local k
-    for k in "${!loaded[@]}"; do REQ_SECRETS[$k]=${loaded[$k]}; done
+    for k in "${!loaded[@]}"; do REQ_VARS[$k]=${loaded[$k]}; done
     return 0
 }
 
@@ -78,8 +78,8 @@ REQ_RESOLVED=""        # the value found by req_resolve_key_var
 # req_resolve_key_var <env> <key> - the engine of req_resolve_key, with no subshell: puts
 # the value in REQ_RESOLVED and succeeds, or fails (REQ_RESOLVED empty) when nothing
 # defines the key. Precedence: the process variable <ENV>_<KEY> (req_env_var_name), then
-# the environment file, then the project variables; the last two come from REQ_SECRETS,
-# so req_secrets_load <env> must have run for that environment. A set but empty process
+# the environment file, then the project variables; the last two come from REQ_VARS,
+# so req_vars_load <env> must have run for that environment. A set but empty process
 # variable counts as a value.
 req_resolve_key_var() {
     local env=$1 key=$2 name
@@ -88,8 +88,8 @@ req_resolve_key_var() {
     name=$(req_env_var_name "$env" "$key")
     if [[ -n ${!name+x} ]]; then
         REQ_RESOLVED=${!name}
-    elif [[ -n ${REQ_SECRETS[$key]+x} ]]; then
-        REQ_RESOLVED=${REQ_SECRETS[$key]}
+    elif [[ -n ${REQ_VARS[$key]+x} ]]; then
+        REQ_RESOLVED=${REQ_VARS[$key]}
     else
         return 1
     fi

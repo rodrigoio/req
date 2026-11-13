@@ -209,7 +209,7 @@ req_run_request() {
     local file=$1 json status env=${REQ_ENV:-default}
     req_request_check "$file" || return 1
     json=$(<"$file")
-    req_secrets_load "$env" || return 1
+    req_vars_load "$env" || return 1
     req_subst_json "$json" "$env" || return 1
     req_build_curl_args "$REQ_SUBST_OUT" || return 1
 

@@ -101,7 +101,7 @@ lib/nav.sh     interactive menu: list, details and keys
 lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :env :config :h :q) and its help table
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
 lib/config.sh  global configuration (`~/.req/config`) and its table of keys
-lib/env.sh     environments and secrets (loading `vars` and `env/<env>`)
+lib/env.sh     environments and variables (loading `vars` and `env/<env>`)
 lib/home.sh    the central directory in ~/.req: `key=value` files, projects and the current-project pointer
 tests/         plain bash tests (no dependencies; see Requirements)
 Makefile       test, lint, install and uninstall
@@ -187,7 +187,7 @@ Write `${key}` in the `url`, in the values of `headers`, `query` and `parameters
 2. the environment file `env/<env>`;
 3. the project `vars`.
 
-The environment is the `REQ_ENV` variable, `default` when it is not set. If a key has no value nothing is sent: the error lists every missing key and says which variable or file would define it. `name` and `description`, and the names of properties, are never replaced. There is no way yet to write a literal `${key}` in a request (see TA.14 in [TASKS.md](TASKS.md)). The url shown when a request runs is the substituted one, so secrets appear there until masking is added.
+The environment is the `REQ_ENV` variable, `default` when it is not set. If a key has no value nothing is sent: the error lists every missing key and says which variable or file would define it. `name` and `description`, and the names of properties, are never replaced. There is no way yet to write a literal `${key}` in a request (see TA.14 in [TASKS.md](TASKS.md)). The url shown when a request runs is the substituted one.
 
 `req run` takes the project files from the project registered for the current folder, if there is one; otherwise only the process variables apply.
 

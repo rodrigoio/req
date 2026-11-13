@@ -29,38 +29,38 @@ test_paths() {
 test_load() {
     echo "env: loading variables"
     envfile dev $'# dev\nurl=http://x\n\n token = abc \nquery=a=b'
-    req_secrets_load dev $ID; assert_eq "0" "$?" "loads a valid file"
-    assert_eq "3" "${#REQ_SECRETS[@]}" "all the variables are loaded"
-    assert_eq "http://x" "${REQ_SECRETS[url]}" "a value"
-    assert_eq "abc" "${REQ_SECRETS[token]}" "spaces around key and value are dropped"
-    assert_eq "a=b" "${REQ_SECRETS[query]}" "a value keeps the = signs after the first"
+    req_vars_load dev $ID; assert_eq "0" "$?" "loads a valid file"
+    assert_eq "3" "${#REQ_VARS[@]}" "all the variables are loaded"
+    assert_eq "http://x" "${REQ_VARS[url]}" "a value"
+    assert_eq "abc" "${REQ_VARS[token]}" "spaces around key and value are dropped"
+    assert_eq "a=b" "${REQ_VARS[query]}" "a value keeps the = signs after the first"
 
     envfile prod 'token=zzz'
-    req_secrets_load prod $ID
-    assert_eq "1" "${#REQ_SECRETS[@]}" "loading another environment replaces the previous variables"
-    assert_eq "zzz" "${REQ_SECRETS[token]}" "with that environment's values"
+    req_vars_load prod $ID
+    assert_eq "1" "${#REQ_VARS[@]}" "loading another environment replaces the previous variables"
+    assert_eq "zzz" "${REQ_VARS[token]}" "with that environment's values"
 
     varsfile $'region=eu\ntoken=shared'
-    req_secrets_load dev $ID
-    assert_eq "eu" "${REQ_SECRETS[region]}" "project variables are loaded too"
-    assert_eq "abc" "${REQ_SECRETS[token]}" "the environment wins over the project variables"
-    req_secrets_load nothing-here $ID; assert_eq "0" "$?" "a missing environment file is not an error"
-    assert_eq "shared" "${REQ_SECRETS[token]}" "and only the project variables remain"
-    assert_eq "2" "${#REQ_SECRETS[@]}" "exactly those"
+    req_vars_load dev $ID
+    assert_eq "eu" "${REQ_VARS[region]}" "project variables are loaded too"
+    assert_eq "abc" "${REQ_VARS[token]}" "the environment wins over the project variables"
+    req_vars_load nothing-here $ID; assert_eq "0" "$?" "a missing environment file is not an error"
+    assert_eq "shared" "${REQ_VARS[token]}" "and only the project variables remain"
+    assert_eq "2" "${#REQ_VARS[@]}" "exactly those"
 
     envfile dup $'k=first\nk=second'
-    req_secrets_load dup $ID
-    assert_eq "first" "${REQ_SECRETS[k]}" "the first line of a repeated key wins"
+    req_vars_load dup $ID
+    assert_eq "first" "${REQ_VARS[k]}" "the first line of a repeated key wins"
 
     rm -f "$REQ_CONFIG_DIR/projects/$ID/vars"
     envfile empty ''
-    req_secrets_load empty $ID; assert_eq "0" "$?" "an empty file is valid"
-    assert_eq "0" "${#REQ_SECRETS[@]}" "and has no variables"
+    req_vars_load empty $ID; assert_eq "0" "$?" "an empty file is valid"
+    assert_eq "0" "${#REQ_VARS[@]}" "and has no variables"
 
-    REQ_PROJECT_ID=$ID; req_secrets_load dev
-    assert_eq "abc" "${REQ_SECRETS[token]}" "the project defaults to REQ_PROJECT_ID"
-    REQ_PROJECT_ID=""; req_secrets_load dev; assert_eq "0" "$?" "without a project nothing is loaded"
-    assert_eq "0" "${#REQ_SECRETS[@]}" "and it is not an error"
+    REQ_PROJECT_ID=$ID; req_vars_load dev
+    assert_eq "abc" "${REQ_VARS[token]}" "the project defaults to REQ_PROJECT_ID"
+    REQ_PROJECT_ID=""; req_vars_load dev; assert_eq "0" "$?" "without a project nothing is loaded"
+    assert_eq "0" "${#REQ_VARS[@]}" "and it is not an error"
 }
 
 test_invalid() {
@@ -68,22 +68,22 @@ test_invalid() {
     local out f before
     envfile bad $'ok=1\nthis is not valid\n1st=2'
     f=$REQ_CONFIG_DIR/projects/$ID/env/bad; before=$(<"$f")
-    out=$(req_secrets_load bad $ID 2>&1); assert_eq "1" "$?" "an invalid line fails"
+    out=$(req_vars_load bad $ID 2>&1); assert_eq "1" "$?" "an invalid line fails"
     assert_contains "$f:2: expected key=value" "$out" "the error names the absolute path and the line"
     assert_contains "$f:3: expected key=value" "$out" "every problem is reported"
     assert_eq "$before" "$(<"$f")" "the file is not touched"
-    req_secrets_load bad $ID 2>/dev/null
-    assert_eq "0" "${#REQ_SECRETS[@]}" "nothing is loaded from an invalid file"
+    req_vars_load bad $ID 2>/dev/null
+    assert_eq "0" "${#REQ_VARS[@]}" "nothing is loaded from an invalid file"
 
     varsfile 'broken line'
-    out=$(req_secrets_load dev $ID 2>&1); assert_eq "1" "$?" "an invalid vars file fails even when the environment is fine"
+    out=$(req_vars_load dev $ID 2>&1); assert_eq "1" "$?" "an invalid vars file fails even when the environment is fine"
     assert_contains "$REQ_CONFIG_DIR/projects/$ID/vars:1" "$out" "and names that file"
     rm -f "$REQ_CONFIG_DIR/projects/$ID/vars"
 
-    out=$(req_secrets_load "../etc" $ID 2>&1); assert_eq "1" "$?" "an environment name that is not a slug is refused"
+    out=$(req_vars_load "../etc" $ID 2>&1); assert_eq "1" "$?" "an environment name that is not a slug is refused"
     assert_contains "invalid environment name" "$out" "and says why"
-    req_secrets_load "" $ID 2>/dev/null; assert_eq "1" "$?" "an empty environment name is refused"
-    req_secrets_load dev "../x" 2>/dev/null; assert_eq "1" "$?" "a project id that is not a slug is refused"
+    req_vars_load "" $ID 2>/dev/null; assert_eq "1" "$?" "an empty environment name is refused"
+    req_vars_load dev "../x" 2>/dev/null; assert_eq "1" "$?" "a project id that is not a slug is refused"
 }
 
 test_legacy() {
@@ -91,12 +91,12 @@ test_legacy() {
     local out
     mkdir -p "$REQ_CONFIG_DIR/env/dev"
     printf '{"token":"old"}\n' >"$REQ_CONFIG_DIR/env/dev/secrets.json"
-    out=$(req_secrets_load dev $ID 2>&1); assert_eq "0" "$?" "the old file is not an error"
+    out=$(req_vars_load dev $ID 2>&1); assert_eq "0" "$?" "the old file is not an error"
     assert_contains "secrets.json is no longer read" "$out" "a warning says so"
     assert_contains "$REQ_CONFIG_DIR/projects/$ID/env/dev" "$out" "and points to the new location"
-    req_secrets_load dev $ID 2>/dev/null
-    assert_eq "abc" "${REQ_SECRETS[token]}" "its content is ignored"
-    out=$(req_secrets_load prod $ID 2>&1); assert_not_contains "no longer read" "$out" "other environments are not warned about"
+    req_vars_load dev $ID 2>/dev/null
+    assert_eq "abc" "${REQ_VARS[token]}" "its content is ignored"
+    out=$(req_vars_load prod $ID 2>&1); assert_not_contains "no longer read" "$out" "other environments are not warned about"
 }
 
 test_resolve() {
@@ -106,7 +106,7 @@ test_resolve() {
     rm -f "$REQ_CONFIG_DIR/projects/$ID/vars"
     varsfile $'region=eu\ntoken=from-vars\nonly_vars=v'
     envfile dev $'url=http://dev\ntoken=from-env\nempty='
-    req_secrets_load dev $ID
+    req_vars_load dev $ID
 
     assert_eq "DEV_URL" "$(req_env_var_name dev url)" "the variable name is ENV_KEY in capitals"
     assert_eq "PRE_PROD_TOKEN" "$(req_env_var_name pre-prod token)" "hyphens of the environment become underscores"
@@ -132,7 +132,7 @@ test_resolve() {
 
     req_resolve_key dev "bad key"; assert_eq "1" "$?" "a key that is not a valid name fails"
     req_resolve_key dev ""; assert_eq "1" "$?" "an empty key fails"
-    REQ_SECRETS=()
+    REQ_VARS=()
     req_resolve_key dev url; assert_eq "1" "$?" "without loaded variables only the process variable can answer"
 }
 
@@ -141,7 +141,7 @@ test_subst() {
     local err
     varsfile $'region=eu\ntoken=from-vars'
     envfile dev $'url=http://dev\nsecret=s3'
-    req_secrets_load dev $ID
+    req_vars_load dev $ID
 
     req_subst 'GET ${url}/users?r=${region}' dev $ID; assert_eq "0" "$?" "a text with known keys is substituted"
     assert_eq "GET http://dev/users?r=eu" "$REQ_SUBST_OUT" "every placeholder is replaced"
@@ -183,7 +183,7 @@ test_subst_json() {
     local j err
     varsfile $'host=h.example\ntok=a"b\\c\nn=5'
     envfile dev 'extra=e1'
-    req_secrets_load dev $ID
+    req_vars_load dev $ID
 
     j='{"name":"${keep}","description":"${keep}","method":"POST","url":"https://${host}/x","headers":{"Authorization":"Bearer ${tok}","${host}":"k"},"query":{"q":"${n}"},"parameters":{"f":"${extra}"},"raw_data":{"a":["${tok}",1,true,null],"${host}":"v"}}'
     req_subst_json "$j" dev $ID; assert_eq "0" "$?" "a request with known keys is substituted"
