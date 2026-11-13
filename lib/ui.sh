@@ -10,7 +10,7 @@ req_colors_enabled() {
     [[ $REQ_COLORS == 1 ]]
 }
 
-# req_color <get|post|put|patch|delete|ok|warn|err|sel|reset|bold|dim> - emits the ANSI sequence.
+# req_color <get|post|put|patch|delete|ok|warn|err|orange|sel|reset|bold|dim> - emits the ANSI sequence.
 # `sel` is the menu selection highlight: bold bright green.
 req_color() {
     req_colors_enabled || return 0
@@ -23,6 +23,7 @@ req_color() {
         ok)     printf '\033[32m' ;;
         warn)   printf '\033[33m' ;;
         err)    printf '\033[31m' ;;
+        orange) printf '\033[38;5;208m' ;;
         sel)    printf '\033[1;92m' ;;
         bold)   printf '\033[1m' ;;
         dim)    printf '\033[2m' ;;

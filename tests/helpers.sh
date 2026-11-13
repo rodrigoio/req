@@ -29,6 +29,17 @@ assert_contains() {
     fi
 }
 
+# assert_not_contains <snippet> <text> <description>
+assert_not_contains() {
+    REQ_TESTS_RUN=$((REQ_TESTS_RUN + 1))
+    if [[ $2 != *"$1"* ]]; then
+        printf '  ok   %s\n' "$3"
+    else
+        REQ_TESTS_FAILED=$((REQ_TESTS_FAILED + 1))
+        printf '  FAIL %s\n       unexpected snippet: %q\n       text: %q\n' "$3" "$1" "$2"
+    fi
+}
+
 # test_summary - prints the summary and returns non-zero if anything failed.
 test_summary() {
     printf '%d asserts, %d failures\n' "$REQ_TESTS_RUN" "$REQ_TESTS_FAILED"

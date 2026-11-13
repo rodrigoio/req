@@ -21,7 +21,15 @@ test_check_deps_message() {
     status=$?
     assert_eq "1" "$status" "check_deps fails with a missing dependency"
     assert_contains "req: error: missing dependencies: req_cmd_missing_xyz" "$out" "message names the dependency"
-    assert_contains "apt-get install" "$out" "message explains how to install"
+    assert_eq "req: error: missing dependencies: req_cmd_missing_xyz" "$out" "message is a single line naming the package"
+    out=$(REQ_REQUIRED_CMDS=(req_cmd_missing_xyz curl_missing_abc); req_check_deps 2>&1)
+    assert_contains "req_cmd_missing_xyz curl_missing_abc" "$out" "lists every missing package on the same line"
+    assert_not_contains "sudo" "$out" "message has no sudo"
+    assert_not_contains "install" "$out" "message has no install command"
+    REQ_COLORS=1
+    out=$(REQ_REQUIRED_CMDS=(req_cmd_missing_xyz); req_check_deps 2>&1)
+    REQ_COLORS=0
+    assert_contains $'\033[38;5;208mreq_cmd_missing_xyz\033[0m' "$out" "package names are orange"
 }
 
 test_bash_check() {

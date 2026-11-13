@@ -53,15 +53,13 @@ req_missing_deps() {
     done
 }
 
-# req_check_deps - exits with instructions if any dependency is missing.
+# req_check_deps - exits with an error naming the missing dependencies (in orange),
+# without install commands.
 req_check_deps() {
     local missing
     missing=$(req_missing_deps)
     [[ -z $missing ]] && return 0
-    req_die "missing dependencies: $(tr '\n' ' ' <<<"$missing")
-install them with your package manager, for example:
-  debian/ubuntu:  sudo apt-get install ${missing//$'\n'/ }
-  centos/rhel:    sudo yum install ${missing//$'\n'/ }"
+    req_die "missing dependencies: $(req_color orange)${missing//$'\n'/ }$(req_color reset)"
 }
 
 # req_restore_terminal - puts the terminal back to normal (cursor, echo, colors).

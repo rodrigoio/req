@@ -9,10 +9,12 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | Phase | State |
 |---|---|
 | 0 Foundation, 1 Data model, 2 curl execution, 3 Navigation, 4 Command mode | done |
+| Review 1, usability findings (TR.1 to TR.15) | pending; runs before Phase 5 resumes |
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **T5.2** (resolve one key: the `<ENV>_<KEY>` variable takes precedence over the file).
+Next task: **TR.2** (`:h` help screen; TR.1, the orange dependency error, is done). Phase 5 resumes at T5.2 after TR.15. See
+"Review 1 findings" below.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - One task = one behavior, about 100 to 200 lines including tests, one commit.
@@ -52,6 +54,10 @@ the menu label. Required: `name`, `method`, `url`. Optional: `description`, `hea
 invalidate the request; invalid files are reported, never rewritten. `data_string` is
 reserved (Phase 8). The body is only sent with POST, PUT and PATCH.
 
+This section describes the code as it is. Review 1 changes the body fields:
+`data_parameter` becomes `parameters` (TR.3) and `raw_data` replaces the reserved
+`data_string` (TR.4). Those tasks update this section.
+
 ## Conventions
 
 - Functions return status codes; results travel in globals named `REQ_*`
@@ -73,7 +79,7 @@ reserved (Phase 8). The body is only sent with POST, PUT and PATCH.
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 458 asserts at the time of writing.
+`assert_contains`, `test_summary`). 462 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed
@@ -136,18 +142,58 @@ worth observing in usability sessions; each one is cheap to change.
     `…`; very long names or paths on narrow terminals deserve a look.
 11. **Non-UTF-8 terminals** fall back to ASCII (`>`, `#`, `~`); worth a quick check.
 
-Record findings as new tasks in the "Adicionais" section of TASKS.md rather than
-changing behavior ad hoc; items 1, 2, 4, 5, 6, 7 and 11 above already have a task there (TA.1 to TA.6 and TA.11).
+Record findings as new tasks in TASKS.md rather than changing behavior ad hoc. What a
+session confirms becomes a task in a review section (see "Review 1 findings" below);
+what is still unconfirmed stays in "Adicionais" (TA.2 to TA.13). Items 1, 2, 4, 5, 7
+and 11 above have a task there (TA.3 to TA.6 and TA.11), and so does the moving part
+of item 6 (TA.2).
 
-## Roadmap after T5.1
+## Review 1 findings (2026-11-13)
+
+First usability session. The notes are in the local `reviews` file (git-ignored, like
+`manifest`); TASKS.md, section "Revisão 1", keeps the summary and the tasks.
+
+| Finding | Outcome |
+|---|---|
+| R1 the result is shown above the request data | TR.14, postponed by the user: confirm before implementing. Preferred design: request data above, response below, compact footer |
+| R2 no way to rename a directory | TR.9 (`.req` helpers), TR.10 `:ed [name]` |
+| R3 no way to duplicate a directory with its contents | TR.11 `:c [name]` |
+| R4 no way to remove a directory, even recursively | TR.12 `:rm` on a request, TR.13 `:rm` on a directory (red warning, `[y/N]`) |
+| R5 no help listing every option | TR.2 `:h` |
+| R6 POST with JSON typed by the user, through vim | TR.3 to TR.8: `parameters`, `raw_data`, external editor |
+| R7 dependency error with `sudo` and `install` commands | TR.1 |
+
+Decisions taken with the user (also in TASKS.md, "Decisões fechadas"):
+- `data_parameter` is renamed `parameters`: form fields (key and value), always sent
+  url-encoded.
+- `raw_data` is the raw body, edited in the user's editor like git does (`$VISUAL`,
+  `$EDITOR`, `vim`, `vi`; a one-line prompt when there is none). It is stored as native
+  JSON (object or array) when the text is JSON and as a string otherwise. A non-empty
+  `raw_data` wins over `parameters`. JSON without a `Content-Type` header is sent as
+  `application/json`; free text gets no automatic header.
+- Files using the old field names are not migrated; validation names the new field.
+- `:rm` removes the request or the whole directory under the cursor, only inside the
+  project, always after a `[y/N]` confirmation.
+
+Open item 6 above is answered by these tasks and item 5 partly (`:h`); the others are
+still open.
+
+## Roadmap
+
+Review 1 first, in this order: TR.1 dependency error, TR.2 `:h`, TR.3 rename to
+`parameters`, TR.4 `raw_data` format and sending, TR.5 `raw_data` on the details
+screen, TR.6 external editor helper, TR.7 `8) raw data` in the edit menu, TR.8 raw
+body in `:n`, TR.9 `.req` entry helpers, TR.10 `:ed`, TR.11 `:c`, TR.12 `:rm` on a
+request, TR.13 `:rm` on a directory, TR.14 (postponed), TR.15 verification.
 
 Phase 5: T5.2 key resolution, T5.3 pure `${key}` substitution with a friendly error
 that lists the missing keys and tells how to fix them, T5.4 apply it to url, headers,
-query and parameters, T5.5 active environment (`REQ_ENV`, default `default`) in the
-menu header, T5.6 `:env <name>`, T5.7 secret masking helper, T5.8 verification and docs.
+query, `parameters` and `raw_data`, T5.5 active environment (`REQ_ENV`, default
+`default`) in the menu header, T5.6 `:env <name>`, T5.7 secret masking helper, T5.8
+verification and docs.
 Environment variable names are `<ENV>_<KEY>` in upper case (`${url}` in `dev` is
 `DEV_URL`); the variable wins over the file.
 Then Phase 6 (logs, verbose with `>>` and `<<`), Phase 7 (portability, docs), the
-"Adicionais" section of TASKS.md (TA.1 to TA.13: everything still open, mostly
-navigation changes to confirm with users) and Phase 8 (per-request options,
-`data_string`, nested values).
+"Adicionais" section of TASKS.md (TA.2 to TA.13: everything still unconfirmed, mostly
+navigation changes) and Phase 8 (per-request options, file upload, nested query
+values).
