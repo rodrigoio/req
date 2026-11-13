@@ -131,10 +131,11 @@ Each request is a file `<slug>.<method>.json` (methods: GET, POST, PUT, PATCH, D
 }
 ```
 
-- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters`, `raw_data`, `timeout`, `follow_redirects` and `insecure`.
+- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters`, `raw_data`, `timeout`, `follow_redirects`, `insecure` and `files`.
 - `timeout` is the longest the whole request may take, in seconds (a positive number, such as `2.5`). Without it `REQ_TIMEOUT` applies, and then 60. A request that runs out of time fails with curl's exit code 28.
 - `follow_redirects` (`true` or `false`, default `false`) follows `3xx` answers, up to 10 redirects, and shows the final response (its status, headers and body). Without it a redirect is shown as it is. As curl does, a `301`, `302` or `303` answer to a `POST` is followed with a `GET`; an endless redirect fails with curl's exit code 47.
 - `insecure` (`true` or `false`, default `false`) skips the check of the server's TLS certificate (curl `-k`), for a test server with a self-signed one. Without it such a certificate fails with curl's exit code 60. Use it only on servers you trust.
+- `files` sends files: an object of `"field": "path"` (`{"avatar": "photo.png"}`). The request becomes a `multipart/form-data` form (POST, PUT and PATCH), and the `parameters` go in it as text fields (a value starting with `@` is sent as text, never read as a file). A relative path starts at the folder of the request file; `${key}` works in it. A file that does not exist or cannot be read stops the request before anything is sent. `files` and `raw_data` cannot be used together.
 - `headers`, `query` and `parameters` are objects with simple values (string, number or boolean).
 - `query` is appended to the url, url-encoded.
 - `raw_data` is the raw body: an object or list (JSON) or a string (any other text).

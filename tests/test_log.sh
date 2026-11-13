@@ -67,6 +67,10 @@ test_request() {
     out=$(<"$f")
     assert_contains 'POST http://x/y?a=1 | form: a=1 | form: b=two words' "$out" "form fields are logged when there is no raw_data"
     [[ $out != *body:* ]]; assert_eq "0" "$?" "and no body"
+    rm -f "$f"; REQ_P_FORM=("a=1"); REQ_P_FILES=("doc=a.txt")
+    req_log_request add.post.json default
+    assert_contains ' | form: a=1 | file: doc=a.txt' "$(<"$f")" "files are logged as field=path"
+    REQ_P_FILES=()
     rm -f "$f"; off; req_log_request add.post.json default
     [[ ! -e $f ]]; assert_eq "0" "$?" "with the log off nothing is written"
 }

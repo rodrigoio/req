@@ -151,6 +151,18 @@ test_invalid_manual() {
         printf '{"name":"s2","method":"GET","url":"https://x","insecure":%s}\n' "$v" >"$d/s2.get.json"
         assert_contains 'field "insecure" must be true or false' "$(check_out "$d/s2.get.json")" "insecure $v is refused"
     done
+    printf '{"name":"u1","method":"POST","url":"http://x","files":{"doc":"a.txt"},"parameters":{"n":"1"}}\n' >"$d/u1.post.json"
+    assert_eq "0" "$(req_request_check "$d/u1.post.json" 2>/dev/null; echo $?)" "files with parameters is valid"
+    printf '{"name":"u2","method":"POST","url":"http://x","files":["a.txt"]}\n' >"$d/u2.post.json"
+    assert_contains 'field "files" must be an object' "$(check_out "$d/u2.post.json")" "files must be an object"
+    printf '{"name":"u3","method":"POST","url":"http://x","files":{"doc":1,"b":""}}\n' >"$d/u3.post.json"
+    out=$(check_out "$d/u3.post.json")
+    assert_contains 'files "doc": the value must be a file path' "$out" "a file value must be a string"
+    assert_contains 'files "b": the value must be a file path' "$out" "and not empty"
+    printf '{"name":"u4","method":"POST","url":"http://x","files":{"doc":"a.txt"},"raw_data":{"a":1}}\n' >"$d/u4.post.json"
+    assert_contains '"files" and "raw_data" cannot be used together' "$(check_out "$d/u4.post.json")" "files and raw_data conflict"
+    printf '{"name":"u5","method":"POST","url":"http://x","files":{},"raw_data":{"a":1}}\n' >"$d/u5.post.json"
+    assert_eq "0" "$(req_request_check "$d/u5.post.json" 2>/dev/null; echo $?)" "an empty files object does not conflict"
     for v in 0 -1 '"5"' true null '[1]'; do
         printf '{"name":"t2","method":"GET","url":"http://x","timeout":%s}\n' "$v" >"$d/t2.get.json"
         assert_contains 'field "timeout" must be a positive number of seconds' "$(check_out "$d/t2.get.json")" "timeout $v is refused"
