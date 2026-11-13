@@ -13,7 +13,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR.6** (external editor helper; TR.1 to TR.5 are done). Phase 5 resumes at T5.2 after TR.15. See
+Next task: **TR.7** (`8) raw data` in the edit menu; TR.1 to TR.6 are done). Phase 5 resumes at T5.2 after TR.15. See
 "Review 1 findings" below.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
@@ -64,7 +64,13 @@ The details screen shows `raw_data` under "Raw data" (indented JSON, or the text
 capped at `REQ_RAW_MAX_LINES` (15) lines with a "... (N more lines)" marker. `parameters`
 is flagged "not sent" when `raw_data` takes precedence, and both are flagged with GET and DELETE.
 
-## Conventions
+External editor (`lib/core.sh`, TR.6): `req_editor` prints `$VISUAL`, `$EDITOR`, `vim` or `vi`
+(first that exists; the variables may carry arguments, run through `sh -c`).
+`req_edit_text <text> [suffix]` edits the text in `<tmpdir>/raw_data<suffix>` and fills
+`REQ_EDIT_TEXT` (trailing line breaks removed). Status 0 edited, 1 the editor failed
+(original text kept), 2 no editor (the caller falls back to a one-line prompt). The
+caller hands the terminal over first (`req_nav_prompt_begin`); the helper does not.
+
 
 - Functions return status codes; results travel in globals named `REQ_*`
   (`REQ_REPLY`, `REQ_LAST_FILE`, `REQ_SCREEN_LINES`, ...) because bash cannot return
@@ -85,7 +91,7 @@ is flagged "not sent" when `raw_data` takes precedence, and both are flagged wit
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 513 asserts at the time of writing.
+`assert_contains`, `test_summary`). 529 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

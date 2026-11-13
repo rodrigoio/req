@@ -62,6 +62,46 @@ req_check_deps() {
     req_die "missing dependencies: $(req_color orange)${missing//$'\n'/ }$(req_color reset)"
 }
 
+# req_editor - prints the external editor command, like git does: $VISUAL, then
+# $EDITOR, then vim, then vi. Fails (status 1) when none is available. $VISUAL and
+# $EDITOR may carry arguments (e.g. "code -w") and are not checked for existence.
+req_editor() {
+    local e
+    if [[ -n ${VISUAL-} ]]; then printf '%s' "$VISUAL"; return 0; fi
+    if [[ -n ${EDITOR-} ]]; then printf '%s' "$EDITOR"; return 0; fi
+    for e in vim vi; do
+        if command -v "$e" >/dev/null 2>&1; then printf '%s' "$e"; return 0; fi
+    done
+    return 1
+}
+
+REQ_EDIT_TEXT=""    # result of req_edit_text
+
+# req_edit_text <text> [suffix] - opens the text in the external editor, in a temporary
+# file named raw_data<suffix> (e.g. ".json", so the editor picks the syntax), and puts
+# the edited text in REQ_EDIT_TEXT without trailing line breaks. The editor takes over
+# the terminal; the caller hands it over first (req_nav_prompt_begin).
+# Status: 0 edited, 1 the editor failed (REQ_EDIT_TEXT keeps the original text),
+# 2 no editor available (the caller falls back to a prompt).
+req_edit_text() {
+    local editor dir file status
+    editor=$(req_editor) || return 2
+    dir=$(mktemp -d "${TMPDIR:-/tmp}/req-edit.XXXXXX") || return 1
+    file=$dir/raw_data${2-}
+    printf '%s\n' "$1" >"$file"
+    # The shell lets $VISUAL and $EDITOR carry arguments, as git does.
+    sh -c "$editor \"\$@\"" req-editor "$file"
+    status=$?
+    if (( status == 0 )) && [[ -f $file ]]; then
+        REQ_EDIT_TEXT=$(<"$file")
+    else
+        REQ_EDIT_TEXT=$1
+        status=1
+    fi
+    rm -rf "$dir"
+    return "$status"
+}
+
 # req_restore_terminal - puts the terminal back to normal (cursor, echo, colors).
 req_restore_terminal() {
     [[ -t 1 ]] || return 0

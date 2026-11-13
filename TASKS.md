@@ -6,8 +6,8 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.gitignore` permanece.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **TR.6** (Revisão 1: helper de editor externo). TR.1 a TR.5 estão feitas. A Fase 5 é retomada na **T5.2** depois da TR.15.
-- Suíte: `make check` com 513 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **TR.7** (Revisão 1: opção `8) raw data` no menu de edição). TR.1 a TR.6 estão feitas. A Fase 5 é retomada na **T5.2** depois da TR.15.
+- Suíte: `make check` com 529 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - A seção "Revisão 1" (TR.1 a TR.15) reúne os achados confirmados na primeira validação de uso e vem antes da Fase 5. A TR.14 está adiada: confirmar com o usuário antes de implementar.
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
@@ -106,7 +106,7 @@ Tarefas:
 - [x] TR.3 (R6) Renomear `data_parameter` para `parameters`, sem mudar o envio; o nome antigo vira erro de validação que indica o novo.
 - [x] TR.4 (R6) `raw_data` no formato e no envio: objeto, lista ou string; precedência sobre `parameters`, que passa a ser sempre formulário url-encoded; JSON sem `Content-Type` sai com `application/json`.
 - [x] TR.5 (R6) Tela de detalhes mostra o `raw_data` (JSON indentado ou texto, com teto de linhas) e avisa quando `parameters` não é enviado.
-- TR.6 (R6) Helper de editor externo (`req_editor`, `req_edit_text`): `$VISUAL`, `$EDITOR`, `vim`, `vi`, em arquivo temporário, como o git. Infraestrutura, commit próprio.
+- [x] TR.6 (R6) Helper de editor externo (`req_editor`, `req_edit_text`): `$VISUAL`, `$EDITOR`, `vim`, `vi`, em arquivo temporário, como o git. Infraestrutura, commit próprio.
 - TR.7 (R6) Menu de edição: a opção `8) raw data` abre o editor com o JSON; JSON válido é gravado nativo, texto que não é JSON oferece editar de novo ou guardar como texto; sem editor, prompt de uma linha.
 - TR.8 (R6) `:n` com preset de formato (json, text, html) oferece o corpo bruto no editor em vez de pedir `parameters`.
 - TR.9 (R2 a R4) Helpers do `.req`: localizar, trocar, remover e acrescentar uma entrada, preservando comentários e ordem. Infraestrutura, commit próprio.

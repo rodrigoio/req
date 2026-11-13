@@ -6,6 +6,9 @@ source "$ROOT/tests/helpers.sh"
 source "$ROOT/lib/core.sh"
 source "$ROOT/lib/ui.sh"
 
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
 test_missing_deps() {
     echo "core: dependencies"
     local out
@@ -30,6 +33,48 @@ test_check_deps_message() {
     out=$(REQ_REQUIRED_CMDS=(req_cmd_missing_xyz); req_check_deps 2>&1)
     REQ_COLORS=0
     assert_contains $'\033[38;5;208mreq_cmd_missing_xyz\033[0m' "$out" "package names are orange"
+}
+
+# fake_editor <path> <sh commands> - writes an executable "editor" script.
+fake_editor() { printf '#!/bin/sh\n%s\n' "$2" >"$1"; chmod +x "$1"; }
+
+test_editor() {
+    echo "core: external editor"
+    local bin=$TMP/edbin out status
+    mkdir -p "$bin"
+    assert_eq "myvisual" "$(VISUAL=myvisual EDITOR=myeditor req_editor)" "VISUAL comes first"
+    assert_eq "myeditor" "$(VISUAL='' EDITOR=myeditor req_editor)" "then EDITOR"
+    assert_eq "code -w" "$(VISUAL="code -w" req_editor)" "arguments are kept"
+    printf '#!/bin/sh\n' >"$bin/vi"; chmod +x "$bin/vi"
+    assert_eq "vi" "$(VISUAL='' EDITOR='' PATH=$bin req_editor)" "then vi when there is no vim"
+    printf '#!/bin/sh\n' >"$bin/vim"; chmod +x "$bin/vim"
+    assert_eq "vim" "$(VISUAL='' EDITOR='' PATH=$bin req_editor)" "vim wins over vi"
+    mkdir -p "$TMP/empty"
+    VISUAL='' EDITOR='' PATH=$TMP/empty req_editor >/dev/null; assert_eq "1" "$?" "fails when there is no editor"
+
+    # A fake editor that appends a line, as a user would type.
+    # shellcheck disable=SC2016  # the script text is meant to be expanded by sh, not here
+    fake_editor "$bin/appender" 'echo more >>"$1"'
+    VISUAL=$bin/appender req_edit_text $'first\nsecond' .json; status=$?
+    assert_eq "0" "$status" "an edit succeeds"
+    assert_eq $'first\nsecond\nmore' "$REQ_EDIT_TEXT" "the edited text comes back without trailing breaks"
+    fake_editor "$bin/spy" "printf '%s' \"\${1##*/}\" >'$TMP/name'; cat \"\$1\" >'$TMP/seen'"
+    mkdir -p "$TMP/ed-tmp"
+    TMPDIR=$TMP/ed-tmp VISUAL="$bin/spy" req_edit_text '{"a":1}' .json
+    assert_eq "raw_data.json" "$(<"$TMP/name")" "the temporary file carries the suffix"
+    assert_eq '{"a":1}' "$(<"$TMP/seen")" "the editor sees the initial text"
+    assert_eq "0" "$(find "$TMP/ed-tmp" -mindepth 1 | wc -l)" "the temporary files are removed"
+    VISUAL="$bin/spy --" req_edit_text 'x'
+    assert_eq "0" "$?" "an editor command with arguments works"
+    VISUAL="$bin/spy" req_edit_text ''
+    assert_eq "" "$REQ_EDIT_TEXT" "an emptied text comes back empty"
+
+    # shellcheck disable=SC2016  # idem
+    fake_editor "$bin/failer" 'echo changed >"$1"; exit 3'
+    VISUAL=$bin/failer req_edit_text 'keep'; status=$?
+    assert_eq "1" "$status" "an editor that fails is reported"
+    assert_eq "keep" "$REQ_EDIT_TEXT" "and the original text is kept"
+    VISUAL='' EDITOR='' PATH=$TMP/empty req_edit_text 'x'; assert_eq "2" "$?" "no editor gives status 2"
 }
 
 test_bash_check() {
@@ -109,6 +154,7 @@ test_abs_path() {
 
 test_missing_deps
 test_check_deps_message
+test_editor
 test_bash_check
 test_colors
 test_confirm

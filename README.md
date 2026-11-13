@@ -83,7 +83,7 @@ make check   # lint + tests
 
 ```
 bin/req        thin entrypoint (resolves its directory and calls main)
-lib/core.sh    dependencies, errors and terminal restoration
+lib/core.sh    dependencies, errors, external editor and terminal restoration
 lib/ui.sh      ANSI colors, terminal helpers and per-method formatting
 lib/store.sh   request persistence and the .req project file
 lib/http.sh    curl command building, execution, display and timing profile
