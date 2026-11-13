@@ -656,6 +656,33 @@ test_command_flow() {
     [[ $out != *"req /svc"* ]]; assert_eq "0" "$?" ":q ends the loop (a later Enter is never handled)"
 }
 
+test_review_flow() {
+    echo "nav: Review 1 commands through the main loop"
+    local p=$TMP/rev out
+    mkdir -p "$p/svc"; printf '# project\nsvc\n' >"$p/.req"
+    req_request_write "$p/svc" ping GET http://x/ping >/dev/null
+    # One stream of keys and answers, as on a terminal: help, rename, copy, remove the
+    # copy, then create and remove a request inside the renamed directory, quit. No bare
+    # Esc is used: it depends on timing and this test must not.
+    out=$({
+        keys : h enter; keys x
+        keys : e d enter; printf 'gateway\n'
+        keys : c enter; printf '\n'
+        keys : r m enter; printf 'y\n'
+        keys enter; keys : n enter; printf 'extra\nGET\nhttp://x/e\nn\n'
+        keys : r m enter; printf 'y\n'
+        keys : q enter
+    } | req_nav_run "$p/.req" 2>&1)
+    assert_contains "Press any key to go back" "$out" ":h opened the help"
+    assert_contains "renamed to gateway" "$out" ":ed ran inside the loop"
+    assert_contains "copied to gateway-copy" "$out" ":c ran inside the loop"
+    assert_contains "removed extra.get.json" "$out" ":rm removed a request"
+    assert_contains "removed gateway-copy" "$out" ":rm removed a directory"
+    [[ -f $p/gateway/ping.get.json && ! -e $p/svc && ! -e $p/gateway-copy ]]
+    assert_eq "0" "$?" "the filesystem ends as expected"
+    assert_eq $'# project\ngateway' "$(<"$p/.req")" "and so does the .req"
+}
+
 test_start_init() {
     echo "nav: init prompt"
     local d=$TMP/fresh out
@@ -689,6 +716,7 @@ test_command_copy_dir
 test_command_remove
 test_command_remove_dir
 test_command_flow
+test_review_flow
 test_start_init
 test_end_to_end
 test_summary

@@ -6,8 +6,8 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.gitignore` permanece.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **TR.15** (Revisão 1: verificação final; a TR.14 segue adiada). TR.1 a TR.13 estão feitas. A Fase 5 é retomada na **T5.2** depois da TR.15.
-- Suíte: `make check` com 703 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **T5.2** (Fase 5: resolução de uma chave). A Revisão 1 está concluída, exceto a TR.14, que segue adiada até o usuário decidir.
+- Suíte: `make check` com 710 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - A seção "Revisão 1" (TR.1 a TR.15) reúne os achados confirmados na primeira validação de uso e vem antes da Fase 5. A TR.14 está adiada: confirmar com o usuário antes de implementar.
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
@@ -115,7 +115,7 @@ Tarefas:
 - [x] TR.12 (R4, TA.1) `:rm` em request: confirmação `[y/N]` e remoção, na lista e na tela de detalhes; vale também para request inválida.
 - [x] TR.13 (R4) `:rm` em diretório: aviso em vermelho com o caminho e a contagem do conteúdo, confirmação `[y/N]`, remoção recursiva só dentro do projeto; na raiz tira a entrada do `.req`.
 - TR.14 (R1) **Adiada: confirmar com o usuário antes de implementar.** Ao executar, os dados da request ficam acima e a resposta abaixo. Desenho preferido para o rodapé: compacto (nome da request e teclas), com Enter executando de novo.
-- TR.15 Verificação da revisão: fluxo integrado pelo laço principal, demonstração em terminal real (pty) e revisão final do README e do `DEVELOPMENT.md`.
+- [x] TR.15 Verificação da revisão: fluxo integrado pelo laço principal, demonstração em terminal real (pty) e revisão final do README e do `DEVELOPMENT.md`.
 
 ### Fase 5 — Ambientes e secrets
 - [x] T5.1 Leitura de `~/.req/env/<env>/secrets.json` via jq; JSON inválido apenas indica o erro.

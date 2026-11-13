@@ -9,12 +9,12 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | Phase | State |
 |---|---|
 | 0 Foundation, 1 Data model, 2 curl execution, 3 Navigation, 4 Command mode | done |
-| Review 1, usability findings (TR.1 to TR.15) | pending; runs before Phase 5 resumes |
+| Review 1, usability findings (TR.1 to TR.15) | done, except TR.14 (postponed, needs the user's decision) |
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR.15** (Review 1 verification; TR.14 stays postponed; TR.1 to TR.13 are done). Phase 5 resumes at T5.2 after TR.15. See
-"Review 1 findings" below.
+Next task: **T5.2** (Phase 5 resumes; TR.14 waits for the user's answer). See "Review 1 findings"
+below for what the review changed.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - One task = one behavior, about 100 to 200 lines including tests, one commit.
@@ -134,7 +134,7 @@ Descendants listed in the `.req` are not cleaned up (same limit as the rename).
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 703 asserts at the time of writing.
+`assert_contains`, `test_summary`). 710 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed
@@ -144,9 +144,18 @@ adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
   without it). It answers GET, POST, PUT, PATCH and DELETE.
 - `REQ_CONFIG_DIR` points the configuration (`~/.req`) at a temp directory.
 - A real terminal is not covered by the unit tests. The flows were verified by
-  driving `bin/req` through a pty (`python3` + `pty.fork`). When doing that, always
-  start the child in a scratch directory: without a `.req` the init prompt appears
-  and answering it creates files.
+  driving `bin/req` through a pty (`python3` + `pty.fork`), including the real `vim`
+  as `$VISUAL` (TR.15: help, `:n` with a body typed in vim, details, `:c`, `:ed`, `:rm`,
+  quit; echo, cursor and exit status were checked after the editor and after quitting).
+  When doing that, always start the child in a scratch directory with `HOME` pointing
+  to it: without a `.req` the init prompt appears and answering it creates files. Match
+  the output after stripping ANSI codes (`req` and the path are separated by bold codes).
+- Tests that feed a bare Esc through a pipe are timing sensitive: after a slow redraw (or
+  with the machine under load) the reader sees the next bytes already in the pipe and takes
+  them as part of the key sequence. Avoid a bare Esc in piped flows (`test_review_flow`
+  is ordered so it needs none); the pty demo is the place to exercise Esc.
+- A full `make check` takes more than two minutes on the development VM (each `jq` call
+  costs about 55 ms); run the test files in parallel when iterating.
 
 ## Gotchas found so far
 
@@ -231,11 +240,11 @@ Decisions taken with the user (also in TASKS.md, "Decisões fechadas"):
   project, always after a `[y/N]` confirmation.
 
 Open item 6 above is answered by these tasks and item 5 partly (`:h`); the others are
-still open.
+still open. TR.1 to TR.13 and TR.15 are done; TR.14 (R1) waits for the user.
 
 ## Roadmap
 
-Review 1 first, in this order: TR.1 dependency error, TR.2 `:h`, TR.3 rename to
+Review 1 (done except TR.14): TR.1 dependency error, TR.2 `:h`, TR.3 rename to
 `parameters`, TR.4 `raw_data` format and sending, TR.5 `raw_data` on the details
 screen, TR.6 external editor helper, TR.7 `8) raw data` in the edit menu, TR.8 raw
 body in `:n`, TR.9 `.req` entry helpers, TR.10 `:ed`, TR.11 `:c`, TR.12 `:rm` on a

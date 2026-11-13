@@ -51,8 +51,7 @@ The response is shown in the terminal (indented JSON; text and HTML as received)
 | Enter | on a directory, enter it; on a request, open its details; on the details, run it |
 | Esc | go back (details → list → parent directory); does nothing at the root |
 | Ctrl-C | quit |
-
-| `:` | enter command mode (see below) |
+| `:` | enter command mode (see below); `:h` lists every key and command |
 
 The menu is redrawn in place without clearing the screen: a request's result stays visible and the menu is redrawn right below it, after the `====` line. The selected row is highlighted in bold bright green. Directories show as `dir  name/` and the other rows show the request's colored method. The details screen also shows `raw_data` (indented JSON or text, up to 15 lines) and flags what will not be sent: `parameters` when `raw_data` takes precedence, and both with GET and DELETE. An invalid request shows its problems on the details screen and is not run.
 
@@ -91,8 +90,8 @@ lib/ui.sh      ANSI colors, terminal helpers and per-method formatting
 lib/store.sh   request persistence and the .req project file
 lib/http.sh    curl command building, execution, display and timing profile
 lib/nav.sh     interactive menu: list, details and keys
-lib/cmd.sh     command mode (:n :nd :e :d :q)
-lib/wizard.sh  prompts to create, edit and duplicate requests and directories
+lib/cmd.sh     command mode (:n :nd :ed :c :rm :e :d :h :q) and its help table
+lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
 lib/env.sh     environments and secrets (loading `secrets.json`)
 tests/         plain bash tests (no dependencies; see Requirements)
 Makefile       test, lint, install and uninstall
