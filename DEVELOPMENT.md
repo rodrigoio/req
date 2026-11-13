@@ -31,12 +31,12 @@ folder itself may be reached through a link: only the workspace part is checked.
 |---|---|
 | 0 Foundation, 1 Data model, 2 curl execution, 3 Navigation, 4 Command mode | done |
 | Review 1, usability findings (TR.1 to TR.15) | done, except TR.14 (postponed, needs the user's decision) |
-| Review 3, R11 (`.req` with `workspace`, dynamic root; TR3.1 to TR3.7) | TR3.1 to TR3.4 done; runs next |
+| Review 3, R11 (`.req` with `workspace`, dynamic root; TR3.1 to TR3.7) | TR3.1 to TR3.6 done; TR3.7 runs next |
 | Review 2, R8 to R10 (central project control in `~/.req`, `:config`, cursor; TR2.1 to TR2.10) | pending; TR2.1 to TR2.4 come before Phase 5 |
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR3.6** (remove the dead `.req` entry helpers; TR3.1 to TR3.5 are done). Order agreed: Review 3 (R11) now, then TR2.4
+Next task: **TR3.7** (Review 3 verification; TR3.1 to TR3.6 are done). Order agreed: Review 3 (R11) now, then TR2.4
 (per-project environments), the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
@@ -114,23 +114,12 @@ invalid. `REQ_CUR_DIR=""` still means "the root", and `req_nav_load` lists `${RE
 directories first). Labels and the breadcrumb are relative to the workspace (`req_nav_rel`). `REQ_NAV_ROOTS` and
 the reading of `.req` lines are gone from the menu; `:nd` and `:n` at the root create
 their directory or request in the workspace (TR3.4; `req_project_add_dir` and the `pfile` argument of
-`req_wizard_mkdir` are gone) and nothing touches the `.req`. The `.req` entry helpers below and the legacy `.req` handling in the wizard
-are dead weight until TR3.5 and TR3.6 remove them.
-
-`.req` entry helpers (`lib/store.sh`, TR.9), for the directory commands: `req_project_has_entry`,
-`req_project_append_entry`, `req_project_replace_entry` and `req_project_remove_entry` (both
-through `req_project_rewrite`). An entry is matched by the directory it stands for
-(relative or absolute, with or without a trailing slash, paths normalized), so callers pass
-directories and never edit lines. Comments, blank lines and the order of the other lines are
-kept; a missing entry is an error and leaves the file untouched. The file is rewritten in
-place (`cat` into it), so its mode and symlinks survive.
+`req_wizard_mkdir` are gone) and nothing touches the `.req`. The `.req` entry helpers (TR.9) and the legacy
+`.req` handling in the wizard were removed (TR3.5, TR3.6); the `.req` is only read for `workspace`
+(`req_project_workspace`).
 
 Directory rename (`req_wizard_rename_dir`, `:ed`, TR.10): renames the last path component with
-`mv`, then rewrites the `.req` entry when the directory is listed (relative when it is under the
-`.req`, absolute otherwise; the original spelling, such as a trailing slash, is not kept). If the
-`.req` cannot be rewritten the `mv` is undone. A `.req` entry that lists a descendant of the
-renamed directory is not updated and becomes a missing entry (reported by `req_project_dirs`);
-that case is rare and not handled.
+`mv`; nothing else is touched.
 
 Copy (`req_wizard_copy_dir` and `req_wizard_copy_request`, `:cp`, TR.11 and TR3.5): `cp -RP` next to the
 original, default name `<name>-copy` (asked again while taken); it works on a directory or a request, asks
@@ -253,8 +242,8 @@ worth observing in usability sessions; each one is cheap to change.
    Ctrl-C. Esc does **not** cancel inside the wizard prompts (an empty name or Ctrl-D does).
 5. **Command mode**: no tab completion or history; unknown commands only show a
    one-line status message; `:q` never asks for confirmation.
-6. **Deleting and renaming** came from the first usage review: `:rm`, `:ed` and `:c` exist
-   now (TR.10 to TR.13). Still open: moving a request or directory elsewhere (TA.2); `:e`
+6. **Deleting and renaming** came from the first usage review: `:rm`, `:ed` and `:cp` exist
+   now (TR.10 to TR.13, TR3.5). Still open: moving a request or directory elsewhere (TA.2); `:e`
    renames a request only by changing its name field.
 7. **Requests at the root**: answered. The root is the workspace and lists requests too (TR3.3);
    `:n` creates a request there (TR3.4).

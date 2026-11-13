@@ -6,7 +6,7 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir) e a Revisão 2 até a TR2.3. Próxima tarefa: **TR3.6** (Revisão 3: remover o código morto do `.req`). TR3.1 a TR3.5 estão feitas.
+- Feito: Fases 0 a 4, a T5.1, a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir) e a Revisão 2 até a TR2.3. Próxima tarefa: **TR3.7** (Revisão 3: verificação final). TR3.1 a TR3.6 estão feitas.
 - Ordem combinada: **Revisão 3 (R11, `.req` com `workspace` e raiz dinâmica) agora**, depois a TR2.4 (ambientes por projeto), e então as demais tarefas da Revisão 2 e a Fase 5. As TR2.1 a TR2.4 continuam sendo pré-requisito da Fase 5.
 - Suíte: `make check` com 895 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
@@ -224,7 +224,7 @@ Tarefas:
 - [x] TR3.3 (R11) Raiz dinâmica: a raiz do menu é o `workspace` e lista todos os itens (diretórios e requests, com o tipo) pelo `req_list_dir`; saem `REQ_NAV_ROOTS` e `req_project_dirs`. Um único ponto (`req_nav_root`) decide o diretório da raiz; o título e os caminhos relativos partem do `workspace`.
 - [x] TR3.4 (R11, TA.6) Comandos na raiz: `:n` cria a request no `workspace`; `:nd` cria um diretório comum, sem tocar o `.req` (sai `req_project_add_dir`); o aviso "open a directory first" desaparece.
 - [x] TR3.5 (R11) Comandos de item sem a lógica do `.req` (entrada listada, "fora do projeto", desinscrever), agindo sobre o item sob o cursor conforme o tipo: `:ed [nome]` renomeia o diretório (abre a pergunta do novo nome; em request avisa que a edição é o `:e`); `:cp [nome]` substitui o `:c` e copia diretório ou request pedindo logo o novo nome (padrão `<nome>-copy`), sem abrir a edição; `:rm` remove diretório ou request. O limite de segurança do `:rm` passa a ser o `workspace` (só dentro dele, nunca symlink: um link é recusado, não há mais "desinscrever"). Ajuda `:h` e documentação atualizadas; `:d` (duplicar e editar) continua como está.
-- TR3.6 (R11) Remover o código morto: helpers de entradas do `.req` (TR.9) e seus testes, mais ajustes nos testes que tratavam do mapeamento; `DEVELOPMENT.md` (itens 6 e 7 dos pontos a validar).
+- [x] TR3.6 (R11) Remover o código morto: helpers de entradas do `.req` (TR.9) e seus testes, mais ajustes nos testes que tratavam do mapeamento; `DEVELOPMENT.md` (itens 6 e 7 dos pontos a validar).
 - TR3.7 Verificação da Revisão 3: fluxo integrado pelo laço principal, demonstração em terminal real (pty) e revisão final do README e do `DEVELOPMENT.md` (a variável `workspace` documentada).
 
 ## Arquivos críticos (a criar)
