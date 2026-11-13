@@ -145,6 +145,12 @@ test_invalid_manual() {
         printf '{"name":"f2","method":"GET","url":"http://x","follow_redirects":%s}\n' "$v" >"$d/f2.get.json"
         assert_contains 'field "follow_redirects" must be true or false' "$(check_out "$d/f2.get.json")" "follow_redirects $v is refused"
     done
+    printf '{"name":"s1","method":"GET","url":"https://x","insecure":true}\n' >"$d/s1.get.json"
+    assert_eq "0" "$(req_request_check "$d/s1.get.json" 2>/dev/null; echo $?)" "insecure accepts a boolean"
+    for v in '"yes"' 1 null; do
+        printf '{"name":"s2","method":"GET","url":"https://x","insecure":%s}\n' "$v" >"$d/s2.get.json"
+        assert_contains 'field "insecure" must be true or false' "$(check_out "$d/s2.get.json")" "insecure $v is refused"
+    done
     for v in 0 -1 '"5"' true null '[1]'; do
         printf '{"name":"t2","method":"GET","url":"http://x","timeout":%s}\n' "$v" >"$d/t2.get.json"
         assert_contains 'field "timeout" must be a positive number of seconds' "$(check_out "$d/t2.get.json")" "timeout $v is refused"
