@@ -367,6 +367,51 @@ test_rename_dir() {
     assert_eq "1" "$STATUS" "a missing directory fails"
 }
 
+test_copy_dir() {
+    echo "wizard: copy directory"
+    fresh cp
+    mkdir -p "$D/api/v2" "$D/auth"
+    printf '# project\napi\nauth\n' >"$D/.req"
+    req_request_write "$D/api" ping GET http://x >/dev/null
+    req_request_write "$D/api/v2" deep POST http://x/d '{"raw_data":{"a":1}}' >/dev/null
+    ln -s ping.get.json "$D/api/link.json"
+
+    IN=$'\n'; run req_wizard_copy_dir "$D/api" "$D/.req"
+    assert_eq "0" "$STATUS" "copies a directory with the default name"
+    assert_eq "$D/api-copy" "$REQ_LAST_DIR" "REQ_LAST_DIR is the copy"
+    [[ -f $D/api-copy/ping.get.json && -f $D/api-copy/v2/deep.post.json ]]; assert_eq "0" "$?" "everything inside is copied, subdirectories too"
+    cmp -s "$D/api/v2/deep.post.json" "$D/api-copy/v2/deep.post.json"; assert_eq "0" "$?" "with the same content"
+    [[ -f $D/api/ping.get.json && -d $D/api/v2 ]]; assert_eq "0" "$?" "the original is untouched"
+    [[ -L $D/api-copy/link.json ]]; assert_eq "0" "$?" "symbolic links are copied as links"
+    assert_eq $'# project\napi\nauth\napi-copy' "$(<"$D/.req")" "the copy is listed in the .req"
+    assert_eq "0" "$(req_request_check "$D/api-copy/ping.get.json" 2>/dev/null; echo $?)" "the copied request is valid"
+
+    IN=$'\nfresh-name\n'; run req_wizard_copy_dir "$D/api" "$D/.req"
+    assert_eq "0" "$STATUS" "a taken default asks again"
+    assert_contains "already exists" "$OUT" "and says why"
+    [[ -d $D/fresh-name ]]; assert_eq "0" "$?" "using the new name"
+
+    run req_wizard_copy_dir "$D/auth" "$D/.req" "auth-two"
+    assert_eq "0" "$STATUS" "a name given as argument skips the prompt"
+    run req_wizard_copy_dir "$D/auth" "$D/.req" "auth-two"
+    assert_eq "1" "$STATUS" "refuses an existing target"
+    run req_wizard_copy_dir "$D/auth" "$D/.req" "Bad Name"
+    assert_eq "1" "$STATUS" "refuses an invalid name"
+    assert_contains "invalid directory name" "$OUT" "says why"
+
+    # A directory that is not listed: only the files are copied.
+    before=$(<"$D/.req")
+    run req_wizard_copy_dir "$D/api/v2" "$D/.req" "v3"
+    assert_eq "0" "$STATUS" "copies a subdirectory"
+    [[ -f $D/api/v3/deep.post.json ]]; assert_eq "0" "$?" "next to the original"
+    assert_eq "$before" "$(<"$D/.req")" "the .req is untouched"
+
+    IN='<EOF>'; run req_wizard_copy_dir "$D/api" "$D/.req"
+    assert_eq "1" "$STATUS" "end of input cancels"
+    run req_wizard_copy_dir "$D/ghost" "$D/.req" "x"
+    assert_eq "1" "$STATUS" "a missing directory fails"
+}
+
 test_pairs_and_presets
 test_new
 test_edit
@@ -374,4 +419,5 @@ test_raw_data
 test_duplicate
 test_mkdir
 test_rename_dir
+test_copy_dir
 test_summary

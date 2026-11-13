@@ -13,7 +13,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR.11** (`:c [name]` copies a directory; TR.1 to TR.10 are done). Phase 5 resumes at T5.2 after TR.15. See
+Next task: **TR.12** (`:rm` on a request; TR.1 to TR.11 are done). Phase 5 resumes at T5.2 after TR.15. See
 "Review 1 findings" below.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
@@ -71,6 +71,38 @@ External editor (`lib/core.sh`, TR.6): `req_editor` prints `$VISUAL`, `$EDITOR`,
 (original text kept), 2 no editor (the caller falls back to a one-line prompt). The
 caller hands the terminal over first (`req_nav_prompt_begin`); the helper does not.
 
+Raw data editing (`req_ask_raw_data` in `lib/wizard.sh`, TR.7 and TR.8): the edit menu's `8)` opens
+the text in the editor (`.json` suffix). An empty text removes the field; an object or list
+is stored as native JSON; other text is stored as a string after a "1) edit again 2) keep as
+text 3) discard" question, which is skipped when the request has a `Content-Type` without
+`json` (the user is clearly writing text or html). `:n` reuses it: after a json, text or html
+preset on POST, PUT or PATCH it asks "Write the body in your editor?" (default yes) and only
+asks for `parameters` when declined; the JSON question applies to the json preset only.
+Without an editor, a one-line prompt (`-` clears) is used. An editor that fails leaves the
+field untouched. The wizard tests replace the editor with small `sh` scripts (`fake_editor`)
+or override `req_editor`.
+
+`.req` entry helpers (`lib/store.sh`, TR.9), for the directory commands: `req_project_has_entry`,
+`req_project_append_entry`, `req_project_replace_entry` and `req_project_remove_entry` (both
+through `req_project_rewrite`). An entry is matched by the directory it stands for
+(relative or absolute, with or without a trailing slash, paths normalized), so callers pass
+directories and never edit lines. Comments, blank lines and the order of the other lines are
+kept; a missing entry is an error and leaves the file untouched. The file is rewritten in
+place (`cat` into it), so its mode and symlinks survive.
+
+Directory rename (`req_wizard_rename_dir`, `:ed`, TR.10): renames the last path component with
+`mv`, then rewrites the `.req` entry when the directory is listed (relative when it is under the
+`.req`, absolute otherwise; the original spelling, such as a trailing slash, is not kept). If the
+`.req` cannot be rewritten the `mv` is undone. A `.req` entry that lists a descendant of the
+renamed directory is not updated and becomes a missing entry (reported by `req_project_dirs`);
+that case is rare and not handled.
+
+Directory copy (`req_wizard_copy_dir`, `:c`, TR.11): `cp -RP` next to the original, default name
+`<name>-copy` (asked again while taken); a directory listed in the `.req` gets its copy appended
+there, and the copy is removed if the `.req` cannot be written.
+
+## Conventions
+
 
 - Functions return status codes; results travel in globals named `REQ_*`
   (`REQ_REPLY`, `REQ_LAST_FILE`, `REQ_SCREEN_LINES`, ...) because bash cannot return
@@ -91,7 +123,7 @@ caller hands the terminal over first (`req_nav_prompt_begin`); the helper does n
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 609 asserts at the time of writing.
+`assert_contains`, `test_summary`). 638 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

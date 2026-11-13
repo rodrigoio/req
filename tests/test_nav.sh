@@ -533,6 +533,37 @@ test_command_rename_dir() {
     REQ_INPUT_FD=0
 }
 
+test_command_copy_dir() {
+    echo "nav: :c"
+    make_project
+    req_nav_init "$PROJ/.req"
+    REQ_INPUT_FD=3
+
+    type_keys : c
+    req_nav_handle enter 3<<<"" >/dev/null
+    [[ -f $PROJ/api-copy/list-users.get.json && -d $PROJ/api-copy/v2 ]]; assert_eq "0" "$?" ":c copies the directory under the cursor"
+    assert_eq $'api\nauth\napi-copy' "$(<"$PROJ/.req")" "and lists the copy in the .req"
+    assert_eq "api auth api-copy" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed"
+    assert_eq "api-copy" "${REQ_ITEM_LABEL[REQ_SEL]}" "and the copy is selected"
+    assert_contains "copied to api-copy" "$REQ_STATUS" "status mentions it"
+
+    type_keys :
+    REQ_CMD_BUF="c replica"
+    REQ_SEL=1; req_nav_handle enter >/dev/null
+    [[ -d $PROJ/replica ]]; assert_eq "0" "$?" ":c <name> skips the prompt"
+
+    REQ_SEL=0; req_nav_handle enter              # api
+    REQ_SEL=0; type_keys : c                     # v2
+    req_nav_handle enter 3<<<"" >/dev/null
+    [[ -d $PROJ/api/v2-copy ]]; assert_eq "0" "$?" ":c copies a subdirectory"
+    assert_eq "v2-copy" "${REQ_ITEM_LABEL[REQ_SEL]}" "and selects it"
+
+    REQ_SEL=3
+    type_keys : c; req_nav_handle enter >/dev/null
+    assert_contains "select a directory" "$REQ_STATUS" ":c on a request explains itself"
+    REQ_INPUT_FD=0
+}
+
 test_command_flow() {
     echo "nav: command flow through the main loop"
     local p=$TMP/flow out
@@ -576,6 +607,7 @@ test_command_mode
 test_command_actions
 test_help
 test_command_rename_dir
+test_command_copy_dir
 test_command_flow
 test_start_init
 test_end_to_end

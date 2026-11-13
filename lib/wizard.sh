@@ -366,3 +366,38 @@ req_wizard_rename_dir() {
     REQ_LAST_DIR=$target
     printf 'Renamed %s to %s\n' "$dir" "$target"
 }
+
+# req_wizard_copy_dir <directory> <.req file> [name] - copies a directory with everything
+# inside it, next to the original. The name is asked for (default <name>-copy) unless
+# given. When the .req lists the original, the copy is listed too (relative when it is
+# under the .req, absolute otherwise). Returns 0 after copying; REQ_LAST_DIR is the copy.
+req_wizard_copy_dir() {
+    local dir=${1%/} pfile=$2 name=${3-} target base entry listed=0
+    [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
+    dir=$(req_abs_path "$dir")
+    if [[ -z $name ]]; then
+        while :; do
+            req_ask_name "${dir##*/}-copy" "Name of the copy" || { req_cancelled; return 1; }
+            [[ ! -e ${dir%/*}/$REQ_REPLY ]] && break
+            req_err "${dir%/*}/$REQ_REPLY already exists"
+        done
+        name=$REQ_REPLY
+    fi
+    req_valid_name "$name" || {
+        req_err "invalid directory name: \"$name\" (use a slug: lowercase letters, digits and hyphens)"
+        return 1; }
+    target=${dir%/*}/$name
+    [[ ! -e $target ]] || { req_err "$target already exists"; return 1; }
+    req_project_has_entry "$pfile" "$dir" && listed=1
+    cp -RP -- "$dir" "$target" 2>/dev/null || {
+        rm -rf -- "$target"; req_err "cannot copy $dir"; return 1; }
+    if (( listed )); then
+        base=$(cd -P "$(dirname "$pfile")" && pwd)
+        entry=$target
+        [[ $target == "$base"/* ]] && entry=${target#"$base"/}
+        req_project_append_entry "$pfile" "$entry" 2>/dev/null || {
+            rm -rf -- "$target"; req_err "could not update $pfile; the copy was removed"; return 1; }
+    fi
+    REQ_LAST_DIR=$target
+    printf 'Copied %s to %s\n' "$dir" "$target"
+}
