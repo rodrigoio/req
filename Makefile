@@ -6,39 +6,39 @@ SRC     := $(abspath bin/req)
 .DEFAULT_GOAL := help
 .PHONY: help test lint check install uninstall
 
-help: ## Lista os alvos disponíveis
+help: ## List the available targets
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
 	@echo
-	@echo "Variáveis: PREFIX=$(PREFIX) BINDIR=$(BINDIR)"
+	@echo "Variables: PREFIX=$(PREFIX) BINDIR=$(BINDIR)"
 
-test: ## Executa todos os testes
+test: ## Run all tests
 	@tests/run.sh
 
-lint: ## Roda shellcheck (se instalado) e verifica a sintaxe
+lint: ## Run shellcheck (if installed) and check syntax
 	@bash -n bin/req lib/*.sh tests/*.sh
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck -x bin/req lib/*.sh; \
 	else \
-		echo "shellcheck não encontrado; apenas a sintaxe foi verificada"; \
+		echo "shellcheck not found; only the syntax was checked"; \
 	fi
 
-check: lint test ## Lint + testes
+check: lint test ## Lint + tests
 
-install: ## Instala o link simbólico em $(BINDIR)/req
+install: ## Install a symlink at $(BINDIR)/req
 	@mkdir -p "$(DESTDIR)$(BINDIR)"
 	@ln -sf "$(SRC)" "$(TARGET)"
-	@echo "instalado: $(TARGET) -> $(SRC)"
+	@echo "installed: $(TARGET) -> $(SRC)"
 	@case ":$$PATH:" in \
 		*":$(BINDIR):"*) ;; \
-		*) echo "aviso: $(BINDIR) não está no PATH; adicione ao seu shell:"; \
+		*) echo "warning: $(BINDIR) is not in your PATH; add this to your shell profile:"; \
 		   echo "  export PATH=\"$(BINDIR):\$$PATH\"" ;; \
 	esac
 
-uninstall: ## Remove o link simbólico, se apontar para este projeto
+uninstall: ## Remove the symlink, if it points to this project
 	@if [ -L "$(TARGET)" ] && [ "$$(readlink "$(TARGET)")" = "$(SRC)" ]; then \
-		rm "$(TARGET)" && echo "removido: $(TARGET)"; \
+		rm "$(TARGET)" && echo "removed: $(TARGET)"; \
 	elif [ -e "$(TARGET)" ] || [ -L "$(TARGET)" ]; then \
-		echo "recusado: $(TARGET) não aponta para $(SRC)"; exit 1; \
+		echo "refused: $(TARGET) does not point to $(SRC)"; exit 1; \
 	else \
-		echo "nada a remover: $(TARGET)"; \
+		echo "nothing to remove: $(TARGET)"; \
 	fi

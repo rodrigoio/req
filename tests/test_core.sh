@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Testes de lib/core.sh e lib/ui.sh.
+# Tests for lib/core.sh and lib/ui.sh.
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$ROOT/tests/helpers.sh"
@@ -7,50 +7,68 @@ source "$ROOT/lib/core.sh"
 source "$ROOT/lib/ui.sh"
 
 test_missing_deps() {
-    echo "core: dependências"
+    echo "core: dependencies"
     local out
-    out=$(REQ_REQUIRED_CMDS=(bash req_cmd_inexistente_xyz); req_missing_deps)
-    assert_eq "req_cmd_inexistente_xyz" "$out" "lista apenas a dependência ausente"
+    out=$(REQ_REQUIRED_CMDS=(bash req_cmd_missing_xyz); req_missing_deps)
+    assert_eq "req_cmd_missing_xyz" "$out" "lists only the missing dependency"
     out=$(REQ_REQUIRED_CMDS=(bash); req_missing_deps)
-    assert_eq "" "$out" "nada ausente quando tudo existe"
+    assert_eq "" "$out" "nothing missing when everything exists"
 }
 
 test_check_deps_message() {
     local out status
-    out=$(REQ_REQUIRED_CMDS=(req_cmd_inexistente_xyz); req_check_deps 2>&1)
+    out=$(REQ_REQUIRED_CMDS=(req_cmd_missing_xyz); req_check_deps 2>&1)
     status=$?
-    assert_eq "1" "$status" "check_deps falha com dependência ausente"
-    assert_contains "req_cmd_inexistente_xyz" "$out" "mensagem cita a dependência"
-    assert_contains "apt-get install" "$out" "mensagem orienta a instalação"
+    assert_eq "1" "$status" "check_deps fails with a missing dependency"
+    assert_contains "req: error: missing dependencies: req_cmd_missing_xyz" "$out" "message names the dependency"
+    assert_contains "apt-get install" "$out" "message explains how to install"
 }
 
 test_bash_check() {
     local out status
     out=$(REQ_REQUIRED_BASH_MAJOR=99 req_check_bash 2>&1)
     status=$?
-    assert_eq "1" "$status" "check_bash falha com versão insuficiente"
-    assert_contains "bash 99+" "$out" "mensagem cita a versão exigida"
+    assert_eq "1" "$status" "check_bash fails with an old version"
+    assert_contains "bash 99+" "$out" "message names the required version"
     req_check_bash
-    assert_eq "0" "$?" "bash atual atende ao mínimo"
+    assert_eq "0" "$?" "current bash meets the minimum"
 }
 
 test_colors() {
-    echo "ui: cores"
-    # Saída capturada não é terminal, então as cores ficam desligadas.
-    assert_eq "" "$(req_color get)" "sem cor fora de terminal"
-    assert_eq "GET" "$(req_paint_method get)" "método em maiúsculas sem cor"
-    # Força o modo colorido sobrescrevendo a checagem.
+    echo "ui: colors"
+    # Captured output is not a terminal, so colors are off.
+    assert_eq "" "$(req_color get)" "no color outside a terminal"
+    assert_eq "GET" "$(req_paint_method get)" "uppercase method without color"
+    # Force color mode by overriding the check.
     req_colors_enabled() { return 0; }
-    assert_eq $'\033[32m' "$(req_color get)" "GET verde"
-    assert_eq $'\033[34m' "$(req_color post)" "POST azul"
-    assert_eq $'\033[38;5;208m' "$(req_color put)" "PUT laranja"
-    assert_eq $'\033[38;5;130m' "$(req_color patch)" "PATCH marrom"
-    assert_eq $'\033[31m' "$(req_color delete)" "DELETE vermelho"
-    assert_eq "" "$(req_method_color head)" "método desconhecido sem cor"
+    assert_eq $'\033[32m' "$(req_color get)" "GET green"
+    assert_eq $'\033[34m' "$(req_color post)" "POST blue"
+    assert_eq $'\033[38;5;208m' "$(req_color put)" "PUT orange"
+    assert_eq $'\033[38;5;130m' "$(req_color patch)" "PATCH brown"
+    assert_eq $'\033[31m' "$(req_color delete)" "DELETE red"
+    assert_eq "" "$(req_method_color head)" "unknown method has no color"
+}
+
+test_confirm() {
+    echo "ui: confirmation prompt"
+    local out
+    for answer in "" y Y yes YES; do
+        printf '%s\n' "$answer" | req_confirm "Go?" >/dev/null
+        assert_eq "0" "$?" "\"$answer\" means yes"
+    done
+    for answer in n N no NO; do
+        printf '%s\n' "$answer" | req_confirm "Go?" >/dev/null
+        assert_eq "1" "$?" "\"$answer\" means no"
+    done
+    req_confirm "Go?" </dev/null >/dev/null
+    assert_eq "1" "$?" "end of input means no"
+    out=$(printf 'maybe\ny\n' | req_confirm "Go?")
+    assert_eq "2" "$(grep -o 'Go? \[Y/n\]' <<<"$out" | wc -l)" "asks again on an unrecognized answer"
 }
 
 test_missing_deps
 test_check_deps_message
 test_bash_check
 test_colors
+test_confirm
 test_summary

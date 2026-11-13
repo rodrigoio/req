@@ -1,93 +1,112 @@
 # req
 
-The interactive request tool for your terminal. Utilitário interativo em bash + curl para cadastrar, navegar e disparar requisições HTTP, com persistência em arquivos JSON.
+The interactive request tool for your terminal. A bash + curl utility to register, browse and fire HTTP requests, with persistence in plain JSON files.
 
-> Em desenvolvimento. O plano de trabalho está em [TASKS.md](TASKS.md).
+> Work in progress. The roadmap lives in [TASKS.md](TASKS.md).
 
-## Requisitos
+## Requirements
 
-- bash 4+
-- curl
-- jq
+Runtime: bash 4+, curl and jq. Nothing else.
 
-## Instalação
+Development only (not needed to use `req`): `shellcheck`, used by `make lint`. When it is not installed, `make lint` just warns and only checks the syntax. The tests need `python3` for the local mock server and skip those cases without it.
+
+## Installation
 
 ```sh
-make install      # link simbólico em ~/.local/bin/req
-make uninstall    # remove o link
+make install      # symlink at ~/.local/bin/req
+make uninstall    # remove the symlink
 ```
 
-Para instalar em outro lugar: `make install PREFIX=/usr/local` (ou `BINDIR=...`). Se o diretório não estiver no `PATH`, o `make install` avisa como adicioná-lo.
+To install elsewhere: `make install PREFIX=/usr/local` (or `BINDIR=...`). If the directory is not in your `PATH`, `make install` warns and shows how to add it.
 
-## Desenvolvimento
+## Getting started
 
 ```sh
-make test    # executa os testes
-make lint    # shellcheck (se instalado) + verificação de sintaxe
-make check   # lint + testes
+cd my-project
+req               # no .req here? it offers to initialize the project: [Y/n]
 ```
 
-## Uso
+Or explicitly:
 
 ```sh
-req run caminho/login.post.json   # executa uma request e mostra resposta e perfil de tempo
+req init          # creates .req and a requests/ directory
+```
+
+## Usage
+
+```sh
+req                               # interactive menu, using the .req of the current directory
+req init                          # initialize a project in the current directory
+req run path/to/login.post.json   # run one request and show the response and timing profile
 req --version
 ```
 
-A resposta é exibida no terminal (JSON identado; texto e HTML como recebidos) e nada é gravado em disco. Variáveis opcionais: `REQ_TIMEOUT` (padrão 60s) e `REQ_CONNECT_TIMEOUT` (padrão 10s).
+The response is shown in the terminal (indented JSON; text and HTML as received) and nothing is written to disk. Optional variables: `REQ_TIMEOUT` (default 60s) and `REQ_CONNECT_TIMEOUT` (default 10s).
 
-## Estrutura
+### Interactive menu
 
-```
-bin/req        entrypoint fino (resolve o diretório e chama main)
-lib/core.sh    dependências, erros e restauração do terminal
-lib/ui.sh      cores ANSI e formatação por método HTTP
-lib/store.sh   persistência de requests e arquivo .req
-lib/http.sh    montagem do curl, execução, exibição e perfil de tempo
-tests/         testes em bash puro (sem dependências; os de execução usam python3 para um servidor local e são pulados sem ele)
-Makefile       test, lint, install e uninstall
-```
+| Key | Action |
+|---|---|
+| Up / Down | move the selection (wraps around at the ends) |
+| Enter | on a directory, enter it; on a request, open its details; on the details, run it |
+| Esc | go back (details → list → parent directory); does nothing at the root |
+| Ctrl-C | quit |
 
-Todo o código é organizado em funções dentro de `lib/`.
+The menu is redrawn in place without clearing the screen: a request's result stays visible and the menu is redrawn right below it, after the `====` line. Directories show as `dir  name/` and requests with a colored method. An invalid request shows its problems on the details screen and is not run.
 
-## Testes
+## Development
 
 ```sh
-make test   # equivale a tests/run.sh
+make test    # run the tests
+make lint    # shellcheck (if installed) + syntax check
+make check   # lint + tests
 ```
 
-Cada `tests/test_*.sh` é executado isoladamente; o runner falha se qualquer assert falhar.
+## Layout
 
-## Formato dos arquivos
+```
+bin/req        thin entrypoint (resolves its directory and calls main)
+lib/core.sh    dependencies, errors and terminal restoration
+lib/ui.sh      ANSI colors, terminal helpers and per-method formatting
+lib/store.sh   request persistence and the .req project file
+lib/http.sh    curl command building, execution, display and timing profile
+lib/nav.sh     interactive menu: list, details and keys
+tests/         plain bash tests (no dependencies; see Requirements)
+Makefile       test, lint, install and uninstall
+```
 
-Cada request é um arquivo `<slug>.<método>.json` (métodos: GET, POST, PUT, PATCH, DELETE). O slug usa só minúsculas, números e hífens (ex.: `listar-usuarios`). O `name` no JSON é idêntico ao slug do arquivo e é o rótulo mostrado no menu.
+All the code is organized in functions inside `lib/`.
+
+## File format
+
+Each request is a file `<slug>.<method>.json` (methods: GET, POST, PUT, PATCH, DELETE). The slug uses only lowercase letters, digits and hyphens (e.g. `list-users`). The `name` in the JSON is identical to the file's slug and is the label shown in the menu.
 
 ```json
 {
   "name": "login",
   "method": "POST",
   "url": "https://api.example.com/login",
-  "description": "Autentica o usuário",
+  "description": "Signs the user in",
   "headers": {"Content-Type": "application/json"},
   "query": {},
-  "data_parameter": {"user": "ana"}
+  "data_parameter": {"user": "ann"}
 }
 ```
 
-- Obrigatórios: `name`, `method` e `url`. Opcionais: `description`, `headers`, `query` e `data_parameter`.
-- `headers`, `query` e `data_parameter` são objetos de valores simples (texto, número ou booleano).
-- `query` é anexada à url com url-encode.
-- Corpo (enviado só em POST, PUT e PATCH): `data_parameter` é enviado como JSON quando o header `Content-Type` contém `json`, senão como formulário url-encoded.
-- Campos desconhecidos ou com tipo errado invalidam a request.
+- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query` and `data_parameter`.
+- `headers`, `query` and `data_parameter` are objects with simple values (string, number or boolean).
+- `query` is appended to the url, url-encoded.
+- Body (sent only with POST, PUT and PATCH): `data_parameter` is sent as JSON when the `Content-Type` header contains `json`, and as an url-encoded form otherwise.
+- Unknown fields or fields with a wrong type invalidate the request.
 
-Subdiretórios do projeto são diretórios reais.
+Subdirectories of the project are real directories.
 
-O arquivo `.req` na raiz do projeto lista os diretórios que o compõem, um por linha, relativos ao próprio `.req`. Linhas em branco e iniciadas por `#` são ignoradas:
+The `.req` file at the project root lists the directories that make it up, one per line, relative to the `.req` itself. Blank lines and lines starting with `#` are ignored:
 
 ```
-# projeto
+# project
 api
 auth
 ```
 
-Arquivos JSON editados manualmente e inválidos não são corrigidos: o `req` apenas indica o erro.
+Manually edited files that become invalid are never fixed: `req` only reports the error.

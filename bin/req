@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # req - The interactive request tool for your terminal.
 
-# req_resolve_home - diretório raiz da instalação, seguindo symlinks.
+# req_resolve_home - installation root directory, following symlinks.
 req_resolve_home() {
     local src=${BASH_SOURCE[0]} dir
     while [[ -L $src ]]; do
@@ -10,6 +10,15 @@ req_resolve_home() {
         [[ $src == /* ]] || src=$dir/$src
     done
     cd -P "$(dirname "$src")/.." && pwd
+}
+
+req_usage() {
+    cat <<'USAGE'
+usage: req                  open the interactive menu (uses the .req in the current directory)
+       req init             initialize a req project in the current directory
+       req run <file>       run a request and show the result
+       req --version | --help
+USAGE
 }
 
 main() {
@@ -22,9 +31,12 @@ main() {
     source "$REQ_HOME/lib/store.sh"
     # shellcheck source=../lib/http.sh
     source "$REQ_HOME/lib/http.sh"
+    # shellcheck source=../lib/nav.sh
+    source "$REQ_HOME/lib/nav.sh"
 
     case ${1-} in
         -v|--version) printf 'req %s\n' "$REQ_VERSION"; return 0 ;;
+        -h|--help)    req_usage; return 0 ;;
     esac
 
     req_check_bash
@@ -32,13 +44,21 @@ main() {
     req_setup_traps
 
     case ${1-} in
+        init)
+            req_project_init . || return 1
+            printf 'Initialized req project in %s\n  %s\n  %s/\n' \
+                "$PWD" "$REQ_PROJECT_FILE" "$REQ_PROJECT_DEFAULT_DIR"
+            ;;
         run)
-            [[ -n ${2-} ]] || req_die "uso: req run <arquivo.<método>.json>"
+            [[ -n ${2-} ]] || req_die "usage: req run <file.<method>.json>"
             req_run_request "$2"
             ;;
+        '')
+            req_nav_start
+            ;;
         *)
-            printf 'req %s: navegação interativa ainda não implementada.\n' "$REQ_VERSION"
-            printf 'uso: req run <arquivo.<método>.json> | req --version\n'
+            req_usage >&2
+            return 1
             ;;
     esac
 }

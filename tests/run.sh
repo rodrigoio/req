@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh - executa todos os tests/test_*.sh e falha se algum falhar.
+# run.sh - runs every tests/test_*.sh and fails if any of them fails.
 
 main() {
     local dir failed=0 t

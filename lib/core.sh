@@ -1,29 +1,29 @@
 #!/usr/bin/env bash
-# core.sh - verificação de dependências, erros e restauração do terminal.
+# core.sh - dependency checks, errors and terminal restoration.
 
 REQ_VERSION="0.1.0"
 REQ_REQUIRED_BASH_MAJOR=4
 REQ_REQUIRED_CMDS=(curl jq)
 
-# req_err <mensagem> - imprime erro em stderr sem encerrar o programa.
+# req_err <message> - prints an error to stderr without exiting.
 req_err() {
-    printf 'req: erro: %s\n' "$*" >&2
+    printf 'req: error: %s\n' "$*" >&2
 }
 
-# req_die <mensagem> - imprime erro em stderr e encerra com status 1.
+# req_die <message> - prints an error to stderr and exits with status 1.
 req_die() {
     req_err "$@"
     exit 1
 }
 
-# req_check_bash - exige bash >= REQ_REQUIRED_BASH_MAJOR.
+# req_check_bash - requires bash >= REQ_REQUIRED_BASH_MAJOR.
 req_check_bash() {
     if (( BASH_VERSINFO[0] < REQ_REQUIRED_BASH_MAJOR )); then
-        req_die "bash ${REQ_REQUIRED_BASH_MAJOR}+ é necessário (encontrado: ${BASH_VERSION})."
+        req_die "bash ${REQ_REQUIRED_BASH_MAJOR}+ is required (found: ${BASH_VERSION})."
     fi
 }
 
-# req_missing_deps - lista, uma por linha, as dependências ausentes do PATH.
+# req_missing_deps - lists, one per line, the dependencies missing from PATH.
 req_missing_deps() {
     local cmd
     for cmd in "${REQ_REQUIRED_CMDS[@]}"; do
@@ -31,18 +31,18 @@ req_missing_deps() {
     done
 }
 
-# req_check_deps - encerra com instruções se faltar alguma dependência.
+# req_check_deps - exits with instructions if any dependency is missing.
 req_check_deps() {
     local missing
     missing=$(req_missing_deps)
     [[ -z $missing ]] && return 0
-    req_die "dependências ausentes: $(tr '\n' ' ' <<<"$missing")
-instale-as com o gerenciador de pacotes da distro, por exemplo:
+    req_die "missing dependencies: $(tr '\n' ' ' <<<"$missing")
+install them with your package manager, for example:
   debian/ubuntu:  sudo apt-get install ${missing//$'\n'/ }
   centos/rhel:    sudo yum install ${missing//$'\n'/ }"
 }
 
-# req_restore_terminal - devolve o terminal ao estado normal (cursor, eco, cores).
+# req_restore_terminal - puts the terminal back to normal (cursor, echo, colors).
 req_restore_terminal() {
     [[ -t 1 ]] || return 0
     printf '\033[0m\033[?25h'
@@ -50,7 +50,7 @@ req_restore_terminal() {
     return 0
 }
 
-# req_setup_traps - garante restauração do terminal em saída normal, erro ou sinal.
+# req_setup_traps - restores the terminal on normal exit, error or signal.
 req_setup_traps() {
     trap req_restore_terminal EXIT
     trap 'exit 130' INT

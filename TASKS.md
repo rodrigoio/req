@@ -34,6 +34,11 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 ### Extra — Makefile (feito antes da Fase 2)
 - [x] `make test`, `make lint`, `make check`, `make install` e `make uninstall` (link simbólico em `~/.local/bin`, configurável via `PREFIX`/`BINDIR`).
 
+### Extra — Inicialização e idioma (feito antes da Fase 4)
+- [x] `req init` cria `.req` e `requests/`; sem `.req` no diretório, o modo interativo oferece inicializar o projeto (`[Y/n]`).
+- [x] Todo o código, mensagens, comentários, testes e README foram traduzidos para o inglês (idioma único do projeto).
+- `shellcheck` é só ferramenta de desenvolvimento (`make lint`), não é dependência de runtime.
+
 ### Fase 1 — Modelo de dados e persistência
 - [x] T1.1 Formato `<nome>.<method>.json` com campos `name`, `method`, `url`, `headers`, `query`, `data_parameter`, `data_string` (`url` e `description` acrescentados; ver Decisões fechadas). PATCH incluído, na cor marrom; `data_string` removido por ora.
 - [x] T1.2 Funções de leitura/escrita/validação do JSON via jq (o exemplo do manifest não tem vírgulas; o JSON gravado deve ser válido) e detecção de JSON inválido por edição manual, apenas reportando o erro.
@@ -49,10 +54,10 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - [x] T2.5 Testes com servidor local simples ou mock.
 
 ### Fase 3 — Navegação interativa
-- T3.1 Loop infinito de menu: setas cima/baixo, Enter, Esc (captura de sequências de escape com `read -rsn`).
-- T3.2 Menu raiz com os diretórios do `.req`; entrar em diretório lista subdiretórios e requests, com ícone/rótulo distinguindo cada um.
-- T3.3 Tela de detalhes da request (url, description, params, headers); Enter dispara, Esc volta; na raiz Esc não faz nada.
-- T3.4 Cores por método na listagem e nos detalhes.
+- [x] T3.1 Loop infinito de menu: setas cima/baixo, Enter, Esc (captura de sequências de escape com `read -rsn`).
+- [x] T3.2 Menu raiz com os diretórios do `.req`; entrar em diretório lista subdiretórios e requests, com ícone/rótulo distinguindo cada um.
+- [x] T3.3 Tela de detalhes da request (url, description, params, headers); Enter dispara, Esc volta; na raiz Esc não faz nada.
+- [x] T3.4 Cores por método na listagem e nos detalhes.
 
 ### Fase 4 — Modo comando e gestão de requests
 - T4.1 Entrada em modo comando com `:`; Esc cancela.

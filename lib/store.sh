@@ -1,50 +1,51 @@
 #!/usr/bin/env bash
-# store.sh - persistência de requests (<nome>.<método>.json) e do arquivo .req.
+# store.sh - request persistence (<name>.<method>.json) and the .req project file.
 #
-# Formato de uma request:
-#   {"name": "listar-usuarios", "method": "GET", "url": "https://api/users",
+# Request format:
+#   {"name": "list-users", "method": "GET", "url": "https://api/users",
 #    "description": "...", "headers": {}, "query": {}, "data_parameter": {}}
 #
-# - `name` é um slug (minúsculas, números e hífens) e é idêntico ao nome do
-#   arquivo; é também o rótulo exibido no menu.
-# - `name`, `method` e `url` são obrigatórios; os demais campos são opcionais.
-# - headers, query e data_parameter são objetos de valores simples (texto,
-#   número ou booleano).
-# Qualquer campo desconhecido ou com tipo errado invalida a request; o arquivo
-# nunca é alterado, o erro apenas é indicado.
+# - `name` is a slug (lowercase letters, digits and hyphens) identical to the
+#   file name; it is also the label shown in the menu.
+# - `name`, `method` and `url` are required; the other fields are optional.
+# - headers, query and data_parameter are objects with simple values (string,
+#   number or boolean).
+# Any unknown field or wrong type invalidates the request; the file is never
+# changed, the error is only reported.
 
 REQ_METHODS=(GET POST PUT PATCH DELETE)
 REQ_PROJECT_FILE=.req
+REQ_PROJECT_DEFAULT_DIR=requests
 
-# Verificação de conteúdo (independe do nome do arquivo): imprime um problema por linha.
+# Content checks (independent of the file name): prints one problem per line.
 REQ_SCHEMA_JQ='
 def scalar: type == "string" or type == "number" or type == "boolean";
 def check_map($lbl; $item):
-    if type != "object" then "campo \"\($lbl)\" deve ser um objeto"
+    if type != "object" then "field \"\($lbl)\" must be an object"
     else to_entries[] | select((.value | scalar) | not)
-         | "\($item) \"\(.key)\": o valor deve ser texto, número ou booleano" end;
+         | "\($item) \"\(.key)\": the value must be a string, number or boolean" end;
 ["name", "method", "url", "description", "headers", "query", "data_parameter"] as $allowed
-| if type != "object" then "a raiz deve ser um objeto"
+| if type != "object" then "the root must be an object"
   else
     (keys[] | select(. as $k | $allowed | index($k) | not)
-        | if . == "data_string" then "campo \"data_string\" ainda não é suportado"
-          else "campo desconhecido \"\(.)\" (permitidos: \($allowed | join(", ")))" end),
-    (if (.name | type) != "string" then "campo \"name\" obrigatório (texto)"
+        | if . == "data_string" then "field \"data_string\" is not supported yet"
+          else "unknown field \"\(.)\" (allowed: \($allowed | join(", ")))" end),
+    (if (.name | type) != "string" then "field \"name\" is required (string)"
      elif (.name | test("^[a-z0-9]+(-[a-z0-9]+)*$") | not)
-         then "campo \"name\" deve ser um slug: minúsculas, números e hífens (ex.: listar-usuarios)"
+         then "field \"name\" must be a slug: lowercase letters, digits and hyphens (e.g. list-users)"
      else empty end),
-    (if (.method | type) != "string" then "campo \"method\" obrigatório (texto)" else empty end),
-    (if (.url | type) != "string" or .url == "" then "campo \"url\" obrigatório (texto)" else empty end),
+    (if (.method | type) != "string" then "field \"method\" is required (string)" else empty end),
+    (if (.url | type) != "string" or .url == "" then "field \"url\" is required (string)" else empty end),
     (if has("description") and (.description | type) != "string"
-         then "campo \"description\" deve ser texto" else empty end),
+         then "field \"description\" must be a string" else empty end),
     (if has("headers") then
         (.headers | check_map("headers"; "header")),
         (if (.headers | type) == "object" then
             .headers | to_entries[]
             | if (.key | test("^[A-Za-z0-9!#$%&*+.^_|~-]+$") | not)
-                  then "header \"\(.key)\": nome inválido"
+                  then "header \"\(.key)\": invalid name"
               elif (.value | type) == "string" and (.value | test("[\r\n]"))
-                  then "header \"\(.key)\": o valor não pode conter quebra de linha"
+                  then "header \"\(.key)\": the value must not contain line breaks"
               else empty end
          else empty end)
      else empty end),
@@ -52,7 +53,7 @@ def check_map($lbl; $item):
     (if has("data_parameter") then (.data_parameter | check_map("data_parameter"; "data_parameter")) else empty end)
   end'
 
-# req_valid_method <método> - sucesso se for um método suportado (qualquer caixa).
+# req_valid_method <method> - succeeds for a supported method (any case).
 req_valid_method() {
     local m
     for m in "${REQ_METHODS[@]}"; do
@@ -61,18 +62,18 @@ req_valid_method() {
     return 1
 }
 
-# req_valid_name <nome> - slug: minúsculas, números e hífens (ex.: listar-usuarios).
+# req_valid_name <name> - slug: lowercase letters, digits and hyphens (e.g. list-users).
 req_valid_name() {
     [[ $1 =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]
 }
 
-# req_request_filename <nome> <método> - imprime "<nome>.<método em minúsculas>.json".
+# req_request_filename <name> <method> - prints "<name>.<lowercase method>.json".
 req_request_filename() {
     printf '%s.%s.json' "$1" "${2,,}"
 }
 
-# req_parse_filename <arquivo> - imprime "<nome>\t<MÉTODO>" ou falha se o
-# arquivo não segue o padrão <slug>.<método>.json com método suportado.
+# req_parse_filename <file> - prints "<name>\t<METHOD>", or fails if the file
+# does not follow <slug>.<method>.json with a supported method.
 req_parse_filename() {
     local base=${1##*/} stem method
     [[ $base == *.*.json ]] || return 1
@@ -83,51 +84,92 @@ req_parse_filename() {
     printf '%s\t%s\n' "${stem%.*}" "${method^^}"
 }
 
-# req_json_validate <arquivo> - sucesso se o arquivo for JSON válido; caso
-# contrário só indica o erro (nunca altera o arquivo).
-req_json_validate() {
-    local err
-    if ! err=$(jq empty "$1" 2>&1); then
-        req_err "$1: JSON inválido: $err"
-        return 1
-    fi
+# Full check in a single jq call: the first two output lines are name and method
+# (empty when missing or not a string), the rest are content problems, one per line.
+REQ_CHECK_JQ='
+(if type == "object" then
+    (.name   | if type == "string" then gsub("[\r\n]"; " ") else "" end),
+    (.method | if type == "string" then gsub("[\r\n]"; " ") else "" end)
+ else "", "" end),
+('"$REQ_SCHEMA_JQ"')'
+
+# Request fields for display, as "tag NUL value NUL" records.
+REQ_FIELDS_JQ='
+(["name", (.name // "")], ["method", (.method // "")], ["url", (.url // "")],
+ ["description", (.description // "")],
+ ((.headers // {})        | to_entries[] | ["h", "\(.key): \(.value)"]),
+ ((.query // {})          | to_entries[] | ["q", "\(.key)=\(.value)"]),
+ ((.data_parameter // {}) | to_entries[] | ["p", "\(.key)=\(.value)"]))
+| .[] | (., "\u0000")'
+
+REQ_F_NAME=""; REQ_F_METHOD=""; REQ_F_URL=""; REQ_F_DESC=""
+REQ_F_HEADERS=(); REQ_F_QUERY=(); REQ_F_PARAMS=()
+
+# req_request_fields <file> - reads the fields of an already validated request in
+# a single jq call and fills REQ_F_NAME, REQ_F_METHOD, REQ_F_URL, REQ_F_DESC and
+# the arrays REQ_F_HEADERS ("key: value"), REQ_F_QUERY and REQ_F_PARAMS ("key=value").
+req_request_fields() {
+    local tag val
+    REQ_F_NAME=""; REQ_F_METHOD=""; REQ_F_URL=""; REQ_F_DESC=""
+    REQ_F_HEADERS=(); REQ_F_QUERY=(); REQ_F_PARAMS=()
+    while IFS= read -r -d '' tag && IFS= read -r -d '' val; do
+        case $tag in
+            name)        REQ_F_NAME=$val ;;
+            method)      REQ_F_METHOD=${val^^} ;;
+            url)         REQ_F_URL=$val ;;
+            description) REQ_F_DESC=$val ;;
+            h)           REQ_F_HEADERS+=("$val") ;;
+            q)           REQ_F_QUERY+=("$val") ;;
+            p)           REQ_F_PARAMS+=("$val") ;;
+        esac
+    done < <(jq -j "$REQ_FIELDS_JQ" "$1")
 }
 
-# req_request_check <arquivo> - valida JSON, campos, tipos e coerência com o
-# nome do arquivo. Imprime cada problema em stderr; sucesso se não houver nenhum.
+# req_request_check <file> - validates the JSON, fields, types and consistency
+# with the file name. Prints each problem to stderr; succeeds if there are none.
+# Invalid JSON is only reported, the file is never changed.
 req_request_check() {
-    local file=$1 problems line parsed stem fmethod jname jmethod
-    req_json_validate "$file" || return 1
-    problems=$(jq -r "$REQ_SCHEMA_JQ" "$file") || return 1
+    local file=$1 out status line parsed stem fmethod jname jmethod
+    local lines=() problems=()
+    out=$(jq -r "$REQ_CHECK_JQ" "$file" 2>&1); status=$?
+    if (( status != 0 )) && [[ $out == *"parse error"* ]]; then
+        req_err "$file: invalid JSON: $out"
+        return 1
+    elif (( status != 0 )); then
+        req_err "$file: cannot validate: $out"
+        return 1
+    fi
+    mapfile -t lines <<<"$out"
+    jname=${lines[0]}
+    jmethod=${lines[1]}
+    problems=("${lines[@]:2}")
 
-    if [[ $problems != *"a raiz deve ser"* ]]; then
-        jname=$(jq -r '.name | strings' "$file")
-        jmethod=$(jq -r '.method | strings' "$file")
+    if [[ ${problems[0]-} != *"the root must be"* ]]; then
         if [[ -n $jmethod ]] && ! req_valid_method "$jmethod"; then
-            problems+=${problems:+$'\n'}"método \"$jmethod\" não suportado (use ${REQ_METHODS[*]})"
+            problems+=("method \"$jmethod\" is not supported (use ${REQ_METHODS[*]})")
         fi
         if parsed=$(req_parse_filename "$file"); then
             stem=${parsed%%$'\t'*}
             fmethod=${parsed#*$'\t'}
             if [[ -n $jname && $jname != "$stem" ]]; then
-                problems+=${problems:+$'\n'}"campo \"name\" (\"$jname\") difere do nome do arquivo (\"$stem\")"
+                problems+=("field \"name\" (\"$jname\") differs from the file name (\"$stem\")")
             fi
             if [[ -n $jmethod ]] && req_valid_method "$jmethod" && [[ $fmethod != "${jmethod^^}" ]]; then
-                problems+=${problems:+$'\n'}"método \"$jmethod\" difere do nome do arquivo ($fmethod)"
+                problems+=("method \"$jmethod\" differs from the file name ($fmethod)")
             fi
         else
-            problems+=${problems:+$'\n'}"nome de arquivo fora do padrão <slug>.<método>.json"
+            problems+=("file name does not follow <slug>.<method>.json")
         fi
     fi
 
-    [[ -z $problems ]] && return 0
-    while IFS= read -r line; do
+    (( ${#problems[@]} == 0 )) && return 0
+    for line in "${problems[@]}"; do
         req_err "$file: $line"
-    done <<<"$problems"
+    done
     return 1
 }
 
-# req_request_template <nome> <método> <url> - imprime uma request nova em JSON.
+# req_request_template <name> <method> <url> - prints a new request as JSON.
 req_request_template() {
     jq -n --arg name "$1" --arg method "${2^^}" --arg url "$3" '{
         name: $name, method: $method, url: $url, description: "",
@@ -135,31 +177,31 @@ req_request_template() {
     }'
 }
 
-# req_request_write <diretório> <nome> <método> <url> [json]
-# Grava a request de forma atômica como JSON válido e imprime o caminho criado.
-# [json] traz os campos opcionais (description, headers, query, data_parameter);
-# name, method e url vêm dos argumentos e prevalecem. Se o resultado não passar
-# na validação, nada é gravado.
+# req_request_write <directory> <name> <method> <url> [json]
+# Atomically writes the request as valid JSON and prints the created path.
+# [json] carries the optional fields (description, headers, query, data_parameter);
+# name, method and url come from the arguments and take precedence. If the
+# result fails validation, nothing is written.
 req_request_write() {
     local dir=$1 name=$2 method=$3 url=$4 json=${5-} target tmp problems line
     req_valid_name "$name" || {
-        req_err "nome inválido: \"$name\" (use slug: minúsculas, números e hífens)"; return 1; }
+        req_err "invalid name: \"$name\" (use a slug: lowercase letters, digits and hyphens)"; return 1; }
     req_valid_method "$method" || {
-        req_err "método inválido: \"$method\" (use ${REQ_METHODS[*]})"; return 1; }
-    [[ -n $url ]] || { req_err "a url é obrigatória"; return 1; }
-    [[ -d $dir ]] || { req_err "diretório inexistente: $dir"; return 1; }
+        req_err "invalid method: \"$method\" (use ${REQ_METHODS[*]})"; return 1; }
+    [[ -n $url ]] || { req_err "the url is required"; return 1; }
+    [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
 
     [[ -n $json ]] || json=$(req_request_template "$name" "$method" "$url")
     target=$dir/$(req_request_filename "$name" "$method")
-    tmp=$(mktemp "$dir/.req.XXXXXX") || { req_err "não foi possível gravar em $dir"; return 1; }
+    tmp=$(mktemp "$dir/.req.XXXXXX") || { req_err "cannot write to $dir"; return 1; }
     if ! jq --arg name "$name" --arg method "${method^^}" --arg url "$url" \
             '. + {name: $name, method: $method, url: $url}' <<<"$json" >"$tmp" 2>/dev/null; then
         rm -f "$tmp"
-        req_err "JSON da request \"$name\" é inválido; nada foi gravado"
+        req_err "the JSON of request \"$name\" is invalid; nothing was written"
         return 1
     fi
     problems=$(jq -r "$REQ_SCHEMA_JQ" "$tmp") || {
-        rm -f "$tmp"; req_err "falha ao validar a request \"$name\""; return 1; }
+        rm -f "$tmp"; req_err "failed to validate request \"$name\""; return 1; }
     if [[ -n $problems ]]; then
         rm -f "$tmp"
         while IFS= read -r line; do
@@ -170,8 +212,8 @@ req_request_write() {
     mv "$tmp" "$target" && printf '%s\n' "$target"
 }
 
-# req_request_get <arquivo> <campo> - imprime o valor de um campo (texto cru).
-# Campos ausentes viram {} (headers, query, data_parameter) ou vazio (demais).
+# req_request_get <file> <field> - prints a field's value (raw text).
+# Missing fields become {} (headers, query, data_parameter) or empty (others).
 req_request_get() {
     case $2 in
         headers|query|data_parameter) jq -c --arg f "$2" '.[$f] // {}' "$1" ;;
@@ -179,20 +221,33 @@ req_request_get() {
     esac
 }
 
-# req_project_find [diretório] - imprime o caminho do .req no diretório (padrão: atual).
+# req_project_find [directory] - prints the path of the .req in the directory (default: current).
 req_project_find() {
     local file=${1:-.}/$REQ_PROJECT_FILE
     [[ -f $file ]] || return 1
     printf '%s\n' "$file"
 }
 
-# req_project_dirs <arquivo .req> - imprime os diretórios do projeto, um por linha.
-# Formato do .req: um diretório por linha, relativo ao próprio .req; linhas em
-# branco e iniciadas por # são ignoradas. Entradas inexistentes geram erro em
-# stderr, são puladas e o status final é 1.
+# req_project_init [directory] - creates a .req and its default directory. Fails
+# if the directory does not exist or already has a .req.
+req_project_init() {
+    local dir=${1:-.} file
+    file=$dir/$REQ_PROJECT_FILE
+    [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
+    [[ ! -e $file ]] || { req_err "$file already exists"; return 1; }
+    mkdir -p "$dir/$REQ_PROJECT_DEFAULT_DIR" 2>/dev/null &&
+        printf '# req project: one directory per line, relative to this file.\n%s\n' \
+            "$REQ_PROJECT_DEFAULT_DIR" >"$file" 2>/dev/null ||
+        { req_err "cannot write to $dir"; return 1; }
+}
+
+# req_project_dirs <.req file> - prints the project directories, one per line.
+# .req format: one directory per line, relative to the .req itself; blank lines
+# and lines starting with # are ignored. Missing entries are reported to stderr,
+# skipped, and the final status is 1.
 req_project_dirs() {
     local file=$1 base line dir status=0
-    [[ -f $file ]] || { req_err "arquivo de projeto não encontrado: $file"; return 1; }
+    [[ -f $file ]] || { req_err "project file not found: $file"; return 1; }
     base=$(cd -P "$(dirname "$file")" && pwd)
     while IFS= read -r line || [[ -n $line ]]; do
         line=${line%$'\r'}
@@ -204,21 +259,21 @@ req_project_dirs() {
         if [[ -d $dir ]]; then
             printf '%s\n' "$dir"
         else
-            req_err "$file: diretório listado não existe: $line"
+            req_err "$file: listed directory does not exist: $line"
             status=1
         fi
     done <"$file"
     return "$status"
 }
 
-# req_list_dir <diretório> - lista o conteúdo, subdiretórios primeiro e depois
-# requests, cada grupo em ordem alfabética. Uma entrada por linha, separada por TAB:
-#   d  <nome>             <caminho>
-#   r  <nome>  <MÉTODO>   <caminho>
-# Itens ocultos e arquivos fora do padrão <slug>.<método>.json são ignorados.
+# req_list_dir <directory> - lists the contents, subdirectories first and then
+# requests, each group in alphabetical order. One TAB-separated entry per line:
+#   d  <name>             <path>
+#   r  <name>  <METHOD>   <path>
+# Hidden items and files not matching <slug>.<method>.json are ignored.
 req_list_dir() {
     local dir=${1%/} entry name parsed
-    [[ -d $dir ]] || { req_err "diretório inexistente: $dir"; return 1; }
+    [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
     (
         shopt -s nullglob
         export LC_ALL=C

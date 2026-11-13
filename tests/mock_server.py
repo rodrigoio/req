@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Servidor HTTP local para os testes: devolve o que recebeu. Imprime a porta."""
+"""Local HTTP server for the tests: echoes what it received. Prints the port."""
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,7 +20,7 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length") or 0)
         raw = self.rfile.read(length).decode() if length else ""
         if parts.path == "/text":
-            return self._reply(200, "text/plain", "olá texto")
+            return self._reply(200, "text/plain", "hello text")
         if parts.path == "/html":
             return self._reply(200, "text/html", "<h1>oi</h1>")
         if parts.path == "/empty":
