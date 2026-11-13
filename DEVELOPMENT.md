@@ -13,7 +13,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR.10** (`:ed [name]` renames a directory; TR.1 to TR.9 are done). Phase 5 resumes at T5.2 after TR.15. See
+Next task: **TR.11** (`:c [name]` copies a directory; TR.1 to TR.10 are done). Phase 5 resumes at T5.2 after TR.15. See
 "Review 1 findings" below.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
@@ -91,7 +91,7 @@ caller hands the terminal over first (`req_nav_prompt_begin`); the helper does n
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 579 asserts at the time of writing.
+`assert_contains`, `test_summary`). 609 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

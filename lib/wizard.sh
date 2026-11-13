@@ -327,3 +327,42 @@ req_wizard_mkdir() {
     fi
     printf 'Created directory %s\n' "$REQ_LAST_DIR"
 }
+
+# req_wizard_rename_dir <directory> <.req file> [name] - renames a directory (the
+# last component of its path); the name is asked for unless given. When the .req
+# lists the directory, its entry is updated too (relative when the directory is
+# under the .req, absolute otherwise). Returns 0 after renaming; REQ_LAST_DIR is the
+# new path. An unchanged name returns 1 without touching anything.
+req_wizard_rename_dir() {
+    local dir=${1%/} pfile=$2 name=${3-} target base entry listed=0
+    [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
+    if [[ -z $name ]]; then
+        req_ask_name "${dir##*/}" "New directory name" || { req_cancelled; return 1; }
+        name=$REQ_REPLY
+    fi
+    req_valid_name "$name" || {
+        req_err "invalid directory name: \"$name\" (use a slug: lowercase letters, digits and hyphens)"
+        return 1; }
+    dir=$(req_abs_path "$dir")
+    target=${dir%/*}/$name
+    if [[ $target == "$dir" ]]; then
+        printf 'Name unchanged.\n'
+        return 1
+    fi
+    [[ ! -e $target ]] || { req_err "$target already exists"; return 1; }
+    req_project_has_entry "$pfile" "$dir" && listed=1
+    mv -- "$dir" "$target" 2>/dev/null || { req_err "cannot rename $dir"; return 1; }
+    if (( listed )); then
+        base=$(cd -P "$(dirname "$pfile")" && pwd)
+        entry=$target
+        [[ $target == "$base"/* ]] && entry=${target#"$base"/}
+        # The old path is gone, so the entry is found through the saved path.
+        if ! req_project_replace_entry "$pfile" "$dir" "$entry"; then
+            mv -- "$target" "$dir"
+            req_err "could not update $pfile; the rename was undone"
+            return 1
+        fi
+    fi
+    REQ_LAST_DIR=$target
+    printf 'Renamed %s to %s\n' "$dir" "$target"
+}

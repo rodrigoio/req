@@ -318,10 +318,60 @@ test_mkdir() {
     assert_eq "$D/auth" "$REQ_LAST_DIR" "REQ_LAST_DIR is still the last created one"
 }
 
+test_rename_dir() {
+    echo "wizard: rename directory"
+    fresh rn
+    mkdir -p "$D/api/v2" "$D/auth" "$D/taken"
+    printf '# project\napi\n\n  auth/  \n' >"$D/.req"
+    req_request_write "$D/api" ping GET http://x >/dev/null
+
+    IN=$'service\n'; run req_wizard_rename_dir "$D/api" "$D/.req"
+    assert_eq "0" "$STATUS" "renames a directory listed in the .req"
+    [[ -d $D/service/v2 && -f $D/service/ping.get.json && ! -e $D/api ]]; assert_eq "0" "$?" "the contents move with it"
+    assert_eq "$D/service" "$REQ_LAST_DIR" "REQ_LAST_DIR is the new path"
+    assert_eq $'# project\nservice\n\n  auth/  ' "$(<"$D/.req")" "the .req entry is updated, the rest is kept"
+
+    IN=$'\n'; run req_wizard_rename_dir "$D/service" "$D/.req"
+    assert_eq "1" "$STATUS" "keeping the default name changes nothing"
+    assert_contains "Name unchanged" "$OUT" "and says so"
+    [[ -d $D/service ]]; assert_eq "0" "$?" "the directory stays"
+
+    IN=$'\n'; run req_wizard_rename_dir "$D/auth" "$D/.req"
+    assert_eq "1" "$STATUS" "the prompt offers the current name as default"
+
+    run req_wizard_rename_dir "$D/service" "$D/.req" "taken"
+    assert_eq "1" "$STATUS" "refuses a name that already exists"
+    assert_contains "already exists" "$OUT" "says why"
+    run req_wizard_rename_dir "$D/service" "$D/.req" "Bad Name"
+    assert_eq "1" "$STATUS" "refuses an invalid name"
+    assert_contains "invalid directory name" "$OUT" "says why"
+    assert_eq $'# project\nservice\n\n  auth/  ' "$(<"$D/.req")" "refusals leave the .req alone"
+
+    # A subdirectory that is not listed: only the directory moves.
+    run req_wizard_rename_dir "$D/service/v2" "$D/.req" "v3"
+    assert_eq "0" "$STATUS" "renames a subdirectory"
+    [[ -d $D/service/v3 && ! -e $D/service/v2 ]]; assert_eq "0" "$?" "it moved"
+    assert_eq $'# project\nservice\n\n  auth/  ' "$(<"$D/.req")" "and the .req is untouched"
+
+    # An absolute entry outside the project stays absolute.
+    fresh rnabs
+    mkdir -p "$D/p" "$TMP/outside-dir"
+    printf '%s\n' "$TMP/outside-dir" >"$D/p/.req"
+    run req_wizard_rename_dir "$TMP/outside-dir" "$D/p/.req" "moved-dir"
+    assert_eq "$TMP/moved-dir" "$(<"$D/p/.req")" "an entry outside the project stays absolute"
+    rm -rf "$TMP/moved-dir"
+
+    IN='<EOF>'; run req_wizard_rename_dir "$D/service" "$D/.req"
+    assert_eq "1" "$STATUS" "end of input cancels"
+    run req_wizard_rename_dir "$D/ghost" "$D/.req" "x"
+    assert_eq "1" "$STATUS" "a missing directory fails"
+}
+
 test_pairs_and_presets
 test_new
 test_edit
 test_raw_data
 test_duplicate
 test_mkdir
+test_rename_dir
 test_summary

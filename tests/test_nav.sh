@@ -498,6 +498,41 @@ test_help() {
     assert_contains ":h" "$REQ_STATUS" "unknown command points to :h"
 }
 
+test_command_rename_dir() {
+    echo "nav: :ed"
+    make_project
+    req_nav_init "$PROJ/.req"
+    REQ_INPUT_FD=3
+    local out
+
+    type_keys : e d
+    req_nav_handle enter 3<<<"gateway" >/dev/null
+    [[ -d $PROJ/gateway/v2 && ! -e $PROJ/api ]]; assert_eq "0" "$?" ":ed renames the directory under the cursor"
+    assert_eq $'gateway\nauth' "$(<"$PROJ/.req")" "and updates the .req"
+    assert_eq "gateway auth" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed"
+    assert_eq "gateway" "${REQ_ITEM_LABEL[REQ_SEL]}" "the renamed directory stays selected"
+    assert_contains "renamed to gateway" "$REQ_STATUS" "status mentions it"
+
+    type_keys :
+    REQ_CMD_BUF="ed identity"
+    REQ_SEL=1; req_nav_handle enter >/dev/null
+    [[ -d $PROJ/identity ]]; assert_eq "0" "$?" ":ed <name> skips the prompt"
+    assert_eq "gateway identity" "${REQ_ITEM_LABEL[*]}" "the list shows the new entry"
+
+    REQ_SEL=0; req_nav_handle enter              # gateway
+    type_keys : e d
+    req_nav_handle enter 3<<<"v9" >/dev/null
+    [[ -d $PROJ/gateway/v9 ]]; assert_eq "0" "$?" ":ed renames a subdirectory"
+    assert_eq $'gateway\nidentity' "$(<"$PROJ/.req")" "without touching the .req"
+    assert_eq "v9" "${REQ_ITEM_LABEL[REQ_SEL]}" "and selects it"
+
+    # On a request there is nothing to rename.
+    REQ_SEL=2
+    type_keys : e d; req_nav_handle enter >/dev/null
+    assert_contains "select a directory" "$REQ_STATUS" ":ed on a request explains itself"
+    REQ_INPUT_FD=0
+}
+
 test_command_flow() {
     echo "nav: command flow through the main loop"
     local p=$TMP/flow out
@@ -540,6 +575,7 @@ test_empty_project
 test_command_mode
 test_command_actions
 test_help
+test_command_rename_dir
 test_command_flow
 test_start_init
 test_end_to_end

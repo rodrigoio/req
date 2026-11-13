@@ -4,6 +4,7 @@
 # Commands:
 #   :n            new request in the current directory (wizard)
 #   :nd [name]    new directory (alias :mkdir); at the root it is also listed in the .req
+#   :ed [name]    rename the selected directory (also updates the .req entry)
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
@@ -28,6 +29,7 @@ REQ_HELP_ROWS=(
     "Commands"
     ":n|new request in the current directory"
     ":nd [name]|new directory (alias :mkdir)"
+    ":ed [name]|rename the directory under the cursor"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
     ":h|this help (alias :help)"
@@ -73,6 +75,7 @@ req_cmd_run() {
         q|quit)       REQ_QUIT=1 ;;
         n|new)        req_cmd_new ;;
         nd|mkdir)     req_cmd_mkdir "$arg" ;;
+        ed)           req_cmd_rename_dir "$arg" ;;
         e|edit)       req_cmd_edit ;;
         d|dup)        req_cmd_dup ;;
         h|help)       REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=help ;;
@@ -107,6 +110,23 @@ req_nav_selected_request() {
     else
         return 1
     fi
+}
+
+# req_nav_selected_dir - prints the directory under the cursor on the list.
+req_nav_selected_dir() {
+    [[ $REQ_VIEW == list ]] && (( ${#REQ_ITEM_KIND[@]} > 0 )) && [[ ${REQ_ITEM_KIND[REQ_SEL]} == d ]] || return 1
+    printf '%s' "${REQ_ITEM_PATH[REQ_SEL]}"
+}
+
+req_cmd_rename_dir() {
+    local dir
+    dir=$(req_nav_selected_dir) || { REQ_STATUS="select a directory on the list first"; return 0; }
+    req_nav_prompt_begin
+    if req_wizard_rename_dir "$dir" "$REQ_NAV_BASE/$REQ_PROJECT_FILE" "$1"; then
+        req_nav_refresh "$REQ_LAST_DIR"
+        REQ_STATUS="renamed to ${REQ_LAST_DIR##*/}"
+    fi
+    req_nav_prompt_end
 }
 
 req_cmd_new() {

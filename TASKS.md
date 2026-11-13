@@ -6,8 +6,8 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.gitignore` permanece.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **TR.10** (Revisão 1: `:ed [nome]` renomeia diretório). TR.1 a TR.9 estão feitas. A Fase 5 é retomada na **T5.2** depois da TR.15.
-- Suíte: `make check` com 579 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **TR.11** (Revisão 1: `:c [nome]` copia diretório). TR.1 a TR.10 estão feitas. A Fase 5 é retomada na **T5.2** depois da TR.15.
+- Suíte: `make check` com 609 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - A seção "Revisão 1" (TR.1 a TR.15) reúne os achados confirmados na primeira validação de uso e vem antes da Fase 5. A TR.14 está adiada: confirmar com o usuário antes de implementar.
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
@@ -110,7 +110,7 @@ Tarefas:
 - [x] TR.7 (R6) Menu de edição: a opção `8) raw data` abre o editor com o JSON; JSON válido é gravado nativo, texto que não é JSON oferece editar de novo ou guardar como texto; sem editor, prompt de uma linha.
 - [x] TR.8 (R6) `:n` com preset de formato (json, text, html) oferece o corpo bruto no editor em vez de pedir `parameters`.
 - [x] TR.9 (R2 a R4) Helpers do `.req`: localizar, trocar, remover e acrescentar uma entrada, preservando comentários e ordem. Infraestrutura, commit próprio.
-- TR.10 (R2) `:ed [nome]` renomeia o diretório sob o cursor; na raiz atualiza a entrada do `.req`.
+- [x] TR.10 (R2) `:ed [nome]` renomeia o diretório sob o cursor; na raiz atualiza a entrada do `.req`.
 - TR.11 (R3) `:c [nome]` copia o diretório sob o cursor com tudo dentro (padrão `<nome>-copy`); na raiz lista a cópia no `.req`.
 - TR.12 (R4, TA.1) `:rm` em request: confirmação `[y/N]` e remoção, na lista e na tela de detalhes; vale também para request inválida.
 - TR.13 (R4) `:rm` em diretório: aviso em vermelho com o caminho e a contagem do conteúdo, confirmação `[y/N]`, remoção recursiva só dentro do projeto; na raiz tira a entrada do `.req`.
