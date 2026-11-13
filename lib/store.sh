@@ -3,12 +3,12 @@
 #
 # Request format:
 #   {"name": "list-users", "method": "GET", "url": "https://api/users",
-#    "description": "...", "headers": {}, "query": {}, "data_parameter": {}}
+#    "description": "...", "headers": {}, "query": {}, "parameters": {}}
 #
 # - `name` is a slug (lowercase letters, digits and hyphens) identical to the
 #   file name; it is also the label shown in the menu.
 # - `name`, `method` and `url` are required; the other fields are optional.
-# - headers, query and data_parameter are objects with simple values (string,
+# - headers, query and parameters are objects with simple values (string,
 #   number or boolean).
 # Any unknown field or wrong type invalidates the request; the file is never
 # changed, the error is only reported.
@@ -25,11 +25,12 @@ def check_map($lbl; $item):
     if type != "object" then "field \"\($lbl)\" must be an object"
     else to_entries[] | select((.value | scalar) | not)
          | "\($item) \"\(.key)\": the value must be a string, number or boolean" end;
-["name", "method", "url", "description", "headers", "query", "data_parameter"] as $allowed
+["name", "method", "url", "description", "headers", "query", "parameters"] as $allowed
 | if type != "object" then "the root must be an object"
   else
     (keys[] | select(. as $k | $allowed | index($k) | not)
-        | if . == "data_string" then "field \"data_string\" is not supported yet"
+        | if . == "data_parameter" then "field \"data_parameter\" was renamed to \"parameters\""
+          elif . == "data_string" then "field \"data_string\" is not supported yet"
           else "unknown field \"\(.)\" (allowed: \($allowed | join(", ")))" end),
     (if (.name | type) != "string" then "field \"name\" is required (string)"
      elif (.name | test("^[a-z0-9]+(-[a-z0-9]+)*$") | not)
@@ -51,7 +52,7 @@ def check_map($lbl; $item):
          else empty end)
      else empty end),
     (if has("query") then (.query | check_map("query"; "query")) else empty end),
-    (if has("data_parameter") then (.data_parameter | check_map("data_parameter"; "data_parameter")) else empty end)
+    (if has("parameters") then (.parameters | check_map("parameters"; "parameters")) else empty end)
   end'
 
 # req_valid_method <method> - succeeds for a supported method (any case).
@@ -100,7 +101,7 @@ REQ_FIELDS_JQ='
  ["description", (.description // "")],
  ((.headers // {})        | to_entries[] | ["h", "\(.key): \(.value)"]),
  ((.query // {})          | to_entries[] | ["q", "\(.key)=\(.value)"]),
- ((.data_parameter // {}) | to_entries[] | ["p", "\(.key)=\(.value)"]))
+ ((.parameters // {}) | to_entries[] | ["p", "\(.key)=\(.value)"]))
 | .[] | (., "\u0000")'
 
 REQ_F_NAME=""; REQ_F_METHOD=""; REQ_F_URL=""; REQ_F_DESC=""
@@ -176,13 +177,13 @@ req_request_check() {
 req_request_template() {
     jq -n --arg name "$1" --arg method "${2^^}" --arg url "$3" '{
         name: $name, method: $method, url: $url, description: "",
-        headers: {}, query: {}, data_parameter: {}
+        headers: {}, query: {}, parameters: {}
     }'
 }
 
 # req_request_write <directory> <name> <method> <url> [json]
 # Atomically writes the request as valid JSON and prints the created path.
-# [json] carries the optional fields (description, headers, query, data_parameter);
+# [json] carries the optional fields (description, headers, query, parameters);
 # name, method and url come from the arguments and take precedence. If the
 # result fails validation, nothing is written.
 req_request_write() {
@@ -216,10 +217,10 @@ req_request_write() {
 }
 
 # req_request_get <file> <field> - prints a field's value (raw text).
-# Missing fields become {} (headers, query, data_parameter) or empty (others).
+# Missing fields become {} (headers, query, parameters) or empty (others).
 req_request_get() {
     case $2 in
-        headers|query|data_parameter) jq -c --arg f "$2" '.[$f] // {}' "$1" ;;
+        headers|query|parameters) jq -c --arg f "$2" '.[$f] // {}' "$1" ;;
         *) jq -r --arg f "$2" '.[$f] // ""' "$1" ;;
     esac
 }

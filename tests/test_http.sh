@@ -38,20 +38,20 @@ test_args() {
 
     local m
     for m in GET DELETE; do
-        req_build_curl_args "{\"method\":\"$m\",\"url\":\"http://x\",\"data_parameter\":{\"a\":1},\"headers\":{\"Content-Type\":\"application/json\"}}"
+        req_build_curl_args "{\"method\":\"$m\",\"url\":\"http://x\",\"parameters\":{\"a\":1},\"headers\":{\"Content-Type\":\"application/json\"}}"
         has_arg --data-urlencode || has_arg --data-binary; assert_eq "1" "$?" "$m sends no body"
         assert_eq "" "$REQ_BODY" "$m has no body on stdin"
     done
 
-    req_build_curl_args '{"method":"PATCH","url":"http://x","data_parameter":{"a":"@/etc/passwd"}}'
+    req_build_curl_args '{"method":"PATCH","url":"http://x","parameters":{"a":"@/etc/passwd"}}'
     has_arg -X && has_arg PATCH && has_arg "a=@/etc/passwd"; assert_eq "0" "$?" "PATCH; a value with @ stays literal"
 
-    req_build_curl_args '{"method":"POST","url":"http://x","headers":{"content-type":"application/json"},"data_parameter":{"a":1,"b":"x"}}'
-    assert_eq '{"a":1,"b":"x"}' "$REQ_BODY" "data_parameter becomes JSON with a JSON Content-Type"
+    req_build_curl_args '{"method":"POST","url":"http://x","headers":{"content-type":"application/json"},"parameters":{"a":1,"b":"x"}}'
+    assert_eq '{"a":1,"b":"x"}' "$REQ_BODY" "parameters becomes JSON with a JSON Content-Type"
 
-    req_build_curl_args '{"method":"PUT","url":"http://x","data_parameter":{"a":1,"b":"x y"}}'
+    req_build_curl_args '{"method":"PUT","url":"http://x","parameters":{"a":1,"b":"x y"}}'
     has_arg --data-urlencode && has_arg "a=1" && has_arg "b=x y"
-    assert_eq "0" "$?" "data_parameter becomes a form without a JSON Content-Type"
+    assert_eq "0" "$?" "parameters becomes a form without a JSON Content-Type"
     assert_eq "" "$REQ_BODY" "a form does not use stdin"
 }
 
@@ -113,21 +113,21 @@ test_execute() {
     assert_eq "ola" "$(jq -r .x_test <<<"$REQ_RESP_BODY")" "header arrived"
     assert_eq "6" "${#REQ_RESP_TIMES[@]}" "six timings captured"
 
-    req_execute "{\"method\":\"POST\",\"url\":\"$base/p\",\"headers\":{\"Content-Type\":\"application/json\"},\"data_parameter\":{\"a\":1}}"
+    req_execute "{\"method\":\"POST\",\"url\":\"$base/p\",\"headers\":{\"Content-Type\":\"application/json\"},\"parameters\":{\"a\":1}}"
     assert_eq '{"a":1}' "$(jq -r .body <<<"$REQ_RESP_BODY")" "POST with a JSON body"
 
-    req_execute "{\"method\":\"PUT\",\"url\":\"$base/p\",\"data_parameter\":{\"k\":\"v 1\"}}"
+    req_execute "{\"method\":\"PUT\",\"url\":\"$base/p\",\"parameters\":{\"k\":\"v 1\"}}"
     # curl versions differ: a space comes out as %20 or +; both are valid.
     out=$(jq -r .body <<<"$REQ_RESP_BODY")
     [[ $out == "k=v%201" || $out == "k=v+1" ]]; assert_eq "0" "$?" "PUT with an url-encoded form"
     assert_contains "x-www-form-urlencoded" "$(jq -r .content_type <<<"$REQ_RESP_BODY")" "form content-type"
 
-    req_execute "{\"method\":\"PATCH\",\"url\":\"$base/p\",\"data_parameter\":{\"f\":\"@/etc/hostname\"}}"
+    req_execute "{\"method\":\"PATCH\",\"url\":\"$base/p\",\"parameters\":{\"f\":\"@/etc/hostname\"}}"
     assert_eq "PATCH" "$(jq -r .method <<<"$REQ_RESP_BODY")" "PATCH reaches the server"
     out=$(jq -r .body <<<"$REQ_RESP_BODY")
     [[ $out == f=%40* ]]; assert_eq "0" "$?" "@ in a value is sent literally, without reading a file"
 
-    req_execute "{\"method\":\"DELETE\",\"url\":\"$base/d\",\"data_parameter\":{\"a\":1}}"
+    req_execute "{\"method\":\"DELETE\",\"url\":\"$base/d\",\"parameters\":{\"a\":1}}"
     assert_eq "DELETE" "$(jq -r .method <<<"$REQ_RESP_BODY")" "DELETE reaches the server"
     assert_eq "" "$(jq -r .body <<<"$REQ_RESP_BODY")" "DELETE sends no body"
 

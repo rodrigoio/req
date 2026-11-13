@@ -6,8 +6,8 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.gitignore` permanece.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **TR.3** (Revisão 1: renomear `data_parameter` para `parameters`). TR.1 e TR.2 estão feitas. A Fase 5 é retomada na **T5.2** depois da TR.15.
-- Suíte: `make check` com 478 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **TR.4** (Revisão 1: `raw_data` no formato e no envio). TR.1 a TR.3 estão feitas. A Fase 5 é retomada na **T5.2** depois da TR.15.
+- Suíte: `make check` com 479 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - A seção "Revisão 1" (TR.1 a TR.15) reúne os achados confirmados na primeira validação de uso e vem antes da Fase 5. A TR.14 está adiada: confirmar com o usuário antes de implementar.
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
@@ -22,7 +22,7 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - **Git:** `manifest` permanece no `.gitignore`.
 - **Enter em duas etapas:** o 1º Enter em uma request abre os detalhes (url, params), o 2º dispara; Esc volta. Assim o usuário confere antes de executar.
 - **Ambiente padrão:** `default`, usado quando `REQ_ENV` não está definido; troca em sessão via `:env <nome>`.
-- **Campos da request:** obrigatórios `name`, `method` e `url` (a `url` pode usar `${chave}`); opcionais `description`, `headers`, `query`, `parameters` e `raw_data`. `parameters` é o novo nome de `data_parameter` (a partir da TR.3; até lá o código usa o nome antigo).
+- **Campos da request:** obrigatórios `name`, `method` e `url` (a `url` pode usar `${chave}`); opcionais `description`, `headers`, `query`, `parameters` e `raw_data`. `parameters` é o novo nome de `data_parameter` (feito na TR.3).
 - **Nome slug:** `name` é um slug (minúsculas, números e hífens, ex.: `listar-usuarios`), idêntico ao nome do arquivo (`<slug>.<método>.json`) e usado como rótulo no menu.
 - **Validação estrita:** campo desconhecido ou com tipo errado invalida a request e é indicado ao usuário; o arquivo nunca é alterado.
 - **Headers genéricos:** qualquer nome de header válido, com valor texto, número ou booleano.
@@ -103,7 +103,7 @@ Achados:
 Tarefas:
 - [x] TR.1 (R7) Erro de dependências: uma linha que só nomeia os pacotes faltantes, em laranja, sem `sudo` nem `install`.
 - [x] TR.2 (R5) `:h` (alias `:help`): tela de ajuda com todas as teclas e comandos, a partir de uma tabela única; qualquer tecla volta. O aviso de comando desconhecido e os rodapés passam a apontar para `:h`.
-- TR.3 (R6) Renomear `data_parameter` para `parameters`, sem mudar o envio; o nome antigo vira erro de validação que indica o novo.
+- [x] TR.3 (R6) Renomear `data_parameter` para `parameters`, sem mudar o envio; o nome antigo vira erro de validação que indica o novo.
 - TR.4 (R6) `raw_data` no formato e no envio: objeto, lista ou string; precedência sobre `parameters`, que passa a ser sempre formulário url-encoded; JSON sem `Content-Type` sai com `application/json`.
 - TR.5 (R6) Tela de detalhes mostra o `raw_data` (JSON indentado ou texto, com teto de linhas) e avisa quando `parameters` não é enviado.
 - TR.6 (R6) Helper de editor externo (`req_editor`, `req_edit_text`): `$VISUAL`, `$EDITOR`, `vim`, `vi`, em arquivo temporário, como o git. Infraestrutura, commit próprio.

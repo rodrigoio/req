@@ -109,14 +109,14 @@ Each request is a file `<slug>.<method>.json` (methods: GET, POST, PUT, PATCH, D
   "description": "Signs the user in",
   "headers": {"Content-Type": "application/json"},
   "query": {},
-  "data_parameter": {"user": "ann"}
+  "parameters": {"user": "ann"}
 }
 ```
 
-- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query` and `data_parameter`.
-- `headers`, `query` and `data_parameter` are objects with simple values (string, number or boolean).
+- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query` and `parameters`.
+- `headers`, `query` and `parameters` are objects with simple values (string, number or boolean).
 - `query` is appended to the url, url-encoded.
-- Body (sent only with POST, PUT and PATCH): `data_parameter` is sent as JSON when the `Content-Type` header contains `json`, and as an url-encoded form otherwise.
+- Body (sent only with POST, PUT and PATCH): `parameters` is sent as JSON when the `Content-Type` header contains `json`, and as an url-encoded form otherwise.
 - Unknown fields or fields with a wrong type invalidate the request.
 
 Subdirectories of the project are real directories.

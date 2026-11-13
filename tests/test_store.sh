@@ -50,14 +50,14 @@ test_write_read() {
     assert_eq "{}" "$(req_request_get "$d/users.get.json" headers)" "empty headers"
 
     req_request_write "$d" create-user patch http://x/u \
-        '{"description":"updates","headers":{"Content-Type":"application/json","X-N":5},"data_parameter":{"a":1,"b":true}}' >/dev/null
+        '{"description":"updates","headers":{"Content-Type":"application/json","X-N":5},"parameters":{"a":1,"b":true}}' >/dev/null
     assert_eq "PATCH" "$(req_request_get "$d/create-user.patch.json" method)" "method normalized to uppercase"
     assert_eq "updates" "$(req_request_get "$d/create-user.patch.json" description)" "writes description"
     assert_eq '{"Content-Type":"application/json","X-N":5}' "$(req_request_get "$d/create-user.patch.json" headers)" "writes headers"
-    assert_eq '{"a":1,"b":true}' "$(req_request_get "$d/create-user.patch.json" data_parameter)" "writes data_parameter"
+    assert_eq '{"a":1,"b":true}' "$(req_request_get "$d/create-user.patch.json" parameters)" "writes parameters"
     assert_eq "" "$(compgen -G "$d/.req.*")" "no temporary files left"
 
-    req_request_write "$d" ordered PUT http://x '{"data_parameter":{"a":"1"},"description":"d"}' >/dev/null
+    req_request_write "$d" ordered PUT http://x '{"parameters":{"a":"1"},"description":"d"}' >/dev/null
     assert_eq '["name","method","url"]' "$(jq -c 'keys_unsorted[0:3]' "$d/ordered.put.json")" "name, method and url come first in the file"
     out=$(req_request_write "$d" x GET http://x '{"name":"other","url":"http://other"}' 2>&1)
     assert_eq "http://x" "$(req_request_get "$d/x.get.json" url)" "arguments win over the json"
@@ -138,6 +138,8 @@ test_invalid_manual() {
     assert_contains 'unknown field "descr"' "$out" "unknown field is invalidated"
     assert_contains 'unknown field "timeout"' "$out" "another unknown field"
 
+    printf '{"name":"o","method":"POST","url":"http://x","data_parameter":{"a":"1"}}\n' >"$d/o.post.json"
+    assert_contains '"data_parameter" was renamed to "parameters"' "$(check_out "$d/o.post.json")" "the old name points to the new one"
     printf '{"name":"l","method":"POST","url":"http://x","data_string":"x"}\n' >"$d/l.post.json"
     assert_contains '"data_string" is not supported yet' "$(check_out "$d/l.post.json")" "data_string is reserved"
 
@@ -154,10 +156,10 @@ test_invalid_manual() {
     printf '{"name":"o","method":"GET","url":"http://x","headers":{"X-A":"v","X-N":1,"X-B":true},"query":{"a":1,"b":"c","d":false}}\n' >"$d/o.get.json"
     assert_eq "0" "$(req_request_check "$d/o.get.json" 2>/dev/null; echo $?)" "headers and query with simple values are valid"
 
-    printf '{"name":"p","method":"POST","url":"http://x","data_parameter":{"a":{"b":1},"c":[1]}}\n' >"$d/p.post.json"
+    printf '{"name":"p","method":"POST","url":"http://x","parameters":{"a":{"b":1},"c":[1]}}\n' >"$d/p.post.json"
     out=$(check_out "$d/p.post.json")
-    assert_contains 'data_parameter "a": the value must be' "$out" "data_parameter with an object"
-    assert_contains 'data_parameter "c": the value must be' "$out" "data_parameter with a list"
+    assert_contains 'parameters "a": the value must be' "$out" "parameters with an object"
+    assert_contains 'parameters "c": the value must be' "$out" "parameters with a list"
 
     printf '{"name":"q","method":"GET","url":"http://x"}\n' >"$d/Q Name.get.json"
     assert_contains "does not follow" "$(check_out "$d/Q Name.get.json")" "file outside the pattern"

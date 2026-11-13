@@ -133,7 +133,7 @@ req_wizard_new() {
     fi
 
     json=$(jq -cn --arg d "$desc" --argjson h "$headers" --argjson q "$query" --argjson p "$params" \
-        '{description: $d, headers: $h, query: $q, data_parameter: $p}')
+        '{description: $d, headers: $h, query: $q, parameters: $p}')
     REQ_LAST_FILE=$(req_request_write "$dir" "$name" "$method" "$url" "$json") || return 1
     printf 'Created %s\n' "$REQ_LAST_FILE"
 }
@@ -148,7 +148,7 @@ req_edit_show() {
         "  4) description  \(.description // "")",
         "  5) headers      \((.headers // {}) | count)",
         "  6) query        \((.query // {}) | count)",
-        "  7) parameters   \((.data_parameter // {}) | count)"' <<<"$1"
+        "  7) parameters   \((.parameters // {}) | count)"' <<<"$1"
 }
 
 # req_wizard_edit <file> - field menu for a request. Changing the name or the
@@ -180,8 +180,8 @@ req_wizard_edit() {
                    json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.headers = $v' <<<"$json") ;;
             6) req_ask_pairs "Query" "=" "$(jq -c '.query // {}' <<<"$json")" &&
                    json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.query = $v' <<<"$json") ;;
-            7) req_ask_pairs "Parameters" "=" "$(jq -c '.data_parameter // {}' <<<"$json")" &&
-                   json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.data_parameter = $v' <<<"$json") ;;
+            7) req_ask_pairs "Parameters" "=" "$(jq -c '.parameters // {}' <<<"$json")" &&
+                   json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.parameters = $v' <<<"$json") ;;
             s|save)
                 name=$(jq -r .name <<<"$json"); method=$(jq -r '.method | ascii_upcase' <<<"$json")
                 url=$(jq -r .url <<<"$json")

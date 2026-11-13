@@ -67,7 +67,7 @@ test_new() {
     assert_eq "the desc" "$(req_request_get "$f" description)" "description"
     assert_eq '{"Content-Type":"application/json","X-A":"1"}' "$(req_request_get "$f" headers)" "preset plus edits on the headers"
     assert_eq '{"page":"2"}' "$(req_request_get "$f" query)" "query"
-    assert_eq '{"user":"ann"}' "$(req_request_get "$f" data_parameter)" "parameters"
+    assert_eq '{"user":"ann"}' "$(req_request_get "$f" parameters)" "parameters"
 
     fresh get
     IN=$'g\nGET\nhttp://x\ny\n\n4\n\n\n'; run req_wizard_new "$D"
@@ -127,7 +127,7 @@ test_edit() {
     assert_eq "hello" "$(req_request_get "$n" description)" "description"
     assert_eq '{"X-B":"2"}' "$(req_request_get "$n" headers)" "headers"
     assert_eq '{"q":"1"}' "$(req_request_get "$n" query)" "query"
-    assert_eq '{"k":"v"}' "$(req_request_get "$n" data_parameter)" "parameters"
+    assert_eq '{"k":"v"}' "$(req_request_get "$n" parameters)" "parameters"
     assert_eq "0" "$(req_request_check "$n" 2>/dev/null; echo $?)" "the edited file is valid"
 
     IN=$'4\n-\ns\n'; run req_wizard_edit "$n"
@@ -150,14 +150,14 @@ test_edit() {
 test_duplicate() {
     echo "wizard: duplicate request"
     fresh dup
-    req_request_write "$D" orig POST http://x '{"description":"d","data_parameter":{"a":"1"}}' >/dev/null
+    req_request_write "$D" orig POST http://x '{"description":"d","parameters":{"a":"1"}}' >/dev/null
     f=$D/orig.post.json
     IN=$'copy-one\ns\n'; run req_wizard_duplicate "$f"
     assert_eq "0" "$STATUS" "duplicates and saves"
     c=$D/copy-one.post.json
     [[ -f $c && -f $f ]]; assert_eq "0" "$?" "both files exist"
     assert_eq "copy-one" "$(req_request_get "$c" name)" "the copy has the new name"
-    assert_eq '{"a":"1"}' "$(req_request_get "$c" data_parameter)" "the copy keeps the fields"
+    assert_eq '{"a":"1"}' "$(req_request_get "$c" parameters)" "the copy keeps the fields"
     assert_eq "POST" "$(req_request_get "$c" method)" "the copy keeps the method"
     assert_contains "Editing copy-one.post.json" "$OUT" "starts the edit menu on the copy"
 

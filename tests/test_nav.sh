@@ -45,9 +45,9 @@ make_project() {
     req_request_write "$p/api" list-users GET http://x/users \
         '{"description":"lists everyone","headers":{"Accept":"application/json"},"query":{"page":1}}' >/dev/null
     req_request_write "$p/api" create POST http://x/users \
-        '{"data_parameter":{"user":"ann"}}' >/dev/null
+        '{"parameters":{"user":"ann"}}' >/dev/null
     req_request_write "$p/api" remove DELETE http://x/users \
-        '{"data_parameter":{"id":1}}' >/dev/null
+        '{"parameters":{"id":1}}' >/dev/null
     req_request_write "$p/api/v2" ping DELETE http://x/ping >/dev/null
     printf '{"name":"broken","method":"GET","url":"http://x","timeout":5}\n' >"$p/api/broken.get.json"
     PROJ=$p

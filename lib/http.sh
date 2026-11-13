@@ -21,7 +21,7 @@ REQ_CURL_FORMAT=$'\n%{http_code}|%{time_namelookup}|%{time_connect}|%{time_appco
 REQ_PREPARE_JQ='
 ((.method // "") | ascii_upcase) as $m
 | (.headers // {}) as $h
-| (.data_parameter // {}) as $d
+| (.parameters // {}) as $d
 | (["method", $m],
    ["url", ((.url // "") as $u
             | ((.query // {}) | to_entries
@@ -71,7 +71,7 @@ req_build_url() {
 }
 
 # req_build_curl_args <json> - fills REQ_P_*, REQ_CURL_ARGS and REQ_BODY.
-# Body (POST, PUT and PATCH only): data_parameter, sent as JSON if the Content-Type
+# Body (POST, PUT and PATCH only): parameters, sent as JSON if the Content-Type
 # is JSON, or as an url-encoded form otherwise. The JSON body goes through stdin
 # and the form uses "key=value", so values starting with "@" are never read as
 # files by curl.
