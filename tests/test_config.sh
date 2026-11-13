@@ -50,7 +50,7 @@ test_load() {
 
     cfg $'time_stats=no\ntime_stats=yes'
     req_config_load; assert_eq "no" "$(req_config_get time_stats)" "the first line of a repeated key wins"
-    req_config_load "$TMP/other-file"; assert_eq "0" "$?" "another file can be given (and a missing one is fine)"
+    req_config_load_file "$TMP/other-file"; assert_eq "0" "$?" "another file can be loaded (and a missing one is fine)"
     assert_eq "yes" "$(req_config_get time_stats)" "loading again replaces the previous values"
 }
 

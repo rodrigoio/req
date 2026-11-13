@@ -55,11 +55,16 @@ req_config_expect() {
     esac
 }
 
-# req_config_load [file] - fills REQ_CONFIG with the file's values (default: the global
-# file). A missing file is fine. Problems are warnings; the status is 1 when there was
-# any. The first line of a repeated key wins.
+# req_config_load - fills REQ_CONFIG from the global file (see req_config_load_file).
 req_config_load() {
-    local file=${1:-$(req_config_file)} line n=0 abs status=0
+    req_config_load_file "$(req_config_file)"
+}
+
+# req_config_load_file <file> - fills REQ_CONFIG with the file's values. A missing file is
+# fine. Problems are warnings; the status is 1 when there was any. The first line of a
+# repeated key wins.
+req_config_load_file() {
+    local file=$1 line n=0 abs status=0
     REQ_CONFIG=()
     [[ -f $file ]] || return 0
     abs=$(req_abs_path "$file")

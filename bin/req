@@ -52,6 +52,7 @@ main() {
     req_check_bash
     req_check_deps
     req_setup_traps
+    req_config_load || true     # warnings only: a bad setting never stops req
 
     case ${1-} in
         init)

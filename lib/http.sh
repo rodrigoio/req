@@ -153,9 +153,13 @@ req_bar_char() {
     if req_utf8; then printf '█'; else printf '#'; fi
 }
 
-# req_print_profile - one horizontal bar per stage, proportional to the total time.
+# req_print_profile - one horizontal bar per stage, proportional to the total time,
+# and the total line. The settings time_stats (the stages) and time_stat_total (the
+# total line) turn each part off; with both off nothing is printed.
 req_print_profile() {
-    local stages label ms total char bar n
+    local stages label ms total char bar n show_stats show_total
+    show_stats=$(req_config_get time_stats); show_total=$(req_config_get time_stat_total)
+    [[ $show_stats == yes || $show_total == yes ]] || return 0
     stages=$(req_timing_stages "${REQ_RESP_TIMES[@]}")
     total=$(tail -n 1 <<<"$stages"); total=${total#*$'\t'}
     char=$(req_bar_char)
@@ -163,9 +167,11 @@ req_print_profile() {
     req_color dim; printf 'Timing\n'; req_color reset
     while IFS=$'\t' read -r label ms; do
         if [[ $label == Total ]]; then
+            [[ $show_total == yes ]] || continue
             printf '  %-9s %*s %5s ms\n' "$label" "$REQ_BAR_WIDTH" '' "$ms"
             continue
         fi
+        [[ $show_stats == yes ]] || continue
         n=0
         (( total > 0 && ms > 0 )) && n=$(( (ms * REQ_BAR_WIDTH + total / 2) / total ))
         (( ms > 0 && n < 1 )) && n=1

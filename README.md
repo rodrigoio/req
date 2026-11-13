@@ -145,6 +145,16 @@ The menu root is the workspace, and it lists **everything in it**: every directo
 
 Manually edited files that become invalid are never fixed: `req` only reports the error, with the file's absolute path.
 
+## Settings
+
+`~/.req/config` (or `REQ_CONFIG_DIR/config`) holds the global settings as `key=value` lines. Show them with `:config` and change one with `:config key=value`. An unknown key or a wrong value in the file is reported as a warning (with the file and line) and ignored.
+
+| key | default | what it does |
+|-----|---------|--------------|
+| `time_stats` | `yes` | show the timing stages (DNS, TCP, TLS, Wait, Download) after a request runs, in the menu and in `req run` |
+| `time_stat_total` | `yes` | show the total time line of that profile |
+| `restore_cursor` | `yes` | reopen the menu where it was left (not applied yet) |
+
 ## Environments and variables (in progress)
 
 Variables live in the central directory (`~/.req`, or `REQ_CONFIG_DIR`), one folder per project, as plain `key=value` files:

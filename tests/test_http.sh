@@ -6,6 +6,8 @@ source "$ROOT/tests/helpers.sh"
 source "$ROOT/lib/core.sh"
 source "$ROOT/lib/ui.sh"
 source "$ROOT/lib/store.sh"
+source "$ROOT/lib/home.sh"
+source "$ROOT/lib/config.sh"
 source "$ROOT/lib/http.sh"
 
 TMP=$(mktemp -d)
@@ -104,6 +106,22 @@ test_print() {
     assert_contains "150 ms" "$out" "profile shows the total"
     [[ $out != *TLS* ]]; assert_eq "0" "$?" "profile omits TLS over http"
     assert_contains "#" "$out" "ASCII bar outside UTF-8"
+
+    REQ_CONFIG=([time_stats]=no)
+    out=$(LC_ALL=C req_print_profile)
+    assert_contains "Timing" "$out" "time_stats=no keeps the title"
+    assert_contains "150 ms" "$out" "and the total line"
+    [[ $out != *DNS* && $out != *Wait* && $out != *"#"* ]]; assert_eq "0" "$?" "but drops the stages and their bars"
+    REQ_CONFIG=([time_stat_total]=no)
+    out=$(LC_ALL=C req_print_profile)
+    assert_contains "Wait" "$out" "time_stat_total=no keeps the stages"
+    [[ $out != *Total* && $out != *"150 ms"* ]]; assert_eq "0" "$?" "but drops the total line"
+    REQ_CONFIG=([time_stats]=no [time_stat_total]=no)
+    out=$(LC_ALL=C req_print_profile)
+    assert_eq "" "$out" "with both off nothing is printed"
+    REQ_CONFIG=()
+    out=$(LC_ALL=C req_print_profile)
+    assert_contains "Total" "$out" "by default everything is shown"
 }
 
 start_server() {
@@ -175,6 +193,11 @@ test_execute() {
     assert_contains "hello text" "$out" "shows the body"
     assert_contains "Timing" "$out" "shows the profile"
     assert_eq "====================" "$(tail -n 1 <<<"$out")" "ends with a separator"
+    REQ_CONFIG=([time_stats]=no [time_stat_total]=no)
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/users.get.json" 2>&1)
+    [[ $out != *Timing* ]]; assert_eq "0" "$?" "with both settings off the run shows no profile"
+    assert_contains "hello text" "$out" "but still the response"
+    REQ_CONFIG=()
     assert_eq "" "$(find "$TMP" -newer "$TMP/port" -type f ! -name 'users.get.json' ! -name 'port')" "no extra file written"
 
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
