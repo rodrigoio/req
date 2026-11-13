@@ -23,7 +23,7 @@ REQ_CURL_FORMAT=$'\n%{http_code}|%{time_namelookup}|%{time_connect}|%{time_appco
 # body ("raw", plus "rawjson" when it was an object or list) and wins over parameters,
 # which otherwise come out as key=value form pairs.
 # shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
-REQ_PREPARE_JQ='
+REQ_PREPARE_JQ=$REQ_JQ_LEAVES'
 ((.method // "") | ascii_upcase) as $m
 | (.headers // {}) as $h
 | (.parameters // {}) as $d
@@ -35,8 +35,8 @@ REQ_PREPARE_JQ='
 | ($m == "POST" or $m == "PUT" or $m == "PATCH") as $body
 | (["method", $m],
    ["url", ((.url // "") as $u
-            | ((.query // {}) | to_entries
-               | map("\(.key | @uri)=\(.value | tostring | @uri)") | join("&")) as $q
+            | ([(.query // {}) | to_entries[] | .key as $k | .value | leaves($k)]
+               | map("\(.[0] | @uri)=\(.[1] | @uri)") | join("&")) as $q
             | if $q == "" then $u
               elif ($u | contains("?")) then $u + "&" + $q
               else $u + "?" + $q end)],

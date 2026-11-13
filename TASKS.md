@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T8.6** (Fase 8; a T8.1 a T8.3 e a T8.5 estão feitas; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **nenhuma tarefa pendente no plano** (a Fase 8 está concluída, T8.1 a T8.6; as pendências "Adicionais" TA.2 a TA.14 dependem de validação com usuários e as questões Q1 a Q11 aguardam a revisão final; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1333 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1346 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -170,6 +170,7 @@ Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; ca
 - Q8 (T8.2) O limite de 10 redirecionamentos é fixo, e o curl troca o método (POST vira GET) em 301, 302 e 303. Decidir se o limite deve ser configurável e se o método deve ser mantido (`--post301`/`--post302`/`--post303`).
 - Q9 (T8.3) Com `insecure` ligado nada avisa que o certificado não foi verificado (nem na tela de execução, nem no log). Decidir se deve haver um aviso.
 - Q10 (T8.5) O envio de arquivos foi definido por padrão (a tarefa não tinha detalhes): campo `files`, sempre `multipart/form-data`, sem tipo MIME nem nome de arquivo configuráveis (`;type=`, `;filename=`), vários arquivos só com campos de nomes diferentes, e o conteúdo do arquivo não vai para o log. Decidir se isso basta e se um corpo binário cru (`--data-binary @arquivo`) também é necessário.
+- Q11 (T8.6) O aninhamento de `query` usa a notação de colchetes (`filtro[a]=1`, `tags[]=x`), a mais comum em frameworks web, e codifica os colchetes na url. Decidir se outra convenção é necessária (listas repetindo o nome sem `[]`, ou notação com ponto) e se `parameters` (formulário) também deve aceitar valores aninhados, que a T8.7 removeu.
 
 ### Fase 7 — Portabilidade, qualidade e entrega
 - [x] T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`. Feita com `tests/container.sh` (`make container IMAGE=...`), como usuário comum: debian 12 (bash 5.2) passa com 1238 asserts, 0 falhas e 0 testes pulados.
@@ -202,7 +203,7 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 - [x] T8.3 `insecure` por request: campo booleano opcional (padrão `false`), validado em `REQ_SCHEMA_JQ`, liga `-k`. O `mock_server.py` serve https quando recebe certificado e chave (o teste gera um autoassinado com `openssl`, instalado também pelo `tests/container.sh`).
 - ~~T8.4~~ Substituída pela TR.4: `raw_data` entra no lugar de `data_string`, com a regra de precedência sobre `parameters`.
 - [x] T8.5 Envio de arquivos: campo opcional `files` (`{"campo": "caminho"}`) que envia `multipart/form-data` (`-F campo=@"caminho"`), com os `parameters` como campos de texto (`--form-string`); caminho relativo parte da pasta da request (`REQ_REQUEST_DIR`); `${chave}` vale no campo; arquivo ilegível para a execução; `files` junto com `raw_data` é recusado na validação. Entra no verbose (`>> campo=@caminho`) e no log (`| file: campo=caminho`).
-- T8.6 Valores aninhados em `query`.
+- [x] T8.6 Valores aninhados em `query`: objeto vira `chave[sub]=valor` e lista vira `chave[]=valor` (colchetes codificados na url; vazios omitidos; `null` recusado). Definição jq compartilhada (`REQ_JQ_LEAVES`) entre validação, tela de detalhes e montagem da url.
 - ~~T8.7~~ Removida: JSON aninhado vai em `raw_data`; `parameters` fica plano (campos de formulário).
 
 ### Revisão 2 — achados da validação de uso (R8 a R10; ao final do plano)
