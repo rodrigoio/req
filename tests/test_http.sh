@@ -127,6 +127,33 @@ test_print() {
     assert_contains "Total" "$out" "by default everything is shown"
 }
 
+test_headers() {
+    echo "http: response headers"
+    local crlf=$'\r\n'
+    req_split_headers "HTTP/1.1 200 OK${crlf}Content-Type: text/plain${crlf}X-A: 1: 2${crlf}${crlf}hello"
+    assert_eq "HTTP/1.1 200 OK" "$REQ_RESP_STATUSLINE" "the status line"
+    assert_eq $'Content-Type: text/plain\nX-A: 1: 2' "$(printf '%s\n' "${REQ_RESP_HEADERS[@]}")" "the headers, without the carriage returns"
+    assert_eq "hello" "$REQ_RESP_BODY" "the rest is the body"
+    req_split_headers "HTTP/2 204${crlf}x-b: y${crlf}${crlf}"
+    assert_eq "HTTP/2 204" "$REQ_RESP_STATUSLINE" "HTTP/2 works too"
+    assert_eq "" "$REQ_RESP_BODY" "no body stays empty"
+    req_split_headers "HTTP/1.1 100 Continue${crlf}${crlf}HTTP/1.1 201 Created${crlf}Location: /x${crlf}${crlf}{\"a\":1}"
+    assert_eq "HTTP/1.1 201 Created" "$REQ_RESP_STATUSLINE" "an interim 100 block is skipped"
+    assert_eq "Location: /x" "${REQ_RESP_HEADERS[*]}" "and its headers dropped"
+    assert_eq '{"a":1}' "$REQ_RESP_BODY" "leaving the body"
+    req_split_headers "HTTP/1.1 200 OK${crlf}${crlf}HTTP/1.1 is a body"
+    assert_eq "HTTP/1.1 is a body" "$REQ_RESP_BODY" "a body that looks like a status line is kept"
+    assert_eq "0" "${#REQ_RESP_HEADERS[@]}" "a response without headers has none"
+    req_split_headers "just text"
+    assert_eq "" "$REQ_RESP_STATUSLINE" "text without a header block has no status line"
+    assert_eq "just text" "$REQ_RESP_BODY" "and is all body"
+    REQ_VERBOSE=1; REQ_RESP_STATUSLINE="HTTP/1.1 200 OK"; REQ_RESP_HEADERS=("A: 1" "B: 2")
+    assert_eq $'<< HTTP/1.1 200 OK\n<< A: 1\n<< B: 2' "$(NO_COLOR=1 req_verbose_response)" "verbose on: the status line and each header get <<"
+    assert_eq "4" "$(req_verbose_response | wc -l | tr -d ' ')" "followed by one blank line"
+    REQ_VERBOSE=0
+    assert_eq "" "$(req_verbose_response)" "verbose off: nothing"
+}
+
 start_server() {
     command -v python3 >/dev/null 2>&1 || return 1
     python3 -I "$ROOT/tests/mock_server.py" >"$TMP/port" 2>/dev/null &
@@ -269,6 +296,12 @@ test_execute() {
     assert_contains $'>> line one\n>> line two' "$out" "each line of a multi-line body has its own >>"
     out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/users.get.json" 2>&1)
     [[ $out != *'>>'* ]]; assert_eq "0" "$?" "a request without data shows none"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/form.post.json" 2>&1)
+    assert_contains "<< HTTP/" "$out" "the status line of the response gets <<"
+    assert_contains "<< Content-Type: application/json" "$out" "and so do its headers"
+    assert_contains "HTTP 200" "$out" "the usual response display follows"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/users.get.json" 2>&1)
+    assert_contains "<< HTTP/" "$out" "a request without data shows the response headers too"
     out=$(REQ_COLORS=1 COLUMNS=20 req_run_request "$TMP/form.post.json" 2>&1 | grep -c $'\033\[2m>>')
     assert_eq "2" "$out" "with colors every marker is dim"
     REQ_VERBOSE=0
@@ -283,6 +316,7 @@ test_execute() {
 test_url
 test_args
 test_timing
+test_headers
 test_print
 test_execute
 test_summary
