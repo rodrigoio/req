@@ -171,7 +171,11 @@ With `log=yes` (`:config log=yes` for the project, `:config -g log=yes` for ever
 2026-11-13T22:30:00-0300 REQUEST file=add.post.json env=dev POST https://api.example.com/users | header: X-Token: abc123 | body: {"name":"ana"}
 ```
 
-The values are the real ones, after `${key}` is replaced (nothing is masked). A request that stops before it is sent (invalid file, missing key) is not logged. If the log cannot be written, `req` warns and sends the request anyway. There is no log without an open project. The response will be logged next to the request in a later step (T6.3).
+The values are the real ones, after `${key}` is replaced (nothing is masked). A request that stops before it is sent (invalid file, missing key) is not logged. If the log cannot be written, `req` warns and sends the request anyway. There is no log without an open project. The response follows on the next line, with the status, the Content-Type, the total time and the whole body (there is no size limit), or, when nothing came back, an `ERROR no response (curl exit code N)` line:
+
+```
+2026-11-13T22:30:01-0300 RESPONSE status=201 type=application/json total=0.150s | body: {"id":7}
+```
 
 ## Environments and variables
 

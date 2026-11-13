@@ -47,3 +47,15 @@ req_log_request() {
     (( REQ_P_RAWSET )) && text+=" | body: $REQ_BODY"
     req_log_write REQUEST "$text"
 }
+
+# req_log_response - logs the response just received by req_curl_exec (REQ_RESP_*): the
+# status code, the Content-Type, the total time in seconds and the whole body.
+req_log_response() {
+    req_log_enabled || return 0
+    req_log_write RESPONSE "status=$REQ_RESP_STATUS type=${REQ_RESP_CTYPE:--} total=${REQ_RESP_TIMES[5]}s | body: $REQ_RESP_BODY"
+}
+
+# req_log_failure <curl exit code> - logs a request that got no HTTP response.
+req_log_failure() {
+    req_log_write ERROR "no response (curl exit code $1)"
+}
