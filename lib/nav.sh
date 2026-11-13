@@ -8,6 +8,7 @@
 # Keys: up/down move the selection, Enter opens/runs, Esc goes back (does nothing at the root),
 # ":" enters command mode (see cmd.sh).
 
+REQ_RAW_MAX_LINES=15    # lines of raw_data shown on the details screen
 REQ_ESC_TIMEOUT=0.05    # wait for bytes after ESC to tell an arrow key from a bare Esc
 REQ_INPUT_FD=0          # descriptor the keys are read from
 REQ_KEY=""              # last key read: up, down, enter, esc, or the character itself
@@ -236,10 +237,23 @@ req_nav_build_detail() {
 
     req_nav_detail_section "Headers" "$width" "${REQ_F_HEADERS[@]}"
     req_nav_detail_section "Query" "$width" "${REQ_F_QUERY[@]}"
-    case $REQ_F_METHOD in
-        POST|PUT|PATCH) req_nav_detail_section "Parameters" "$width" "${REQ_F_PARAMS[@]}" ;;
-        *) req_nav_detail_section "Parameters (not sent with $REQ_F_METHOD)" "$width" "${REQ_F_PARAMS[@]}" ;;
-    esac
+    local sends_body=1 raw_title="Raw data" params_title="Parameters" raw_lines=()
+    case $REQ_F_METHOD in POST|PUT|PATCH) ;; *) sends_body=0 ;; esac
+    if (( ! sends_body )); then
+        raw_title="Raw data (not sent with $REQ_F_METHOD)"
+        params_title="Parameters (not sent with $REQ_F_METHOD)"
+    elif (( REQ_F_RAW_SET )); then
+        params_title="Parameters (not sent: raw data takes precedence)"
+    fi
+    req_nav_detail_section "$params_title" "$width" "${REQ_F_PARAMS[@]}"
+    if (( REQ_F_RAW_SET )); then
+        mapfile -t raw_lines <<<"$REQ_F_RAW"
+        if (( ${#raw_lines[@]} > REQ_RAW_MAX_LINES )); then
+            local more=$(( ${#raw_lines[@]} - REQ_RAW_MAX_LINES ))
+            raw_lines=("${raw_lines[@]:0:REQ_RAW_MAX_LINES}" "... ($more more lines)")
+        fi
+        req_nav_detail_section "$raw_title" "$width" "${raw_lines[@]}"
+    fi
 
     REQ_SCREEN_LINES+=("${c_dim}Enter run   : commands   :h help   Esc back${c_reset}")
 }

@@ -99,25 +99,33 @@ REQ_CHECK_JQ='
 ('"$REQ_SCHEMA_JQ"')'
 
 # Request fields for display, as "tag NUL value NUL" records.
+# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
 REQ_FIELDS_JQ='
 (["name", (.name // "")], ["method", (.method // "")], ["url", (.url // "")],
  ["description", (.description // "")],
  ((.headers // {})        | to_entries[] | ["h", "\(.key): \(.value)"]),
  ((.query // {})          | to_entries[] | ["q", "\(.key)=\(.value)"]),
- ((.parameters // {}) | to_entries[] | ["p", "\(.key)=\(.value)"]))
+ ((.parameters // {}) | to_entries[] | ["p", "\(.key)=\(.value)"]),
+ ((.raw_data // "") as $r
+  | if $r == "" then empty
+    elif ($r | type) == "string" then ["rawtext", $r]
+    else ["rawjson", ($r | tojson)] end))
 | .[] | (., "\u0000")'
 
 REQ_F_NAME=""; REQ_F_METHOD=""; REQ_F_URL=""; REQ_F_DESC=""
 REQ_F_HEADERS=(); REQ_F_QUERY=(); REQ_F_PARAMS=()
+REQ_F_RAW=""        # raw_data as text: indented JSON for an object or list, else the string
+REQ_F_RAW_SET=0     # 1 when the request has a non-empty raw_data
 
 # shellcheck disable=SC2034  # REQ_F_* are read by nav.sh
 # req_request_fields <file> - reads the fields of an already validated request in
 # a single jq call and fills REQ_F_NAME, REQ_F_METHOD, REQ_F_URL, REQ_F_DESC and
-# the arrays REQ_F_HEADERS ("key: value"), REQ_F_QUERY and REQ_F_PARAMS ("key=value").
+# the arrays REQ_F_HEADERS ("key: value"), REQ_F_QUERY and REQ_F_PARAMS ("key=value"),
+# plus REQ_F_RAW and REQ_F_RAW_SET for raw_data.
 req_request_fields() {
     local tag val
     REQ_F_NAME=""; REQ_F_METHOD=""; REQ_F_URL=""; REQ_F_DESC=""
-    REQ_F_HEADERS=(); REQ_F_QUERY=(); REQ_F_PARAMS=()
+    REQ_F_HEADERS=(); REQ_F_QUERY=(); REQ_F_PARAMS=(); REQ_F_RAW=""; REQ_F_RAW_SET=0
     while IFS= read -r -d '' tag && IFS= read -r -d '' val; do
         case $tag in
             name)        REQ_F_NAME=$val ;;
@@ -127,6 +135,8 @@ req_request_fields() {
             h)           REQ_F_HEADERS+=("$val") ;;
             q)           REQ_F_QUERY+=("$val") ;;
             p)           REQ_F_PARAMS+=("$val") ;;
+            rawtext)     REQ_F_RAW=$val; REQ_F_RAW_SET=1 ;;
+            rawjson)     REQ_F_RAW=$(jq . <<<"$val"); REQ_F_RAW_SET=1 ;;
         esac
     done < <(jq -j "$REQ_FIELDS_JQ" "$1")
 }

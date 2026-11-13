@@ -194,6 +194,44 @@ test_detail_params() {
     assert_contains "not sent with DELETE" "$out" "DELETE warns that it sends no body"
 }
 
+test_detail_raw_data() {
+    echo "nav: raw_data on the details"
+    local p=$TMP/raw out f big i
+    mkdir -p "$p/d"; printf 'd\n' >"$p/.req"
+    req_nav_init "$p/.req"
+    show() { REQ_DETAIL_FILE=$1; screen detail; out=$OUT; }
+
+    f=$(req_request_write "$p/d" js POST http://x '{"raw_data":{"a":1,"b":[true,"x"]},"parameters":{"k":"v"}}')
+    show "$f"
+    assert_contains "  Raw data" "$out" "a raw_data section is shown"
+    assert_contains '    {' "$out" "JSON is indented (opening line)"
+    assert_contains '      "a": 1,' "$out" "JSON is indented (a field)"
+    assert_contains "Parameters (not sent: raw data takes precedence)" "$out" "parameters are flagged when raw_data wins"
+    assert_contains "k=v" "$out" "and still listed"
+
+    f=$(req_request_write "$p/d" tx PUT http://x $'{"raw_data":"line one\\nline two"}')
+    show "$f"
+    assert_contains "    line one" "$out" "text is shown as it is (first line)"
+    assert_contains "    line two" "$out" "text is shown as it is (second line)"
+    [[ $out != *"not sent"* ]]; assert_eq "0" "$?" "no warning without parameters"
+
+    f=$(req_request_write "$p/d" em POST http://x '{"raw_data":"","parameters":{"k":"v"}}')
+    show "$f"
+    [[ $out != *"Raw data"* ]]; assert_eq "0" "$?" "an empty raw_data shows no section"
+    [[ $out != *"not sent"* ]]; assert_eq "0" "$?" "and parameters are sent"
+
+    f=$(req_request_write "$p/d" gt GET http://x '{"raw_data":{"a":1}}')
+    show "$f"
+    assert_contains "Raw data (not sent with GET)" "$out" "GET warns that raw_data is not sent"
+
+    big="["; for i in $(seq 1 40); do big+="$i,"; done; big+="0]"
+    f=$(req_request_write "$p/d" bg POST http://x "{\"raw_data\":$big}")
+    show "$f"
+    assert_contains "... (28 more lines)" "$out" "a long raw_data is capped"
+    assert_eq "1" "$(( $(wc -l <<<"$out") <= REQ_RAW_MAX_LINES + 12 ))" "and the screen stays short"
+    unset -f show
+}
+
 test_detail_invalid() {
     echo "nav: invalid request"
     make_project
@@ -494,6 +532,7 @@ test_list_screen
 test_selection_highlight
 test_detail_screen
 test_detail_params
+test_detail_raw_data
 test_detail_invalid
 test_invalid_long_path
 test_truncate_scroll
