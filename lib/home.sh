@@ -1,7 +1,17 @@
 #!/usr/bin/env bash
 # home.sh - the user's central directory (~/.req): projects, configuration, cursor.
 #
-# This first part holds the "key=value" text files everything in there is made of
+# Layout (one directory per project; see TASKS.md, "Controle central de projetos"):
+#   ~/.req/current                 project=<id>: the project in use
+#   ~/.req/config                  global configuration
+#   ~/.req/projects/<id>/project   name=<folder name> and path=<absolute path of the project>
+#   ~/.req/projects/<id>/config    project configuration (wins over the global one)
+#   ~/.req/projects/<id>/vars      project variables
+#   ~/.req/projects/<id>/env/<e>   variables of environment <e>
+#   ~/.req/projects/<id>/cursor    last position in the menu
+# The directory is $REQ_CONFIG_DIR when set (tests use it), otherwise ~/.req.
+#
+# The first part below holds the "key=value" text files everything in there is made of
 # (project settings, variables, environments, configuration, cursor). Format:
 #   - one "key=value" per line; the key matches [A-Za-z_][A-Za-z0-9_]*;
 #   - blank lines and lines starting with "#" are ignored;
@@ -124,4 +134,93 @@ req_kv_set() {
 req_kv_unset() {
     [[ -f $1 ]] || return 1
     req_kv_rewrite "$1" unset "$2"
+}
+
+# --- central directory and projects --------------------------------------------
+
+# req_config_dir - the central directory (default: ~/.req).
+req_config_dir() {
+    printf '%s' "${REQ_CONFIG_DIR:-$HOME/.req}"
+}
+
+# req_projects_dir - the directory holding one directory per project.
+req_projects_dir() {
+    printf '%s/projects' "$(req_config_dir)"
+}
+
+# req_project_state_dir <id> [subpath] - where a project keeps its files in ~/.req.
+req_project_state_dir() {
+    printf '%s/%s' "$(req_projects_dir)" "$1"
+    [[ -z ${2-} ]] || printf '/%s' "$2"
+}
+
+# req_project_slug <folder> - a slug made from the folder's name (lowercase letters,
+# digits and hyphens); "project" when nothing is left of it.
+req_project_slug() {
+    local name=${1%/} slug
+    name=${name##*/}
+    slug=$(LC_ALL=C tr '[:upper:]' '[:lower:]' <<<"$name" | LC_ALL=C tr -cs 'a-z0-9' '-')
+    slug=${slug#-}; slug=${slug%-}
+    printf '%s' "${slug:-project}"
+}
+
+# req_project_find_id <project dir> - prints the id of the project registered for that
+# directory (matched by the absolute path in its "project" file). Fails when none.
+req_project_find_id() {
+    local abs dir id
+    abs=$(req_abs_path "$1")
+    for dir in "$(req_projects_dir)"/*/; do
+        [[ -f ${dir}project ]] || continue
+        [[ $(req_kv_get "${dir}project" path) == "$abs" ]] || continue
+        id=${dir%/}; printf '%s\n' "${id##*/}"
+        return 0
+    done
+    return 1
+}
+
+# req_project_new_id <project dir> - prints a free id for a new project: the folder's
+# slug, with -2, -3... added when another project already uses it.
+req_project_new_id() {
+    local slug id n=1
+    slug=$(req_project_slug "$1")
+    id=$slug
+    while [[ -e $(req_project_state_dir "$id") ]]; do
+        n=$(( n + 1 )); id=$slug-$n
+    done
+    printf '%s\n' "$id"
+}
+
+# req_project_create <project dir> - creates the control directory of a project and its
+# "project" file (name and path), and prints the new id. Does not check whether the
+# directory is already registered (req_project_find_id does).
+req_project_create() {
+    local abs id file
+    [[ -d $1 ]] || { req_err "directory does not exist: $1"; return 1; }
+    abs=$(req_abs_path "$1")
+    [[ $abs != *$'\n'* ]] || { req_err "the project path must not contain line breaks: $abs"; return 1; }
+    id=$(req_project_new_id "$abs")
+    file=$(req_project_state_dir "$id" project)
+    if ! { req_kv_set "$file" name "${abs##*/}" && req_kv_set "$file" path "$abs"; }; then
+        req_err "cannot create the project control in $(req_project_state_dir "$id")"
+        return 1
+    fi
+    printf '%s\n' "$id"
+}
+
+# req_current_get - prints the id of the project in use (from ~/.req/current). Fails
+# when there is none or the project's directory is gone.
+req_current_get() {
+    local id
+    id=$(req_kv_get "$(req_config_dir)/current" project) || return 1
+    req_valid_name "$id" && [[ -d $(req_project_state_dir "$id") ]] || return 1
+    printf '%s\n' "$id"
+}
+
+# req_current_set <id> - makes a registered project the one in use.
+req_current_set() {
+    if ! { req_valid_name "$1" && [[ -d $(req_project_state_dir "$1") ]]; }; then
+        req_err "unknown project: $1"
+        return 1
+    fi
+    req_kv_set "$(req_config_dir)/current" project "$1"
 }

@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.gitignore` permanece.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1 e a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir). Próxima tarefa: **TR2.2** (Revisão 2: diretório central e ponteiro `current`). A TR2.1 está feita.
+- Feito: Fases 0 a 4, a T5.1 e a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir). Próxima tarefa: **TR2.3** (Revisão 2: registro do projeto). TR2.1 e TR2.2 estão feitas.
 - A "Revisão 2" (R8 a R10, seção ao final do plano) muda o armazenamento de ambientes: cada projeto passa a ter seu diretório em `~/.req`. **As TR2.1 a TR2.4 são pré-requisito da Fase 5**: a T5.2 só começa depois delas.
-- Suíte: `make check` com 750 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 787 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -34,7 +34,7 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - **Erro de dependências:** só nomeia os pacotes faltantes, em laranja, sem comandos de instalação.
 - **Métodos:** GET (verde), POST (azul), PUT (laranja), PATCH (marrom), DELETE (vermelho).
 - **Secrets:** arquivo `chave=valor` do ambiente do projeto (ver abaixo) ou variáveis de ambiente com prefixo; `${url}` resolve para `DEV_URL` (ambiente `dev`, chave em maiúsculas). O formato antigo `~/.req/env/<env>/secrets.json` (T5.1) é substituído pela TR2.4, sem migração.
-- **Controle central de projetos (R10, a partir da TR2.1):** tudo que não é do repositório do usuário fica em `~/.req`, um diretório por projeto. Tudo é texto `chave=valor` (linhas em branco e `#` ignoradas), pois são só flags e variáveis simples. Layout (proposta, confirmar ao iniciar a TR2.2):
+- **Controle central de projetos (R10, a partir da TR2.1):** tudo que não é do repositório do usuário fica em `~/.req`, um diretório por projeto. Tudo é texto `chave=valor` (linhas em branco e `#` ignoradas), pois são só flags e variáveis simples. Layout (confirmado na TR2.2):
   ```
   ~/.req/
     current                  ponteiro: id do projeto em uso
@@ -46,7 +46,7 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
       env/<ambiente>         variáveis do ambiente (vencem as do projeto)
       cursor                 última posição no menu (R8)
   ```
-  O `<id>` é o slug do nome da pasta do projeto, com sufixo numérico se já existir para outro caminho.
+  O `<id>` é o slug do nome da pasta do projeto (minúsculas, números e hífens), com sufixo `-2`, `-3`... se já existir para outro caminho (confirmado com o usuário). O vínculo com o projeto é o `path` do arquivo `project`; `current` contém `project=<id>`.
 - **Configuração (R9):** `:config` lista as chaves e `:config chave=valor` grava em `~/.req/config`; chaves conhecidas ficam numa tabela única (tipo, padrão, descrição), como a ajuda `:h`. Chave desconhecida ou valor inválido é recusado com mensagem.
 - **Cursor (R8):** ao sair, o `req` grava o diretório e o item selecionado em `projects/<id>/cursor` e, ao abrir, volta para lá; a chave `restore_cursor` (padrão `yes`) desliga isso.
 - **Tarefas prontas:** o que já está implementado conta como feito, sem nova validação; o trabalho segue apenas com o que falta.
@@ -195,7 +195,7 @@ Achados:
 
 Tarefas (R10, antes da Fase 5):
 - [x] TR2.1 (R10) Helpers de arquivo `chave=valor`: ler uma chave, listar, gravar e remover, preservando comentários, linhas em branco e ordem; nomes `[A-Za-z_][A-Za-z0-9_]*`, valores de uma linha. Infraestrutura, commit próprio.
-- TR2.2 (R10) Diretório central: helpers do layout (`~/.req` ou `REQ_CONFIG_DIR`, `projects/<id>/`, arquivo `project` com `name` e `path`), id do projeto a partir da pasta, e o ponteiro `current` (ler e gravar). Infraestrutura, commit próprio.
+- [x] TR2.2 (R10) Diretório central: helpers do layout (`~/.req` ou `REQ_CONFIG_DIR`, `projects/<id>/`, arquivo `project` com `name` e `path`), id do projeto a partir da pasta, e o ponteiro `current` (ler e gravar). Infraestrutura, commit próprio.
 - TR2.3 (R10) Registro do projeto: `req init` e a primeira abertura de um `.req` ainda não registrado criam o controle do projeto; abrir um projeto registrado atualiza `current`; se `~/.req` não for gravável, o menu segue funcionando e avisa uma vez.
 - TR2.4 (R10) Ambientes por projeto: o carregador de secrets (T5.1) lê `projects/<id>/env/<ambiente>` e `projects/<id>/vars` em `chave=valor`, com o ambiente vencendo as variáveis do projeto; `secrets.json` deixa de ser lido (sem migração; se o arquivo antigo existir, um aviso aponta o novo local).
 

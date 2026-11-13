@@ -21,11 +21,6 @@ def scalar: type == "string" or type == "number" or type == "boolean";
 
 declare -gA REQ_SECRETS=()      # secrets of the last loaded environment (key -> value)
 
-# req_config_dir - the directory holding the user's configuration (default: ~/.req).
-req_config_dir() {
-    printf '%s' "${REQ_CONFIG_DIR:-$HOME/.req}"
-}
-
 # req_env_secrets_file <env> - path of the secrets file of an environment.
 req_env_secrets_file() {
     printf '%s/env/%s/secrets.json' "$(req_config_dir)" "$1"

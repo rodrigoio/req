@@ -93,7 +93,7 @@ lib/nav.sh     interactive menu: list, details and keys
 lib/cmd.sh     command mode (:n :nd :ed :c :rm :e :d :h :q) and its help table
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
 lib/env.sh     environments and secrets (loading `secrets.json`)
-lib/home.sh    the central directory in ~/.req: `key=value` files (projects, configuration, cursor)
+lib/home.sh    the central directory in ~/.req: `key=value` files, projects and the current-project pointer
 tests/         plain bash tests (no dependencies; see Requirements)
 Makefile       test, lint, install and uninstall
 ```

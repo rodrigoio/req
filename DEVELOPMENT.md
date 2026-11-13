@@ -14,7 +14,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR2.2** (central directory and `current` pointer; TR2.1, the `key=value` helpers, is done). Review 2 changes where environments live (one
+Next task: **TR2.3** (project registration; TR2.1 and TR2.2 are done). Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
 
@@ -141,11 +141,21 @@ lines and order, rewrite the file in place (mode and symlinks survive) and creat
 0600 inside 0700 directories. `req_kv_check` reports bad lines with absolute path and line number;
 get and list silently skip them, so callers that want to complain call check first.
 
+Central directory (`lib/home.sh`, TR2.2): `req_config_dir` (`$REQ_CONFIG_DIR` or `~/.req`, moved
+here from `env.sh`), `req_projects_dir`, `req_project_state_dir <id> [subpath]`. A project is
+registered by `req_project_create <dir>`, which makes `projects/<id>/` with a `project` file
+(`name=` and `path=`, the physical absolute path) and prints the id; `req_project_find_id <dir>`
+finds the id by that path (symbolic links and `..` resolve first). The id is the slug of the folder
+name (`req_project_slug`), with `-2`, `-3`... when another path already uses it. The project in use
+is `~/.req/current` (`project=<id>`): `req_current_get` returns nothing when the file is missing,
+the id is not a slug or its directory is gone; `req_current_set` refuses unknown projects. The
+project/state files themselves (`config`, `vars`, `env/`, `cursor`) are made by later tasks.
+
 ## Testing
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 750 asserts at the time of writing.
+`assert_contains`, `test_summary`). 787 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

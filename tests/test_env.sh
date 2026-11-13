@@ -5,6 +5,7 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$ROOT/tests/helpers.sh"
 source "$ROOT/lib/core.sh"
 source "$ROOT/lib/store.sh"
+source "$ROOT/lib/home.sh"
 source "$ROOT/lib/env.sh"
 
 TMP=$(mktemp -d)
