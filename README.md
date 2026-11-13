@@ -131,8 +131,9 @@ Each request is a file `<slug>.<method>.json` (methods: GET, POST, PUT, PATCH, D
 }
 ```
 
-- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters`, `raw_data` and `timeout`.
+- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters`, `raw_data`, `timeout` and `follow_redirects`.
 - `timeout` is the longest the whole request may take, in seconds (a positive number, such as `2.5`). Without it `REQ_TIMEOUT` applies, and then 60. A request that runs out of time fails with curl's exit code 28.
+- `follow_redirects` (`true` or `false`, default `false`) follows `3xx` answers, up to 10 redirects, and shows the final response (its status, headers and body). Without it a redirect is shown as it is. As curl does, a `301`, `302` or `303` answer to a `POST` is followed with a `GET`; an endless redirect fails with curl's exit code 47.
 - `headers`, `query` and `parameters` are objects with simple values (string, number or boolean).
 - `query` is appended to the url, url-encoded.
 - `raw_data` is the raw body: an object or list (JSON) or a string (any other text).

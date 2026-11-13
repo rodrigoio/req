@@ -139,6 +139,12 @@ test_invalid_manual() {
     assert_contains 'unknown field "retries"' "$out" "another unknown field"
     printf '{"name":"t1","method":"GET","url":"http://x","timeout":2.5}\n' >"$d/t1.get.json"
     assert_eq "0" "$(req_request_check "$d/t1.get.json" 2>/dev/null; echo $?)" "timeout accepts a positive number"
+    printf '{"name":"f1","method":"GET","url":"http://x","follow_redirects":true}\n' >"$d/f1.get.json"
+    assert_eq "0" "$(req_request_check "$d/f1.get.json" 2>/dev/null; echo $?)" "follow_redirects accepts a boolean"
+    for v in '"yes"' 1 null '"true"'; do
+        printf '{"name":"f2","method":"GET","url":"http://x","follow_redirects":%s}\n' "$v" >"$d/f2.get.json"
+        assert_contains 'field "follow_redirects" must be true or false' "$(check_out "$d/f2.get.json")" "follow_redirects $v is refused"
+    done
     for v in 0 -1 '"5"' true null '[1]'; do
         printf '{"name":"t2","method":"GET","url":"http://x","timeout":%s}\n' "$v" >"$d/t2.get.json"
         assert_contains 'field "timeout" must be a positive number of seconds' "$(check_out "$d/t2.get.json")" "timeout $v is refused"

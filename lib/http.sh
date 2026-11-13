@@ -29,6 +29,7 @@ REQ_PREPARE_JQ='
 | (.parameters // {}) as $d
 | (.raw_data // "") as $r
 | (.timeout // "") as $t
+| (.follow_redirects // false) as $f
 | ($m == "POST" or $m == "PUT" or $m == "PATCH") as $body
 | (["method", $m],
    ["url", ((.url // "") as $u
@@ -40,6 +41,7 @@ REQ_PREPARE_JQ='
    ($h | to_entries[] | ["header", "\(.key): \(.value)"]),
    ["hasctype", ($h | keys | any(ascii_downcase == "content-type") | tostring)],
    (if $t != "" then ["timeout", ($t | tostring)] else empty end),
+   ["follow", ($f | tostring)],
    (if $body and $r != "" then
         ["raw", (if ($r | type) == "string" then $r else ($r | tojson) end)],
         ["rawjson", (($r | type) != "string" | tostring)]
@@ -49,13 +51,13 @@ REQ_PREPARE_JQ='
 | .[] | (., "\u0000")'
 
 REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""
+REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false
 
 # req_prepare_request <json> - fills REQ_P_* from the request. Fails without a url.
 req_prepare_request() {
     local tag val
     REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""
+    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false
     while IFS= read -r -d '' tag && IFS= read -r -d '' val; do
         case $tag in
             method)   REQ_P_METHOD=$val ;;
@@ -66,6 +68,7 @@ req_prepare_request() {
             rawjson)  REQ_P_RAWJSON=$val ;;
             form)     REQ_P_FORM+=("$val") ;;
             timeout)  REQ_P_TIMEOUT=$val ;;
+            follow)   REQ_P_FOLLOW=$val ;;
         esac
     done < <(jq -j "$REQ_PREPARE_JQ" <<<"$1")
     if [[ -z $REQ_P_URL ]]; then
@@ -96,6 +99,7 @@ req_build_curl_args() {
         --connect-timeout "${REQ_CONNECT_TIMEOUT:-10}"
         --max-time "${REQ_P_TIMEOUT:-${REQ_TIMEOUT:-60}}"
         -X "$REQ_P_METHOD")
+    [[ $REQ_P_FOLLOW == true ]] && REQ_CURL_ARGS+=(-L --max-redirs 10)
 
     for line in "${REQ_P_HEADERS[@]}"; do
         REQ_CURL_ARGS+=(-H "$line")
@@ -122,7 +126,8 @@ req_build_curl_args() {
 # req_split_headers <text> - the text is what curl wrote with "-D -": the header block
 # (CRLF lines, ended by a blank line) and then the body. Fills REQ_RESP_STATUSLINE and
 # REQ_RESP_HEADERS, and puts the body in REQ_RESP_BODY. An interim "1xx" block (such as
-# "100 Continue") is skipped. Text that does not start with "HTTP/" is all body.
+# "100 Continue") is skipped, and so are the "3xx" blocks of the redirects followed
+# (REQ_P_FOLLOW). Text that does not start with "HTTP/" is all body.
 req_split_headers() {
     local rest=$1 block line crlf=$'\r\n'
     REQ_RESP_STATUSLINE=""; REQ_RESP_HEADERS=()
@@ -132,7 +137,9 @@ req_split_headers() {
         [[ $block == *"$crlf"* ]] && while IFS= read -r line; do
             [[ -z $line ]] || REQ_RESP_HEADERS+=("${line%$'\r'}")
         done <<<"${block#*"$crlf"}"
-        [[ $REQ_RESP_STATUSLINE =~ ^HTTP/[0-9.]+\ 1[0-9][0-9] ]] || break
+        [[ $REQ_RESP_STATUSLINE =~ ^HTTP/[0-9.]+\ 1[0-9][0-9] ]] && continue
+        # with follow_redirects, curl dumps the headers of every hop: the last one counts
+        [[ $REQ_P_FOLLOW == true && $REQ_RESP_STATUSLINE =~ ^HTTP/[0-9.]+\ 3[0-9][0-9] ]] || break
     done
     REQ_RESP_BODY=$rest
 }

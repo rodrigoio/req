@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T8.2** (Fase 8; a T8.1 está feita; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T8.3** (Fase 8; a T8.1 e a T8.2 estão feitas; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1278 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1297 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -167,6 +167,7 @@ Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; ca
 - Q5 (T6.6) `:log` e `:v` valem só na sessão e não alteram a configuração (o `:log` sobrepõe a chave `log` até sair). Decidir se `:log`/`:v` devem poder gravar a chave, e se `:v` deve ter uma chave `verbose` (ligada à Q3).
 - Q6 (T7.1/T7.2) Validado até o bash 4.4 (RHEL 8); as funções usam `declare -g` e outras construções do bash 4.2, mas não há teste em bash 4.0 a 4.3 (por exemplo o CentOS 7, já sem suporte). Decidir se o mínimo declarado deve passar a "bash 4.4+" ou se vale buscar uma imagem com bash 4.2.
 - Q7 (T8.1 a T8.3) Os campos extras por request (`timeout`, `follow_redirects`, `insecure`) só existem no arquivo JSON: não aparecem na tela de detalhes, nem os assistentes (`:n`, `:e`) os pedem, e o `REQ_CONNECT_TIMEOUT` segue só por variável. Decidir se entram na tela de detalhes e no assistente, e se `timeout`/`insecure` também devem existir como chave da configuração.
+- Q8 (T8.2) O limite de 10 redirecionamentos é fixo, e o curl troca o método (POST vira GET) em 301, 302 e 303. Decidir se o limite deve ser configurável e se o método deve ser mantido (`--post301`/`--post302`/`--post303`).
 
 ### Fase 7 — Portabilidade, qualidade e entrega
 - [x] T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`. Feita com `tests/container.sh` (`make container IMAGE=...`), como usuário comum: debian 12 (bash 5.2) passa com 1238 asserts, 0 falhas e 0 testes pulados.
@@ -195,7 +196,7 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 
 ### Fase 8 — Extras (a detalhar ao final do projeto)
 - [x] T8.1 `timeout` por request: campo opcional `timeout` (número positivo, em segundos) que vale no lugar de `REQ_TIMEOUT` (padrão 60); validado em `REQ_SCHEMA_JQ`, usado em `--max-time`. Só por arquivo: não aparece na tela de detalhes nem nos assistentes (ver Q7).
-- T8.2 `follow_redirects` por request.
+- [x] T8.2 `follow_redirects` por request: campo booleano opcional (padrão `false`), validado em `REQ_SCHEMA_JQ`; liga `-L --max-redirs 10`, e o `req_split_headers` descarta os blocos 3xx dos saltos (vale o último). O `mock_server.py` ganhou `/redirect` e `/loop`.
 - T8.3 `insecure` por request.
 - ~~T8.4~~ Substituída pela TR.4: `raw_data` entra no lugar de `data_string`, com a regra de precedência sobre `parameters`.
 - T8.5 Envio de arquivos.
