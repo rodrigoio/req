@@ -43,6 +43,12 @@ test_url() {
     assert_contains '"url"' "$out" "error names the url field"
 }
 
+test_nested_query() {
+    echo "http: nested query"
+    assert_eq "http://x/a?f%5Ba%5D=1&f%5Bb%5D%5Bc%5D=x%20y&t%5B%5D=1&t%5B%5D=2&n=3" "$(req_build_url '{"url":"http://x/a","query":{"f":{"a":1,"b":{"c":"x y"}},"t":[1,2],"e":{},"n":3}}')" "objects become f[a], lists t[], keys are encoded, empty ones vanish"
+    assert_eq "http://x/a?z=1&q=2" "$(req_build_url '{"url":"http://x/a?z=1","query":{"q":2}}')" "a flat query is unchanged"
+}
+
 test_args() {
     echo "http: curl arguments"
     req_build_curl_args '{"method":"get","url":"http://x","headers":{"X-A":"1","Accept":"text/html"}}'
@@ -418,6 +424,13 @@ test_execute() {
     assert_contains 'does not exist or cannot be read' "$out" "with the reason"
     [[ $out != *HTTP* ]]; assert_eq "0" "$?" "and nothing is sent"
 
+    # nested query values (T8.6) reach the server as bracket names
+    printf '{"name":"nq","method":"GET","url":"%s/echo","query":{"f":{"a":"1"},"t":["x","y"]}}\n' "$base" >"$TMP/nq.get.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/nq.get.json" 2>&1)
+    assert_contains '"f[a]": [' "$out" "the server decodes the object key f[a]"
+    assert_contains '"t[]": [' "$out" "and the list name t[]"
+    assert_contains '"y"' "$out" "with every item"
+
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"
     assert_contains '"url"' "$out" "tells how to set the url"
@@ -425,6 +438,7 @@ test_execute() {
 }
 
 test_url
+test_nested_query
 test_args
 test_timing
 test_headers
