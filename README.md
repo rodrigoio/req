@@ -174,4 +174,16 @@ token=abc123
 
 Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. The environment wins over the project variables. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
 
-Not wired in yet: using `${key}` placeholders in requests, `<ENV>_<KEY>` environment variables taking precedence over the file (`${url}` in `dev` would be `DEV_URL`), and switching with `:env <name>`. See the roadmap in [TASKS.md](TASKS.md).
+### Placeholders
+
+Write `${key}` in the `url`, in the values of `headers`, `query` and `parameters`, and in `raw_data` (also inside a JSON body) and `req` replaces it before sending. The value comes from, in this order:
+
+1. the process variable `<ENV>_<KEY>`, both in capitals, hyphens of the environment turned into underscores (`${url}` in `dev` is `DEV_URL`);
+2. the environment file `env/<env>`;
+3. the project `vars`.
+
+The environment is the `REQ_ENV` variable, `default` when it is not set. If a key has no value nothing is sent: the error lists every missing key and says which variable or file would define it. `name` and `description`, and the names of properties, are never replaced. There is no way yet to write a literal `${key}` in a request (see TA.14 in [TASKS.md](TASKS.md)). The url shown when a request runs is the substituted one, so secrets appear there until masking is added.
+
+`req run` takes the project files from the project registered for the current folder, if there is one; otherwise only the process variables apply.
+
+Not wired in yet: showing the environment in the menu and switching with `:env <name>`. See the roadmap in [TASKS.md](TASKS.md).

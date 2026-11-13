@@ -18,6 +18,8 @@ source "$ROOT/lib/home.sh"
 # shellcheck source=/dev/null
 source "$ROOT/lib/config.sh"
 # shellcheck source=/dev/null
+source "$ROOT/lib/env.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/http.sh"
 # shellcheck source=/dev/null
 source "$ROOT/lib/nav.sh"

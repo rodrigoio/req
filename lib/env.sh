@@ -104,6 +104,24 @@ req_resolve_key() {
 
 REQ_SUBST_OUT=""        # the text produced by req_subst
 
+# req_subst_fail <env> <project id> <key>... - the error for keys that have no value: one
+# line listing them and, for each, the process variable and the files of the project's
+# environment that would define it (the files only when there is a project).
+req_subst_fail() {
+    local env=$1 id=$2 key list="" where=""
+    shift 2
+    for key in "$@"; do list+=", $key"; done
+    req_err "no value for ${list#, } in environment \"$env\""
+    if [[ -n $id ]] && req_valid_name "$id"; then
+        where="$(req_abs_path "$(req_env_file "$id" "$env")") (or $(req_abs_path "$(req_vars_file "$id")") for every environment)"
+    fi
+    for key in "$@"; do
+        printf '  %s: set the variable %s' "$key" "$(req_env_var_name "$env" "$key")" >&2
+        [[ -z $where ]] || printf ', or add %s=... to %s' "$key" "$where" >&2
+        printf '\n' >&2
+    done
+}
+
 # shellcheck disable=SC2034  # REQ_SUBST_OUT is read by the callers
 # req_subst <text> <env> [project id] - replaces every ${key} (a valid key name between
 # braces) in the text by its value in the environment (req_resolve_key_var) and puts the
@@ -113,7 +131,7 @@ REQ_SUBST_OUT=""        # the text produced by req_subst
 # every missing key (once each, in order of appearance) and says how to define it: the
 # process variable and the files of the project's environment.
 req_subst() {
-    local rest=$1 env=$2 id=${3-$REQ_PROJECT_ID} out="" token key list="" where=""
+    local rest=$1 env=$2 id=${3-$REQ_PROJECT_ID} out="" token key
     local -a missing=()
     local -A seen=()
     REQ_SUBST_OUT=""
@@ -129,17 +147,47 @@ req_subst() {
         rest=${rest#*"$token"}
     done
     if (( ${#missing[@]} > 0 )); then
-        for key in "${missing[@]}"; do list+=", $key"; done
-        req_err "no value for ${list#, } in environment \"$env\""
-        if [[ -n $id ]] && req_valid_name "$id"; then
-            where="$(req_abs_path "$(req_env_file "$id" "$env")") (or $(req_abs_path "$(req_vars_file "$id")") for every environment)"
-        fi
-        for key in "${missing[@]}"; do
-            printf '  %s: set the variable %s' "$key" "$(req_env_var_name "$env" "$key")" >&2
-            [[ -z $where ]] || printf ', or add %s=... to %s' "$key" "$where" >&2
-            printf '\n' >&2
-        done
+        req_subst_fail "$env" "$id" "${missing[@]}"
         return 1
     fi
     REQ_SUBST_OUT=$out$rest
+}
+
+# The executable fields of a request (the ones sent to curl), where req_subst_json works.
+# Names of properties are never substituted, only values.
+REQ_SUBST_FIELDS='["url","headers","query","parameters","raw_data"]'
+
+# shellcheck disable=SC2034  # REQ_SUBST_OUT is read by the callers
+# req_subst_json <request json> <env> [project id] - like req_subst, for a request: every
+# ${key} in the string values of url, headers, query, parameters and raw_data (also the
+# strings inside a raw_data that is native JSON) is replaced, and the result, still valid
+# JSON, goes to REQ_SUBST_OUT. Other fields (name, description) are left alone. The keys
+# are resolved first: when some are missing, nothing is replaced, the status is 1 and
+# req_subst_fail lists them all.
+req_subst_json() {
+    local json=$1 env=$2 id=${3-$REQ_PROJECT_ID} key map='{}'
+    local -a missing=()
+    local -A seen=()
+    REQ_SUBST_OUT=$json
+    while IFS= read -r key; do
+        [[ -n $key && -z ${seen[$key]+x} ]] || continue
+        seen[$key]=1
+        if req_resolve_key_var "$env" "$key"; then
+            map=$(jq -c --arg k "$key" --arg v "$REQ_RESOLVED" '. + {($k): $v}' <<<"$map")
+        else
+            missing+=("$key")
+        fi
+    done < <(jq -r --argjson f "$REQ_SUBST_FIELDS" '
+        [to_entries[] | select(.key | IN($f[])) | .value | .. | strings
+         | scan("\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}") | .[0]] | .[]' <<<"$json")
+    if (( ${#missing[@]} > 0 )); then
+        REQ_SUBST_OUT=""
+        req_subst_fail "$env" "$id" "${missing[@]}"
+        return 1
+    fi
+    (( ${#seen[@]} > 0 )) || return 0
+    REQ_SUBST_OUT=$(jq -c --argjson m "$map" --argjson f "$REQ_SUBST_FIELDS" '
+        def fill: walk(if type == "string"
+                       then gsub("\\$\\{(?<k>[A-Za-z_][A-Za-z0-9_]*)\\}"; $m[.k]) else . end);
+        with_entries(if (.key | IN($f[])) then .value |= fill else . end)' <<<"$json")
 }

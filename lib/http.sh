@@ -201,12 +201,17 @@ req_print_body() {
 }
 
 # req_run_request <file> - validates, runs and shows: response, timing profile
-# and a line of "=" that separates the result from the menu redrawn after it.
+# and a line of "=" that separates the result from the menu redrawn after it. Before
+# sending, every ${key} in the url, headers, query, parameters and raw_data is replaced
+# by its value in the environment REQ_ENV (default "default"); a key without a value
+# stops the request with an error that says how to define it.
 req_run_request() {
-    local file=$1 json status
+    local file=$1 json status env=${REQ_ENV:-default}
     req_request_check "$file" || return 1
     json=$(<"$file")
-    req_build_curl_args "$json" || return 1
+    req_secrets_load "$env" || return 1
+    req_subst_json "$json" "$env" || return 1
+    req_build_curl_args "$REQ_SUBST_OUT" || return 1
 
     req_method_color "$REQ_P_METHOD"; printf '%s' "$REQ_P_METHOD"; req_color reset
     printf ' %s\n' "$REQ_P_URL"

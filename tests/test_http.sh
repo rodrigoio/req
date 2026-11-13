@@ -8,9 +8,11 @@ source "$ROOT/lib/ui.sh"
 source "$ROOT/lib/store.sh"
 source "$ROOT/lib/home.sh"
 source "$ROOT/lib/config.sh"
+source "$ROOT/lib/env.sh"
 source "$ROOT/lib/http.sh"
 
 TMP=$(mktemp -d)
+export REQ_CONFIG_DIR=$TMP/cfg      # never touch the real ~/.req
 SERVER_PID=""
 cleanup() { [[ -n $SERVER_PID ]] && kill "$SERVER_PID" 2>/dev/null; rm -rf "$TMP"; }
 trap cleanup EXIT
@@ -199,6 +201,25 @@ test_execute() {
     assert_contains "hello text" "$out" "but still the response"
     REQ_CONFIG=()
     assert_eq "" "$(find "$TMP" -newer "$TMP/port" -type f ! -name 'users.get.json' ! -name 'port')" "no extra file written"
+
+    # ${key} placeholders: the environment is REQ_ENV, "default" when it is not set.
+    # shellcheck disable=SC2016  # the placeholders are single-quoted on purpose
+    printf '{"name":"sub","method":"POST","url":"${base}/echo","headers":{"X-Test":"${tok}"},"raw_data":{"who":"${tok}"}}\n' >"$TMP/sub.post.json"
+    export DEFAULT_BASE=$base DEFAULT_TOK=s3cret
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" 2>&1)
+    assert_eq "0" "$?" "a request with placeholders runs"
+    assert_contains "POST $base/echo" "$out" "the url shown is the substituted one"
+    assert_contains '"x_test": "s3cret"' "$out" "the header the server received was substituted"
+    assert_contains '{\"who\":\"s3cret\"}' "$out" "and so was the body the server received"
+    unset DEFAULT_TOK
+    out=$(NO_COLOR=1 req_run_request "$TMP/sub.post.json" 2>&1); assert_eq "1" "$?" "a missing key stops the request"
+    assert_contains "no value for tok in environment \"default\"" "$out" "the error names the key and the environment"
+    assert_contains "DEFAULT_TOK" "$out" "and the variable that would define it"
+    [[ $out != *HTTP* ]]; assert_eq "0" "$?" "and nothing was sent"
+    REQ_ENV=staging; export STAGING_BASE=$base STAGING_TOK=t2
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" 2>&1)
+    assert_contains '"x_test": "t2"' "$out" "REQ_ENV chooses the environment"
+    unset REQ_ENV STAGING_BASE STAGING_TOK DEFAULT_BASE
 
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"

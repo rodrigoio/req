@@ -178,10 +178,45 @@ test_subst() {
     REQ_PROJECT_ID=""
 }
 
+test_subst_json() {
+    echo "env: substituting in a request"
+    local j err
+    varsfile $'host=h.example\ntok=a"b\\c\nn=5'
+    envfile dev 'extra=e1'
+    req_secrets_load dev $ID
+
+    j='{"name":"${keep}","description":"${keep}","method":"POST","url":"https://${host}/x","headers":{"Authorization":"Bearer ${tok}","${host}":"k"},"query":{"q":"${n}"},"parameters":{"f":"${extra}"},"raw_data":{"a":["${tok}",1,true,null],"${host}":"v"}}'
+    req_subst_json "$j" dev $ID; assert_eq "0" "$?" "a request with known keys is substituted"
+    assert_eq "https://h.example/x" "$(jq -r .url <<<"$REQ_SUBST_OUT")" "in the url"
+    assert_eq 'Bearer a"b\c' "$(jq -r .headers.Authorization <<<"$REQ_SUBST_OUT")" "in the headers (the quote and backslash survive as JSON)"
+    assert_eq "5" "$(jq -r .query.q <<<"$REQ_SUBST_OUT")" "in the query"
+    assert_eq "e1" "$(jq -r .parameters.f <<<"$REQ_SUBST_OUT")" "in the parameters, from the environment file"
+    assert_eq '["a\"b\\c",1,true,null]' "$(jq -c .raw_data.a <<<"$REQ_SUBST_OUT")" "in the strings of a native JSON raw_data, other values unchanged"
+    assert_eq '${keep}|${keep}' "$(jq -r '[.name,.description] | join("|")' <<<"$REQ_SUBST_OUT")" "name and description are left alone"
+    assert_eq '["Authorization","${host}"]' "$(jq -c '.headers | keys_unsorted' <<<"$REQ_SUBST_OUT")" "names of properties are never substituted"
+    jq -e . <<<"$REQ_SUBST_OUT" >/dev/null; assert_eq "0" "$?" "the result is valid JSON"
+
+    req_subst_json '{"method":"GET","url":"http://x"}' dev $ID
+    assert_eq '{"method":"GET","url":"http://x"}' "$REQ_SUBST_OUT" "a request without placeholders is unchanged"
+    assert_eq "no" "$(jq -r 'has("headers") | if . then "yes" else "no" end' <<<"$REQ_SUBST_OUT")" "and no field is added"
+    req_subst_json '{"method":"POST","url":"http://x","raw_data":"{\"k\":\"${host}\"}"}' dev $ID
+    assert_eq '{"k":"h.example"}' "$(jq -r .raw_data <<<"$REQ_SUBST_OUT")" "a raw_data that is text is substituted too"
+    export DEV_LOOP='${host}'
+    req_subst_json '{"url":"http://${loop}"}' dev $ID; assert_eq 'http://${host}' "$(jq -r .url <<<"$REQ_SUBST_OUT")" "a value is not expanded again"
+    unset DEV_LOOP
+
+    err=$(req_subst_json '{"url":"${a}/${b}","headers":{"X":"${a}"},"raw_data":{"k":["${c}"]}}' dev $ID 2>&1 >/dev/null); assert_eq "1" "$?" "missing keys fail"
+    req_subst_json '{"url":"${a}/${b}","headers":{"X":"${a}"},"raw_data":{"k":["${c}"]}}' dev $ID 2>/dev/null
+    assert_eq "" "$REQ_SUBST_OUT" "with nothing produced"
+    assert_contains 'no value for a, b, c in environment "dev"' "$err" "every missing key of the whole request is listed once"
+    assert_contains "c: set the variable DEV_C, or add c=... to $REQ_CONFIG_DIR/projects/$ID/env/dev" "$err" "with how to define it"
+}
+
 test_paths
 test_load
 test_invalid
 test_legacy
 test_resolve
 test_subst
+test_subst_json
 test_summary

@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T5.4** (Fase 5: aplicar a substituição às requests).
-- Ordem combinada: a Fase 5 (T5.4 em diante) segue, pois a Revisão 2 está concluída.
-- Suíte: `make check` com 1059 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T5.5** (Fase 5: projeto e ambiente ativos no cabeçalho do menu).
+- Ordem combinada: a Fase 5 (T5.5 em diante) segue, pois a Revisão 2 está concluída.
+- Suíte: `make check` com 1085 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -140,7 +140,7 @@ Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde fi
 - [x] T5.1 Leitura de `~/.req/env/<env>/secrets.json` via jq; JSON inválido apenas indica o erro. (Substituída pela TR2.4: o carregador passa a ler `chave=valor` do projeto.)
 - [x] T5.2 Resolução de uma chave, em ordem de precedência: variável `<ENV>_<CHAVE>`, arquivo do ambiente (`projects/<id>/env/<ambiente>`), variáveis do projeto (`projects/<id>/vars`).
 - [x] T5.3 Substituição de `${chave}` em um texto (função pura), com erro amigável que lista as chaves ausentes e orienta o usuário (variável esperada e arquivo do ambiente do projeto).
-- T5.4 Aplicar a substituição a url, headers, query, `parameters` e `raw_data` (incluindo as strings dentro do JSON nativo) antes de executar.
+- [x] T5.4 Aplicar a substituição a url, headers, query, `parameters` e `raw_data` (incluindo as strings dentro do JSON nativo) antes de executar.
 - T5.5 Projeto e ambiente ativos (`REQ_ENV`, padrão `default`) exibidos no cabeçalho do menu.
 - T5.6 `:env <nome>` troca o ambiente na sessão e valida ambiente inexistente (arquivo em `projects/<id>/env/`); sem argumento lista os ambientes do projeto; entra na ajuda `:h`.
 - T5.7 Mascaramento de valores secretos (função e testes), para uso em logs, no verbose e na linha `MÉTODO url` mostrada ao executar.
