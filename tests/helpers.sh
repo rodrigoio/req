@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # helpers.sh - minimal asserts for the tests (no external dependencies).
 
+# Keep the output deterministic even when the tests run in a terminal.
+export NO_COLOR=1
+
 REQ_TESTS_FAILED=0
 REQ_TESTS_RUN=0
 

@@ -123,6 +123,27 @@ test_list_screen() {
     assert_eq "7" "${#REQ_SCREEN_LINES[@]}" "lines: header, 5 items and footer"
 }
 
+test_selection_highlight() {
+    echo "nav: selection highlight"
+    make_project
+    req_nav_init "$PROJ/.req"; req_nav_handle enter
+    local sel=$'\033[1;92m' reset=$'\033[0m' line i
+    REQ_COLORS=1
+    req_nav_build_list
+    # Items: v2 (dir, selected), broken, create, list-users, remove
+    assert_eq "${sel}> dir    v2/${reset}" "${REQ_SCREEN_LINES[1]}" "selected directory row is bold bright green"
+    local highlighted=0
+    for line in "${REQ_SCREEN_LINES[@]}"; do [[ $line == *"$sel"* ]] && highlighted=$((highlighted + 1)); done
+    assert_eq "1" "$highlighted" "exactly one row is highlighted"
+
+    req_nav_handle down; req_nav_handle down   # create (POST)
+    req_nav_build_list
+    assert_eq "${sel}> POST   create${reset}" "${REQ_SCREEN_LINES[3]}" "selected request row is highlighted as a whole"
+    assert_eq $'  \033[32mGET   \033[0m broken' "${REQ_SCREEN_LINES[2]}" "other rows keep their method color"
+    [[ ${REQ_SCREEN_LINES[1]} != *"$sel"* ]]; assert_eq "0" "$?" "the previously selected row loses the highlight"
+    REQ_COLORS=0
+}
+
 test_detail_screen() {
     echo "nav: details screen"
     make_project
@@ -263,6 +284,7 @@ test_start_init() {
 test_keys
 test_navigation
 test_list_screen
+test_selection_highlight
 test_detail_screen
 test_detail_params
 test_detail_invalid

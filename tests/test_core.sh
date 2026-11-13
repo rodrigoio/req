@@ -36,16 +36,16 @@ test_bash_check() {
 
 test_colors() {
     echo "ui: colors"
-    # Captured output is not a terminal, so colors are off.
-    assert_eq "" "$(req_color get)" "no color outside a terminal"
+    assert_eq "0" "$REQ_COLORS" "colors are off when NO_COLOR is set"
+    assert_eq "" "$(req_color get)" "no color when disabled"
     assert_eq "GET" "$(req_paint_method get)" "uppercase method without color"
-    # Force color mode by overriding the check.
-    req_colors_enabled() { return 0; }
+    REQ_COLORS=1
     assert_eq $'\033[32m' "$(req_color get)" "GET green"
     assert_eq $'\033[34m' "$(req_color post)" "POST blue"
     assert_eq $'\033[38;5;208m' "$(req_color put)" "PUT orange"
     assert_eq $'\033[38;5;130m' "$(req_color patch)" "PATCH brown"
     assert_eq $'\033[31m' "$(req_color delete)" "DELETE red"
+    assert_eq $'\033[1;92m' "$(req_color sel)" "selection is bold bright green"
     assert_eq "" "$(req_method_color head)" "unknown method has no color"
 }
 

@@ -127,9 +127,10 @@ req_nav_crumb() {
 # req_nav_build_list - builds REQ_SCREEN_LINES with the current directory's list.
 req_nav_build_list() {
     local n=${#REQ_ITEM_KIND[@]} cols rows visible i end width marker pos
-    local c_dim c_bold c_reset arrows hint
+    local c_dim c_bold c_reset c_sel arrows hint tag label
     cols=$(req_term_cols); rows=$(req_term_rows)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
+    c_sel=$(req_color sel)
     REQ_SCREEN_LINES=()
 
     pos=""
@@ -146,12 +147,18 @@ req_nav_build_list() {
         end=$(( REQ_TOP + visible ))
         width=$(( cols - 10 ))
         for (( i = REQ_TOP; i < end; i++ )); do
-            marker=" "
-            (( i == REQ_SEL )) && marker=$(req_marker)
             if [[ ${REQ_ITEM_KIND[i]} == d ]]; then
-                REQ_SCREEN_LINES+=("$marker ${c_dim}dir   ${c_reset} ${c_bold}$(req_trunc "${REQ_ITEM_LABEL[i]}/" "$width")${c_reset}")
+                tag="dir   "; label=$(req_trunc "${REQ_ITEM_LABEL[i]}/" "$width")
             else
-                REQ_SCREEN_LINES+=("$marker $(req_method_color "${REQ_ITEM_METHOD[i]}")$(printf '%-6s' "${REQ_ITEM_METHOD[i]}")${c_reset} $(req_trunc "${REQ_ITEM_LABEL[i]}" "$width")")
+                tag=$(printf '%-6s' "${REQ_ITEM_METHOD[i]}"); label=$(req_trunc "${REQ_ITEM_LABEL[i]}" "$width")
+            fi
+            if (( i == REQ_SEL )); then
+                # The whole selected row is highlighted, which replaces the method color.
+                REQ_SCREEN_LINES+=("${c_sel}$(req_marker) ${tag} ${label}${c_reset}")
+            elif [[ ${REQ_ITEM_KIND[i]} == d ]]; then
+                REQ_SCREEN_LINES+=("  ${c_dim}${tag}${c_reset} ${c_bold}${label}${c_reset}")
+            else
+                REQ_SCREEN_LINES+=("  $(req_method_color "${REQ_ITEM_METHOD[i]}")${tag}${c_reset} ${label}")
             fi
         done
     fi

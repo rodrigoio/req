@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # ui.sh - ANSI colors, terminal helpers and per-method formatting.
 
-# Colors are off when the output is not a terminal or NO_COLOR is set.
+# Colors are off when the output is not a terminal or NO_COLOR is set. This is
+# decided once, when the module is loaded: inside $(...) stdout is a pipe, so a
+# per-call `-t 1` check would wrongly disable colors for captured fragments.
+if [[ -t 1 && -z ${NO_COLOR-} ]]; then REQ_COLORS=1; else REQ_COLORS=0; fi
+
 req_colors_enabled() {
-    [[ -t 1 && -z ${NO_COLOR-} ]]
+    [[ $REQ_COLORS == 1 ]]
 }
 
-# req_color <get|post|put|patch|delete|ok|warn|err|reset|bold|dim> - emits the ANSI sequence.
+# req_color <get|post|put|patch|delete|ok|warn|err|sel|reset|bold|dim> - emits the ANSI sequence.
+# `sel` is the menu selection highlight: bold bright green.
 req_color() {
     req_colors_enabled || return 0
     case ${1,,} in
@@ -18,6 +23,7 @@ req_color() {
         ok)     printf '\033[32m' ;;
         warn)   printf '\033[33m' ;;
         err)    printf '\033[31m' ;;
+        sel)    printf '\033[1;92m' ;;
         bold)   printf '\033[1m' ;;
         dim)    printf '\033[2m' ;;
         reset)  printf '\033[0m' ;;
