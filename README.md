@@ -94,6 +94,7 @@ lib/http.sh    curl command building, execution, display and timing profile
 lib/nav.sh     interactive menu: list, details and keys
 lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :h :q) and its help table
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
+lib/config.sh  global configuration (`~/.req/config`) and its table of keys
 lib/env.sh     environments and secrets (loading `vars` and `env/<env>`)
 lib/home.sh    the central directory in ~/.req: `key=value` files, projects and the current-project pointer
 tests/         plain bash tests (no dependencies; see Requirements)

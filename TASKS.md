@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir) e a Revisão 2 até a TR2.4. Próxima tarefa: **TR2.5** (Revisão 2: configuração global). A Revisão 3 (TR3.1 a TR3.7) está concluída.
+- Feito: Fases 0 a 4, a T5.1, a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir) e a Revisão 2 até a TR2.5. Próxima tarefa: **TR2.6** (Revisão 2: `:config`). A Revisão 3 (TR3.1 a TR3.7) está concluída.
 - Ordem combinada: **Revisão 3 (R11, `.req` com `workspace` e raiz dinâmica) agora**, depois a TR2.4 (ambientes por projeto), e então as demais tarefas da Revisão 2 e a Fase 5. As TR2.1 a TR2.4 continuam sendo pré-requisito da Fase 5.
-- Suíte: `make check` com 909 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 943 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -203,7 +203,7 @@ Tarefas (R10, antes da Fase 5):
 - [x] TR2.4 (R10) Ambientes por projeto: o carregador de secrets (T5.1) lê `projects/<id>/env/<ambiente>` e `projects/<id>/vars` em `chave=valor`, com o ambiente vencendo as variáveis do projeto; `secrets.json` deixa de ser lido (sem migração; se o arquivo antigo existir, um aviso aponta o novo local).
 
 Tarefas (R9):
-- TR2.5 (R9) Configuração global: `~/.req/config` em `chave=valor`, com a tabela única de chaves conhecidas (tipo, padrão, descrição) e leitura validada; chave desconhecida no arquivo é avisada e ignorada. Infraestrutura, commit próprio.
+- [x] TR2.5 (R9) Configuração global: `~/.req/config` em `chave=valor`, com a tabela única de chaves conhecidas (tipo, padrão, descrição) e leitura validada; chave desconhecida no arquivo é avisada e ignorada. Infraestrutura, commit próprio.
 - TR2.6 (R9) `:config`: sem argumento lista as chaves com valor atual e padrão; `:config chave=valor` valida e grava; chave desconhecida ou valor inválido explica e lista as válidas; entra na ajuda `:h`.
 - TR2.7 (R9) Chaves de apresentação `time_stats` (perfil de tempos) e `time_stat_total` (linha de total), `yes` ou `no`, padrão `yes`, aplicadas por `req_run_request` e por `req run`.
 

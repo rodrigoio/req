@@ -36,7 +36,7 @@ folder itself may be reached through a link: only the workspace part is checked.
 | 5 Environments and secrets | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR2.5** (global configuration; Review 3 and TR2.4 are done). Order agreed: the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
+Next task: **TR2.6** (`:config`; TR2.5, global configuration, is done; Review 3 and TR2.4 are done). Order agreed: the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
 
@@ -64,6 +64,7 @@ else is functions in `lib/`, all prefixed `req_`.
 | `nav.sh` | the interactive menu: state, screen building, keys, main loop, init prompt |
 | `cmd.sh` | command mode (`:n :nd :e :d :q`) on top of `nav.sh` |
 | `wizard.sh` | the prompts behind `:n`, `:e`, `:d` and `:nd` |
+| `config.sh` | the global `~/.req/config`: one table of known keys (`REQ_CONFIG_KEYS`, `_TYPE`, `_DEFAULT`, `_DESC`), `req_config_load` fills `REQ_CONFIG` (unknown keys, bad values and bad lines are warnings with path and line, never errors), `req_config_get` falls back to the default |
 | `env.sh` | variable loading (`req_secrets_load <env> [id]` fills `REQ_SECRETS` from `projects/<id>/vars` and `env/<env>`, the environment winning; the old `secrets.json` only gets a warning); resolution and substitution come next |
 
 Data flow of a run: `req_nav_run` loops build screen → draw → read key → handle key.
@@ -181,7 +182,7 @@ line (`req_warn` in `core.sh`) and returns 1; `req init` and the menu carry on w
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 909 asserts at the time of writing.
+`assert_contains`, `test_summary`). 943 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed
