@@ -65,6 +65,13 @@ test_args() {
     has_arg -L && has_arg --max-redirs; assert_eq "0" "$?" "follow_redirects true adds -L and a limit"
     assert_eq "10" "$(arg_after --max-redirs)" "of 10 redirects"
 
+    req_build_curl_args '{"method":"get","url":"https://x"}'
+    has_arg -k; assert_eq "1" "$?" "the certificate is checked by default"
+    req_build_curl_args '{"method":"get","url":"https://x","insecure":true}'
+    has_arg -k; assert_eq "0" "$?" "insecure true adds -k"
+    req_build_curl_args '{"method":"get","url":"https://x","insecure":false}'
+    has_arg -k; assert_eq "1" "$?" "insecure false does not"
+
     local m
     for m in GET DELETE; do
         req_build_curl_args "{\"method\":\"$m\",\"url\":\"http://x\",\"parameters\":{\"a\":1},\"headers\":{\"Content-Type\":\"application/json\"}}"
@@ -359,6 +366,24 @@ test_execute() {
     printf '{"name":"loop","method":"GET","url":"%s/loop","follow_redirects":true}\n' "$base" >"$TMP/loop.get.json"
     out=$(NO_COLOR=1 req_run_request "$TMP/loop.get.json" 2>&1); assert_eq "1" "$?" "an endless redirect stops"
     assert_contains "curl exit code 47" "$out" "at the limit, with curl's exit code"
+
+    # insecure (T8.3): an https server with a self-signed certificate
+    if command -v openssl >/dev/null 2>&1; then
+        openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=127.0.0.1 \
+            -keyout "$TMP/key.pem" -out "$TMP/cert.pem" >/dev/null 2>&1
+        python3 -I "$ROOT/tests/mock_server.py" "$TMP/cert.pem" "$TMP/key.pem" >"$TMP/tlsport" 2>/dev/null &
+        local tlspid=$! tls=""
+        for _ in {1..50}; do [[ -s $TMP/tlsport ]] && { tls=$(<"$TMP/tlsport"); break; }; sleep 0.1; done
+        printf '{"name":"tls","method":"GET","url":"https://127.0.0.1:%s/text"}\n' "$tls" >"$TMP/tls.get.json"
+        out=$(NO_COLOR=1 req_run_request "$TMP/tls.get.json" 2>&1); assert_eq "1" "$?" "a self-signed certificate is refused by default"
+        assert_contains "curl exit code 60" "$out" "with curl's certificate error"
+        printf '{"name":"tls","method":"GET","url":"https://127.0.0.1:%s/text","insecure":true}\n' "$tls" >"$TMP/tls.get.json"
+        out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/tls.get.json" 2>&1); assert_eq "0" "$?" "insecure accepts it"
+        assert_contains "hello text" "$out" "and shows the response"
+        kill "$tlspid" 2>/dev/null
+    else
+        echo "  skip openssl unavailable"
+    fi
 
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"

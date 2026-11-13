@@ -16,11 +16,11 @@ INNER='
 set -e
 if command -v apt-get >/dev/null; then
     apt-get update -qq >/dev/null
-    apt-get install -y -qq --no-install-recommends curl jq python3 vim-tiny make ca-certificates >/dev/null 2>&1
+    apt-get install -y -qq --no-install-recommends curl jq python3 vim-tiny make ca-certificates openssl >/dev/null 2>&1
 else
     pm=$(command -v dnf || command -v yum)
     # curl is already there (curl-minimal on some images), so it is left alone
-    "$pm" install -y -q --allowerasing jq python3 vim-minimal make findutils procps-ng diffutils >/dev/null 2>&1
+    "$pm" install -y -q --allowerasing jq python3 vim-minimal make findutils procps-ng diffutils openssl >/dev/null 2>&1
     command -v curl >/dev/null || "$pm" install -y -q --allowerasing curl >/dev/null 2>&1
 fi
 id tester >/dev/null 2>&1 || useradd -m tester

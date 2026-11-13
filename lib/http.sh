@@ -30,6 +30,7 @@ REQ_PREPARE_JQ='
 | (.raw_data // "") as $r
 | (.timeout // "") as $t
 | (.follow_redirects // false) as $f
+| (.insecure // false) as $k
 | ($m == "POST" or $m == "PUT" or $m == "PATCH") as $body
 | (["method", $m],
    ["url", ((.url // "") as $u
@@ -42,6 +43,7 @@ REQ_PREPARE_JQ='
    ["hasctype", ($h | keys | any(ascii_downcase == "content-type") | tostring)],
    (if $t != "" then ["timeout", ($t | tostring)] else empty end),
    ["follow", ($f | tostring)],
+   ["insecure", ($k | tostring)],
    (if $body and $r != "" then
         ["raw", (if ($r | type) == "string" then $r else ($r | tojson) end)],
         ["rawjson", (($r | type) != "string" | tostring)]
@@ -51,13 +53,13 @@ REQ_PREPARE_JQ='
 | .[] | (., "\u0000")'
 
 REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false
+REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false; REQ_P_INSECURE=false
 
 # req_prepare_request <json> - fills REQ_P_* from the request. Fails without a url.
 req_prepare_request() {
     local tag val
     REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false
+    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false; REQ_P_INSECURE=false
     while IFS= read -r -d '' tag && IFS= read -r -d '' val; do
         case $tag in
             method)   REQ_P_METHOD=$val ;;
@@ -69,6 +71,7 @@ req_prepare_request() {
             form)     REQ_P_FORM+=("$val") ;;
             timeout)  REQ_P_TIMEOUT=$val ;;
             follow)   REQ_P_FOLLOW=$val ;;
+            insecure) REQ_P_INSECURE=$val ;;
         esac
     done < <(jq -j "$REQ_PREPARE_JQ" <<<"$1")
     if [[ -z $REQ_P_URL ]]; then
@@ -100,6 +103,7 @@ req_build_curl_args() {
         --max-time "${REQ_P_TIMEOUT:-${REQ_TIMEOUT:-60}}"
         -X "$REQ_P_METHOD")
     [[ $REQ_P_FOLLOW == true ]] && REQ_CURL_ARGS+=(-L --max-redirs 10)
+    [[ $REQ_P_INSECURE == true ]] && REQ_CURL_ARGS+=(-k)
 
     for line in "${REQ_P_HEADERS[@]}"; do
         REQ_CURL_ARGS+=(-H "$line")
