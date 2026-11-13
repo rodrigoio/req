@@ -280,26 +280,40 @@ req_wizard_edit() {
     done
 }
 
-# req_wizard_duplicate <file> - copies a request under a new name, then opens the
-# edit menu on the copy. Cancelling the edit keeps the copy.
-req_wizard_duplicate() {
-    local file=$1 dir name method url fields target
+# req_wizard_copy_request <file> [name] - copies a request under a new name, asked for
+# (default <name>-copy) unless given; no edit follows. REQ_LAST_FILE is the copy.
+req_wizard_copy_request() {
+    local file=$1 name=${2-} dir oname method url fields target
     dir=$(dirname "$file")
     req_request_check "$file" 2>/dev/null || {
-        req_err "cannot duplicate an invalid request, fix the file first: $(req_abs_path "$file")"; return 1; }
-    name=$(req_request_get "$file" name)
+        req_err "cannot copy an invalid request, fix the file first: $(req_abs_path "$file")"; return 1; }
+    oname=$(req_request_get "$file" name)
     method=$(req_request_get "$file" method); method=${method^^}
     url=$(req_request_get "$file" url)
     fields=$(jq -c 'del(.name, .method, .url)' "$file")
 
-    while :; do
-        req_ask_name "$name-copy" || { req_cancelled; return 1; }
-        target=$dir/$(req_request_filename "$REQ_REPLY" "$method")
-        [[ ! -e $target ]] && break
-        req_err "$target already exists"
-    done
-    REQ_LAST_FILE=$(req_request_write "$dir" "$REQ_REPLY" "$method" "$url" "$fields") || return 1
+    if [[ -z $name ]]; then
+        while :; do
+            req_ask_name "$oname-copy" || { req_cancelled; return 1; }
+            target=$dir/$(req_request_filename "$REQ_REPLY" "$method")
+            [[ ! -e $target ]] && break
+            req_err "$target already exists"
+        done
+        name=$REQ_REPLY
+    else
+        req_valid_name "$name" || {
+            req_err "invalid name: \"$name\" (use lowercase letters, digits and hyphens)"; return 1; }
+        target=$dir/$(req_request_filename "$name" "$method")
+        [[ ! -e $target ]] || { req_err "$target already exists"; return 1; }
+    fi
+    REQ_LAST_FILE=$(req_request_write "$dir" "$name" "$method" "$url" "$fields") || return 1
     printf 'Created %s\n' "$REQ_LAST_FILE"
+}
+
+# req_wizard_duplicate <file> - copies a request under a new name, then opens the
+# edit menu on the copy. Cancelling the edit keeps the copy.
+req_wizard_duplicate() {
+    req_wizard_copy_request "$1" || return 1
     req_wizard_edit "$REQ_LAST_FILE"
     return 0
 }
@@ -321,13 +335,11 @@ req_wizard_mkdir() {
     printf 'Created directory %s\n' "$REQ_LAST_DIR"
 }
 
-# req_wizard_rename_dir <directory> <.req file> [name] - renames a directory (the
-# last component of its path); the name is asked for unless given. When the .req
-# lists the directory, its entry is updated too (relative when the directory is
-# under the .req, absolute otherwise). Returns 0 after renaming; REQ_LAST_DIR is the
-# new path. An unchanged name returns 1 without touching anything.
+# req_wizard_rename_dir <directory> [name] - renames a directory (the last component of
+# its path); the new name is asked for unless given. Returns 0 after renaming;
+# REQ_LAST_DIR is the new path. An unchanged name returns 1 without touching anything.
 req_wizard_rename_dir() {
-    local dir=${1%/} pfile=$2 name=${3-} target base entry listed=0
+    local dir=${1%/} name=${2-} target
     [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
     if [[ -z $name ]]; then
         req_ask_name "${dir##*/}" "New directory name" || { req_cancelled; return 1; }
@@ -343,29 +355,16 @@ req_wizard_rename_dir() {
         return 1
     fi
     [[ ! -e $target ]] || { req_err "$target already exists"; return 1; }
-    req_project_has_entry "$pfile" "$dir" && listed=1
     mv -- "$dir" "$target" 2>/dev/null || { req_err "cannot rename $dir"; return 1; }
-    if (( listed )); then
-        base=$(cd -P "$(dirname "$pfile")" && pwd)
-        entry=$target
-        [[ $target == "$base"/* ]] && entry=${target#"$base"/}
-        # The old path is gone, so the entry is found through the saved path.
-        if ! req_project_replace_entry "$pfile" "$dir" "$entry"; then
-            mv -- "$target" "$dir"
-            req_err "could not update $pfile; the rename was undone"
-            return 1
-        fi
-    fi
     REQ_LAST_DIR=$target
     printf 'Renamed %s to %s\n' "$dir" "$target"
 }
 
-# req_wizard_copy_dir <directory> <.req file> [name] - copies a directory with everything
-# inside it, next to the original. The name is asked for (default <name>-copy) unless
-# given. When the .req lists the original, the copy is listed too (relative when it is
-# under the .req, absolute otherwise). Returns 0 after copying; REQ_LAST_DIR is the copy.
+# req_wizard_copy_dir <directory> [name] - copies a directory with everything inside it,
+# next to the original. The name of the copy is asked for (default <name>-copy) unless
+# given. Returns 0 after copying; REQ_LAST_DIR is the copy.
 req_wizard_copy_dir() {
-    local dir=${1%/} pfile=$2 name=${3-} target base entry listed=0
+    local dir=${1%/} name=${2-} target
     [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
     dir=$(req_abs_path "$dir")
     if [[ -z $name ]]; then
@@ -381,16 +380,8 @@ req_wizard_copy_dir() {
         return 1; }
     target=${dir%/*}/$name
     [[ ! -e $target ]] || { req_err "$target already exists"; return 1; }
-    req_project_has_entry "$pfile" "$dir" && listed=1
     cp -RP -- "$dir" "$target" 2>/dev/null || {
         rm -rf -- "$target"; req_err "cannot copy $dir"; return 1; }
-    if (( listed )); then
-        base=$(cd -P "$(dirname "$pfile")" && pwd)
-        entry=$target
-        [[ $target == "$base"/* ]] && entry=${target#"$base"/}
-        req_project_append_entry "$pfile" "$entry" 2>/dev/null || {
-            rm -rf -- "$target"; req_err "could not update $pfile; the copy was removed"; return 1; }
-    fi
     REQ_LAST_DIR=$target
     printf 'Copied %s to %s\n' "$dir" "$target"
 }
@@ -411,38 +402,25 @@ req_wizard_remove_request() {
     printf 'Removed %s\n' "$file"
 }
 
-# req_wizard_remove_dir <directory> <.req file> - removes a directory and everything
-# inside it, after a red warning with the full path and the size of the contents and
-# a "[y/N]" question (default no). Only a directory strictly inside the project (the
-# folder of the .req, physical path) is ever deleted. A directory outside it, or a
-# symbolic link, is never deleted: when it is listed in the .req, the user can only
-# unlist it. A listed directory loses its .req entry when removed. Returns 0 after
-# changing something; REQ_LAST_DIR is the directory.
+# req_wizard_remove_dir <directory> <workspace> - removes a directory and everything inside
+# it, after a red warning with the full path and the size of the contents and a "[y/N]"
+# question (default no). Only a directory strictly inside the workspace (physical path) is
+# ever deleted, and never a symbolic link: the workspace itself, its parents, anything
+# outside it and links are refused. Returns 0 after removing; REQ_LAST_DIR is the directory.
 req_wizard_remove_dir() {
-    local dir=${1%/} pfile=$2 abs base listed=0 inside=0 files dirs red reset
+    local dir=${1%/} root abs files dirs red reset
     [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
     abs=$(req_abs_path "$dir")
-    base=$(cd -P "$(dirname "$pfile")" && pwd) || { req_err "project folder not found"; return 1; }
-    req_project_has_entry "$pfile" "$abs" && listed=1
-    [[ ! -L $dir && $abs == "$base"/?* ]] && inside=1
-    red=$(req_color err); reset=$(req_color reset)
-
-    if (( ! inside )); then
-        if (( ! listed )); then
-            req_err "refusing to remove $abs: it is not a directory inside the project ($base)"
-            return 1
-        fi
-        printf '%s%s is outside the project or a symbolic link: its files are never deleted.%s\n' "$red" "$abs" "$reset"
-        if ! req_confirm "Remove it from the $REQ_PROJECT_FILE only?" n; then
-            printf 'Kept.\n'
-            return 1
-        fi
-        req_project_remove_entry "$pfile" "$abs" || return 1
-        REQ_LAST_DIR=$dir
-        printf 'Unlisted %s\n' "$abs"
-        return 0
+    root=$(cd -P "$2" 2>/dev/null && pwd) || { req_err "workspace not found: $2"; return 1; }
+    if [[ -L $dir ]]; then
+        req_err "refusing to remove $abs: it is a symbolic link (links are not accepted)"
+        return 1
     fi
-
+    if [[ $abs != "$root"/?* ]]; then
+        req_err "refusing to remove $abs: it is not a directory inside the workspace ($root)"
+        return 1
+    fi
+    red=$(req_color err); reset=$(req_color reset)
     files=$(find "$abs" -mindepth 1 ! -type d | wc -l)
     dirs=$(find "$abs" -mindepth 1 -type d | wc -l)
     printf '%sRemove the directory %s and everything inside it: %d files in %d subdirectories. This cannot be undone.%s\n' \
@@ -453,10 +431,6 @@ req_wizard_remove_dir() {
     fi
     rm -rf -- "$abs" 2>/dev/null
     [[ ! -e $abs ]] || { req_err "could not remove everything in $abs"; return 1; }
-    if (( listed )); then
-        req_project_remove_entry "$pfile" "$abs" ||
-            req_err "the directory was removed but its entry is still in $pfile"
-    fi
     REQ_LAST_DIR=$dir
     printf 'Removed %s\n' "$abs"
 }

@@ -528,37 +528,61 @@ test_command_rename_dir() {
     # On a request there is nothing to rename.
     REQ_SEL=2
     type_keys : e d; req_nav_handle enter >/dev/null
-    assert_contains "select a directory" "$REQ_STATUS" ":ed on a request explains itself"
+    assert_contains "edit a request with :e" "$REQ_STATUS" ":ed on a request points to :e"
     REQ_INPUT_FD=0
 }
 
-test_command_copy_dir() {
-    echo "nav: :c"
+test_command_copy() {
+    echo "nav: :cp"
     make_project
     req_nav_init "$PROJ/.req"
     REQ_INPUT_FD=3
 
-    type_keys : c
+    type_keys : c p
     req_nav_handle enter 3<<<"" >/dev/null
-    [[ -f $PROJ/api-copy/list-users.get.json && -d $PROJ/api-copy/v2 ]]; assert_eq "0" "$?" ":c copies the directory under the cursor"
+    [[ -f $PROJ/api-copy/list-users.get.json && -d $PROJ/api-copy/v2 ]]; assert_eq "0" "$?" ":cp copies the directory under the cursor"
     assert_eq "api api-copy auth" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed (sorted)"
     assert_eq "api-copy" "${REQ_ITEM_LABEL[REQ_SEL]}" "and the copy is selected"
     assert_contains "copied to api-copy" "$REQ_STATUS" "status mentions it"
 
     type_keys :
-    REQ_CMD_BUF="c replica"
+    REQ_CMD_BUF="cp replica"
     REQ_SEL=2; req_nav_handle enter >/dev/null
-    [[ -d $PROJ/replica ]]; assert_eq "0" "$?" ":c <name> skips the prompt"
+    [[ -d $PROJ/replica ]]; assert_eq "0" "$?" ":cp <name> skips the prompt"
 
     REQ_SEL=0; req_nav_handle enter              # api
-    REQ_SEL=0; type_keys : c                     # v2
+    REQ_SEL=0; type_keys : c p                   # v2
     req_nav_handle enter 3<<<"" >/dev/null
-    [[ -d $PROJ/api/v2-copy ]]; assert_eq "0" "$?" ":c copies a subdirectory"
+    [[ -d $PROJ/api/v2-copy ]]; assert_eq "0" "$?" ":cp copies a subdirectory"
     assert_eq "v2-copy" "${REQ_ITEM_LABEL[REQ_SEL]}" "and selects it"
 
-    REQ_SEL=3
-    type_keys : c; req_nav_handle enter >/dev/null
-    assert_contains "select a directory" "$REQ_STATUS" ":c on a request explains itself"
+    # A request is copied too: the new name is asked for and no edit menu follows.
+    local i
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == create ]] && REQ_SEL=$i; done
+    type_keys : c p
+    req_nav_handle enter 3<<<"create-two" >"$TMP/cp.out" 2>&1
+    [[ -f $PROJ/api/create-two.post.json && -f $PROJ/api/create.post.json ]]; assert_eq "0" "$?" ":cp copies a request"
+    assert_eq "$(jq -c 'del(.name)' "$PROJ/api/create.post.json")" "$(jq -c 'del(.name)' "$PROJ/api/create-two.post.json")" "with the same fields"
+    [[ $(<"$TMP/cp.out") != *"Editing"* ]]; assert_eq "0" "$?" "without opening the edit menu"
+    assert_eq "create-two" "${REQ_ITEM_LABEL[REQ_SEL]}" "the copy is selected"
+    assert_contains "copied to create-two.post.json" "$REQ_STATUS" "status mentions it"
+    assert_eq "list" "$REQ_VIEW" "and the list is shown"
+
+    # From the details screen the open request is copied.
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "opens the details"
+    type_keys : c p
+    req_nav_handle enter 3<<<"create-three" >/dev/null 2>&1
+    [[ -f $PROJ/api/create-three.post.json ]]; assert_eq "0" "$?" ":cp on the details copies the open request"
+    assert_eq "list" "$REQ_VIEW" "and returns to the list"
+
+    # :c is gone; an invalid request cannot be copied; nothing selected.
+    type_keys : c enter
+    assert_contains "unknown command :c" "$REQ_STATUS" ":c no longer exists"
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == broken ]] && REQ_SEL=$i; done
+    type_keys : c p
+    req_nav_handle enter 3<<<"x" >/dev/null 2>&1
+    [[ ! -e $PROJ/api/x.get.json ]]; assert_eq "0" "$?" "an invalid request is not copied"
     REQ_INPUT_FD=0
 }
 
@@ -742,7 +766,7 @@ test_review_flow() {
     out=$({
         keys : h enter; keys x
         keys : e d enter; printf 'gateway\n'
-        keys : c enter; printf '\n'
+        keys : c p enter; printf '\n'
         keys : r m enter; printf 'y\n'
         keys enter; keys : n enter; printf 'extra\nGET\nhttp://x/e\nn\n'
         keys : r m enter; printf 'y\n'
@@ -750,7 +774,7 @@ test_review_flow() {
     } | req_nav_run "$p/.req" 2>&1)
     assert_contains "Press any key to go back" "$out" ":h opened the help"
     assert_contains "renamed to gateway" "$out" ":ed ran inside the loop"
-    assert_contains "copied to gateway-copy" "$out" ":c ran inside the loop"
+    assert_contains "copied to gateway-copy" "$out" ":cp ran inside the loop"
     assert_contains "removed extra.get.json" "$out" ":rm removed a request"
     assert_contains "removed gateway-copy" "$out" ":rm removed a directory"
     [[ -f $p/gateway/ping.get.json && ! -e $p/svc && ! -e $p/gateway-copy ]]
@@ -786,7 +810,7 @@ test_command_actions
 test_help
 test_dynamic_root
 test_command_rename_dir
-test_command_copy_dir
+test_command_copy
 test_command_remove
 test_command_remove_dir
 test_command_flow

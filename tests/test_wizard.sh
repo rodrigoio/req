@@ -315,48 +315,34 @@ test_rename_dir() {
     echo "wizard: rename directory"
     fresh rn
     mkdir -p "$D/api/v2" "$D/auth" "$D/taken"
-    printf '# project\napi\n\n  auth/  \n' >"$D/.req"
     req_request_write "$D/api" ping GET http://x >/dev/null
 
-    IN=$'service\n'; run req_wizard_rename_dir "$D/api" "$D/.req"
-    assert_eq "0" "$STATUS" "renames a directory listed in the .req"
+    IN=$'service\n'; run req_wizard_rename_dir "$D/api"
+    assert_eq "0" "$STATUS" "renames a directory"
     [[ -d $D/service/v2 && -f $D/service/ping.get.json && ! -e $D/api ]]; assert_eq "0" "$?" "the contents move with it"
     assert_eq "$D/service" "$REQ_LAST_DIR" "REQ_LAST_DIR is the new path"
-    assert_eq $'# project\nservice\n\n  auth/  ' "$(<"$D/.req")" "the .req entry is updated, the rest is kept"
+    assert_contains "Renamed $D/api to $D/service" "$OUT" "the result is reported"
 
-    IN=$'\n'; run req_wizard_rename_dir "$D/service" "$D/.req"
+    IN=$'\n'; run req_wizard_rename_dir "$D/service"
     assert_eq "1" "$STATUS" "keeping the default name changes nothing"
     assert_contains "Name unchanged" "$OUT" "and says so"
     [[ -d $D/service ]]; assert_eq "0" "$?" "the directory stays"
+    assert_contains "[service]" "$OUT" "the prompt offers the current name as default"
 
-    IN=$'\n'; run req_wizard_rename_dir "$D/auth" "$D/.req"
-    assert_eq "1" "$STATUS" "the prompt offers the current name as default"
-
-    run req_wizard_rename_dir "$D/service" "$D/.req" "taken"
+    run req_wizard_rename_dir "$D/service" "taken"
     assert_eq "1" "$STATUS" "refuses a name that already exists"
     assert_contains "already exists" "$OUT" "says why"
-    run req_wizard_rename_dir "$D/service" "$D/.req" "Bad Name"
+    run req_wizard_rename_dir "$D/service" "Bad Name"
     assert_eq "1" "$STATUS" "refuses an invalid name"
     assert_contains "invalid directory name" "$OUT" "says why"
-    assert_eq $'# project\nservice\n\n  auth/  ' "$(<"$D/.req")" "refusals leave the .req alone"
 
-    # A subdirectory that is not listed: only the directory moves.
-    run req_wizard_rename_dir "$D/service/v2" "$D/.req" "v3"
+    run req_wizard_rename_dir "$D/service/v2" "v3"
     assert_eq "0" "$STATUS" "renames a subdirectory"
     [[ -d $D/service/v3 && ! -e $D/service/v2 ]]; assert_eq "0" "$?" "it moved"
-    assert_eq $'# project\nservice\n\n  auth/  ' "$(<"$D/.req")" "and the .req is untouched"
 
-    # An absolute entry outside the project stays absolute.
-    fresh rnabs
-    mkdir -p "$D/p" "$TMP/outside-dir"
-    printf '%s\n' "$TMP/outside-dir" >"$D/p/.req"
-    run req_wizard_rename_dir "$TMP/outside-dir" "$D/p/.req" "moved-dir"
-    assert_eq "$TMP/moved-dir" "$(<"$D/p/.req")" "an entry outside the project stays absolute"
-    rm -rf "$TMP/moved-dir"
-
-    IN='<EOF>'; run req_wizard_rename_dir "$D/service" "$D/.req"
+    IN='<EOF>'; run req_wizard_rename_dir "$D/service"
     assert_eq "1" "$STATUS" "end of input cancels"
-    run req_wizard_rename_dir "$D/ghost" "$D/.req" "x"
+    run req_wizard_rename_dir "$D/ghost" "x"
     assert_eq "1" "$STATUS" "a missing directory fails"
 }
 
@@ -364,45 +350,73 @@ test_copy_dir() {
     echo "wizard: copy directory"
     fresh cp
     mkdir -p "$D/api/v2" "$D/auth"
-    printf '# project\napi\nauth\n' >"$D/.req"
     req_request_write "$D/api" ping GET http://x >/dev/null
     req_request_write "$D/api/v2" deep POST http://x/d '{"raw_data":{"a":1}}' >/dev/null
     ln -s ping.get.json "$D/api/link.json"
 
-    IN=$'\n'; run req_wizard_copy_dir "$D/api" "$D/.req"
+    IN=$'\n'; run req_wizard_copy_dir "$D/api"
     assert_eq "0" "$STATUS" "copies a directory with the default name"
+    assert_contains "[api-copy]" "$OUT" "the prompt offers <name>-copy"
     assert_eq "$D/api-copy" "$REQ_LAST_DIR" "REQ_LAST_DIR is the copy"
     [[ -f $D/api-copy/ping.get.json && -f $D/api-copy/v2/deep.post.json ]]; assert_eq "0" "$?" "everything inside is copied, subdirectories too"
     cmp -s "$D/api/v2/deep.post.json" "$D/api-copy/v2/deep.post.json"; assert_eq "0" "$?" "with the same content"
     [[ -f $D/api/ping.get.json && -d $D/api/v2 ]]; assert_eq "0" "$?" "the original is untouched"
     [[ -L $D/api-copy/link.json ]]; assert_eq "0" "$?" "symbolic links are copied as links"
-    assert_eq $'# project\napi\nauth\napi-copy' "$(<"$D/.req")" "the copy is listed in the .req"
     assert_eq "0" "$(req_request_check "$D/api-copy/ping.get.json" 2>/dev/null; echo $?)" "the copied request is valid"
 
-    IN=$'\nfresh-name\n'; run req_wizard_copy_dir "$D/api" "$D/.req"
+    IN=$'\nfresh-name\n'; run req_wizard_copy_dir "$D/api"
     assert_eq "0" "$STATUS" "a taken default asks again"
     assert_contains "already exists" "$OUT" "and says why"
     [[ -d $D/fresh-name ]]; assert_eq "0" "$?" "using the new name"
 
-    run req_wizard_copy_dir "$D/auth" "$D/.req" "auth-two"
+    run req_wizard_copy_dir "$D/auth" "auth-two"
     assert_eq "0" "$STATUS" "a name given as argument skips the prompt"
-    run req_wizard_copy_dir "$D/auth" "$D/.req" "auth-two"
+    run req_wizard_copy_dir "$D/auth" "auth-two"
     assert_eq "1" "$STATUS" "refuses an existing target"
-    run req_wizard_copy_dir "$D/auth" "$D/.req" "Bad Name"
+    run req_wizard_copy_dir "$D/auth" "Bad Name"
     assert_eq "1" "$STATUS" "refuses an invalid name"
     assert_contains "invalid directory name" "$OUT" "says why"
 
-    # A directory that is not listed: only the files are copied.
-    before=$(<"$D/.req")
-    run req_wizard_copy_dir "$D/api/v2" "$D/.req" "v3"
+    run req_wizard_copy_dir "$D/api/v2" "v3"
     assert_eq "0" "$STATUS" "copies a subdirectory"
     [[ -f $D/api/v3/deep.post.json ]]; assert_eq "0" "$?" "next to the original"
-    assert_eq "$before" "$(<"$D/.req")" "the .req is untouched"
 
-    IN='<EOF>'; run req_wizard_copy_dir "$D/api" "$D/.req"
+    IN='<EOF>'; run req_wizard_copy_dir "$D/api"
     assert_eq "1" "$STATUS" "end of input cancels"
-    run req_wizard_copy_dir "$D/ghost" "$D/.req" "x"
+    run req_wizard_copy_dir "$D/ghost" "x"
     assert_eq "1" "$STATUS" "a missing directory fails"
+}
+
+test_copy_request() {
+    echo "wizard: copy request"
+    fresh cr
+    req_request_write "$D" orig POST http://x/o '{"description":"d","headers":{"A":"1"},"raw_data":{"k":[1,2]}}' >/dev/null
+    printf '{broken' >"$D/oops.get.json"
+
+    IN=$'\n'; run req_wizard_copy_request "$D/orig.post.json"
+    assert_eq "0" "$STATUS" "copies a request with the default name"
+    assert_contains "[orig-copy]" "$OUT" "the prompt offers <name>-copy"
+    assert_eq "$D/orig-copy.post.json" "$REQ_LAST_FILE" "REQ_LAST_FILE is the copy"
+    assert_eq "orig-copy" "$(req_request_get "$D/orig-copy.post.json" name)" "the copy has the new name"
+    assert_eq "$(jq -c 'del(.name)' "$D/orig.post.json")" "$(jq -c 'del(.name)' "$D/orig-copy.post.json")" "and every other field is the same"
+    assert_contains "Created" "$OUT" "the result is reported"
+    [[ $OUT != *"Editing"* ]]; assert_eq "0" "$?" "no edit menu follows"
+
+    IN=$'\nother\n'; run req_wizard_copy_request "$D/orig.post.json"
+    assert_contains "already exists" "$OUT" "a taken default asks again"
+    [[ -f $D/other.post.json ]]; assert_eq "0" "$?" "using the new name"
+
+    run req_wizard_copy_request "$D/orig.post.json" "given"
+    assert_eq "0" "$STATUS" "a name given as argument skips the prompt"
+    run req_wizard_copy_request "$D/orig.post.json" "given"
+    assert_eq "1" "$STATUS" "refuses an existing target"
+    run req_wizard_copy_request "$D/orig.post.json" "Bad Name"
+    assert_eq "1" "$STATUS" "refuses an invalid name"
+    run req_wizard_copy_request "$D/oops.get.json" "x"
+    assert_eq "1" "$STATUS" "refuses an invalid request"
+    assert_contains "fix the file first: $D/oops.get.json" "$OUT" "and tells where it is"
+    IN='<EOF>'; run req_wizard_copy_request "$D/orig.post.json"
+    assert_eq "1" "$STATUS" "end of input cancels"
 }
 
 test_remove_request() {
@@ -438,70 +452,69 @@ test_remove_request() {
 test_remove_dir() {
     echo "wizard: remove directory"
     fresh rd
-    local proj=$D/proj out
-    mkdir -p "$proj/api/v2" "$proj/auth" "$D/outside/inner"
-    printf '# project\napi\nauth\n%s\n' "$D/outside" >"$proj/.req"
-    req_request_write "$proj/api" ping GET http://x >/dev/null
-    req_request_write "$proj/api/v2" deep GET http://x >/dev/null
+    local ws=$D/ws out before
+    mkdir -p "$ws/api/v2" "$ws/auth" "$D/outside/inner"
+    req_request_write "$ws/api" ping GET http://x >/dev/null
+    req_request_write "$ws/api/v2" deep GET http://x >/dev/null
     printf 'keep' >"$D/outside/precious.txt"
 
-    IN=$'\n'; run req_wizard_remove_dir "$proj/api" "$proj/.req"
+    IN=$'\n'; run req_wizard_remove_dir "$ws/api" "$ws"
     assert_eq "1" "$STATUS" "Enter keeps the directory (the default is no)"
     assert_contains "[y/N]" "$OUT" "the prompt shows the default"
-    assert_contains "Remove the directory $proj/api" "$OUT" "the warning has the full path"
+    assert_contains "Remove the directory $ws/api" "$OUT" "the warning has the full path"
     assert_contains "2 files in 1 subdirectories" "$OUT" "and the size of the contents"
-    [[ -f $proj/api/v2/deep.get.json ]]; assert_eq "0" "$?" "nothing was removed"
-    IN=$'n\n'; run req_wizard_remove_dir "$proj/api" "$proj/.req"; assert_eq "1" "$STATUS" "n keeps it"
-    IN='<EOF>'; run req_wizard_remove_dir "$proj/api" "$proj/.req"; assert_eq "1" "$STATUS" "end of input keeps it"
-    [[ -d $proj/api ]]; assert_eq "0" "$?" "still there"
+    [[ -f $ws/api/v2/deep.get.json ]]; assert_eq "0" "$?" "nothing was removed"
+    IN=$'n\n'; run req_wizard_remove_dir "$ws/api" "$ws"; assert_eq "1" "$STATUS" "n keeps it"
+    IN='<EOF>'; run req_wizard_remove_dir "$ws/api" "$ws"; assert_eq "1" "$STATUS" "end of input keeps it"
+    [[ -d $ws/api ]]; assert_eq "0" "$?" "still there"
 
-    REQ_COLORS=1; IN=$'n\n'; run req_wizard_remove_dir "$proj/api" "$proj/.req"; REQ_COLORS=0
+    REQ_COLORS=1; IN=$'n\n'; run req_wizard_remove_dir "$ws/api" "$ws"; REQ_COLORS=0
     assert_contains $'\033[31mRemove the directory' "$OUT" "the warning is red"
 
-    IN=$'y\n'; run req_wizard_remove_dir "$proj/api" "$proj/.req"
-    assert_eq "0" "$STATUS" "y removes a listed directory"
-    [[ ! -e $proj/api ]]; assert_eq "0" "$?" "with everything inside"
-    assert_eq "$proj/api" "$REQ_LAST_DIR" "REQ_LAST_DIR is the directory"
-    assert_eq $'# project\nauth\n'"$D/outside" "$(<"$proj/.req")" "and its .req entry is removed, the rest is kept"
-    [[ -d $proj/auth ]]; assert_eq "0" "$?" "other directories are untouched"
+    IN=$'y\n'; run req_wizard_remove_dir "$ws/api" "$ws"
+    assert_eq "0" "$STATUS" "y removes the directory"
+    [[ ! -e $ws/api ]]; assert_eq "0" "$?" "with everything inside"
+    assert_eq "$ws/api" "$REQ_LAST_DIR" "REQ_LAST_DIR is the directory"
+    [[ -d $ws/auth ]]; assert_eq "0" "$?" "other directories are untouched"
 
-    # A subdirectory that is not listed.
-    mkdir -p "$proj/auth/sub"; printf 'x' >"$proj/auth/sub/f"
-    before=$(<"$proj/.req")
-    IN=$'y\n'; run req_wizard_remove_dir "$proj/auth/sub" "$proj/.req"
+    mkdir -p "$ws/auth/sub"; printf 'x' >"$ws/auth/sub/f"
+    IN=$'y\n'; run req_wizard_remove_dir "$ws/auth/sub" "$ws"
     assert_eq "0" "$STATUS" "removes a subdirectory"
-    [[ ! -e $proj/auth/sub && -d $proj/auth ]]; assert_eq "0" "$?" "only that one"
-    assert_eq "$before" "$(<"$proj/.req")" "the .req is untouched"
+    [[ ! -e $ws/auth/sub && -d $ws/auth ]]; assert_eq "0" "$?" "only that one"
 
-    # Outside the project: the files are never deleted, only the entry can go.
-    IN=$'y\n'; run req_wizard_remove_dir "$D/outside" "$proj/.req"
-    assert_eq "0" "$STATUS" "an outside directory can be unlisted"
-    assert_contains "never deleted" "$OUT" "and the warning says its files are safe"
-    [[ -f $D/outside/precious.txt && -d $D/outside/inner ]]; assert_eq "0" "$?" "its files are kept"
-    assert_eq $'# project\nauth' "$(<"$proj/.req")" "the entry is gone from the .req"
-    IN='<EOF>'; run req_wizard_remove_dir "$D/outside" "$proj/.req"
-    assert_eq "1" "$STATUS" "an outside directory that is not listed is refused"
+    # Never outside the workspace: the files stay and nothing is asked.
+    IN=$'y\n'; run req_wizard_remove_dir "$D/outside" "$ws"
+    assert_eq "1" "$STATUS" "a directory outside the workspace is refused"
     assert_contains "refusing to remove" "$OUT" "with an explanation"
-    [[ -f $D/outside/precious.txt ]]; assert_eq "0" "$?" "still safe"
+    assert_contains "not a directory inside the workspace" "$OUT" "that names the rule"
+    [[ -f $D/outside/precious.txt && -d $D/outside/inner ]]; assert_eq "0" "$?" "its files are safe"
+    IN=$'y\n'; run req_wizard_remove_dir "$ws" "$ws"
+    assert_eq "1" "$STATUS" "the workspace itself is refused"
+    [[ -d $ws/auth ]]; assert_eq "0" "$?" "and is still there"
+    IN=$'y\n'; run req_wizard_remove_dir "$D" "$ws"
+    assert_eq "1" "$STATUS" "a parent of the workspace is refused"
+    [[ -d $ws ]]; assert_eq "0" "$?" "and is still there"
+    mkdir -p "$ws/auth/../auth2"
+    IN=$'y\n'; run req_wizard_remove_dir "$ws/auth/../../outside" "$ws"
+    assert_eq "1" "$STATUS" "a path that climbs out with .. is refused"
+    [[ -f $D/outside/precious.txt ]]; assert_eq "0" "$?" "and its files are safe"
 
-    # The project folder itself, its parents and symbolic links are never removed.
-    IN=$'y\n'; run req_wizard_remove_dir "$proj" "$proj/.req"
-    assert_eq "1" "$STATUS" "the project folder is refused"
-    [[ -f $proj/.req ]]; assert_eq "0" "$?" "and still there"
-    IN=$'y\n'; run req_wizard_remove_dir "$D" "$proj/.req"
-    assert_eq "1" "$STATUS" "a parent of the project is refused"
-    ln -s "$D/outside" "$proj/auth/link"
-    printf '%s\n' "auth/link" >>"$proj/.req"
-    IN=$'y\n'; run req_wizard_remove_dir "$proj/auth/link" "$proj/.req"
-    [[ -f $D/outside/precious.txt ]]; assert_eq "0" "$?" "a symbolic link never deletes its target"
-    assert_eq $'# project\nauth' "$(<"$proj/.req")" "a listed link is only unlisted"
-    ln -s "$D/outside" "$proj/auth/link2"
-    IN=$'y\n'; run req_wizard_remove_dir "$proj/auth/link2" "$proj/.req"
-    assert_eq "1" "$STATUS" "an unlisted link is refused"
-    [[ -f $D/outside/precious.txt && -L $proj/auth/link2 ]]; assert_eq "0" "$?" "and nothing changed"
+    # Symbolic links are never removed, and their target never touched.
+    ln -s "$D/outside" "$ws/auth/link"
+    IN=$'y\n'; run req_wizard_remove_dir "$ws/auth/link" "$ws"
+    assert_eq "1" "$STATUS" "a symbolic link is refused"
+    assert_contains "symbolic link" "$OUT" "and the reason is given"
+    [[ -f $D/outside/precious.txt && -L $ws/auth/link ]]; assert_eq "0" "$?" "the link and its target stay"
+    ln -s "$ws/auth" "$ws/auth-link"
+    IN=$'y\n'; run req_wizard_remove_dir "$ws/auth-link" "$ws"
+    assert_eq "1" "$STATUS" "a link to a directory inside the workspace is refused too"
+    [[ -d $ws/auth && -L $ws/auth-link ]]; assert_eq "0" "$?" "nothing changed"
 
-    run req_wizard_remove_dir "$proj/ghost" "$proj/.req"
+    run req_wizard_remove_dir "$ws/ghost" "$ws"
     assert_eq "1" "$STATUS" "a missing directory fails"
+    run req_wizard_remove_dir "$ws/auth" "$D/no-such-workspace"
+    assert_eq "1" "$STATUS" "a missing workspace fails"
+    assert_contains "workspace not found" "$OUT" "with a message"
 }
 
 test_pairs_and_presets
@@ -512,6 +525,7 @@ test_duplicate
 test_mkdir
 test_rename_dir
 test_copy_dir
+test_copy_request
 test_remove_request
 test_remove_dir
 test_summary

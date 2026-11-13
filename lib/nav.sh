@@ -18,7 +18,6 @@ REQ_SCREEN_DRAWN=0      # rows of the block already printed in the terminal
 REQ_SCREEN_EXTRA=0      # rows beyond one per line, from long lines that wrap
 REQ_BASE_EXTRA=0
 
-REQ_NAV_BASE=""         # directory of the .req file
 REQ_NAV_ROOT=""         # the menu root: the workspace of the project (set only by req_nav_root)
 REQ_CUR_DIR=""          # directory being shown ("" = project root)
 REQ_STACK_DIR=()        # navigation stack: previous directories and selections
@@ -122,12 +121,10 @@ req_nav_load() {
     REQ_TOP=0
 }
 
-# shellcheck disable=SC2034  # REQ_NAV_BASE is read by cmd.sh (the .req path)
 # req_nav_init <.req file> - sets the state up at the project root.
 req_nav_init() {
     local pfile=$1
     [[ -f $pfile ]] || { req_err "project file not found: $pfile"; return 1; }
-    REQ_NAV_BASE=$(cd -P "$(dirname "$pfile")" && pwd)
     req_nav_root "$pfile" || return 1
     REQ_CUR_DIR=""; REQ_STACK_DIR=(); REQ_STACK_SEL=()
     REQ_VIEW=list; REQ_DETAIL_FILE=""; REQ_DETAIL_VALID=0

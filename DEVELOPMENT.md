@@ -36,7 +36,7 @@ folder itself may be reached through a link: only the workspace part is checked.
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR3.5** (`:ed`, `:c` and `:rm` without the `.req` logic; TR3.1 to TR3.4 are done). Order agreed: Review 3 (R11) now, then TR2.4
+Next task: **TR3.6** (remove the dead `.req` entry helpers; TR3.1 to TR3.5 are done). Order agreed: Review 3 (R11) now, then TR2.4
 (per-project environments), the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
@@ -132,9 +132,9 @@ Directory rename (`req_wizard_rename_dir`, `:ed`, TR.10): renames the last path 
 renamed directory is not updated and becomes a missing entry (reported by `req_project_dirs`);
 that case is rare and not handled.
 
-Directory copy (`req_wizard_copy_dir`, `:c`, TR.11): `cp -RP` next to the original, default name
-`<name>-copy` (asked again while taken); a directory listed in the `.req` gets its copy appended
-there, and the copy is removed if the `.req` cannot be written.
+Copy (`req_wizard_copy_dir` and `req_wizard_copy_request`, `:cp`, TR.11 and TR3.5): `cp -RP` next to the
+original, default name `<name>-copy` (asked again while taken); it works on a directory or a request, asks
+for the name right away and does not open the edit menu. `:c` no longer exists.
 
 Request removal (`req_wizard_remove_request`, `:rm`, TR.12): shows the full path, asks `[y/N]` (default no,
 end of input means no) and removes the file. It works for invalid requests, from the list and from the

@@ -4,8 +4,8 @@
 # Commands:
 #   :n            new request in the current directory (wizard)
 #   :nd [name]    new directory (alias :mkdir); at the root it is also listed in the .req
-#   :ed [name]    rename the selected directory (also updates the .req entry)
-#   :c [name]     copy the selected directory with its contents (default <name>-copy)
+#   :ed [name]    rename the selected directory
+#   :cp [name]    copy the selected directory or request, asking for the new name (default <name>-copy)
 #   :rm           remove the selected request or directory (with its contents), after a [y/N] confirmation
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
@@ -31,8 +31,8 @@ REQ_HELP_ROWS=(
     "Commands"
     ":n|new request in the current directory"
     ":nd [name]|new directory (alias :mkdir)"
-    ":ed [name]|rename the directory under the cursor"
-    ":c [name]|copy the directory under the cursor, with its contents"
+    ":ed [name]|rename the directory under the cursor (a request is edited with :e)"
+    ":cp [name]|copy the directory (with its contents) or request under the cursor"
     ":rm|remove the selected request or directory, with a y/N question first"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
@@ -80,7 +80,7 @@ req_cmd_run() {
         n|new)        req_cmd_new ;;
         nd|mkdir)     req_cmd_mkdir "$arg" ;;
         ed)           req_cmd_rename_dir "$arg" ;;
-        c)            req_cmd_copy_dir "$arg" ;;
+        cp)           req_cmd_copy "$arg" ;;
         rm)           req_cmd_remove ;;
         e|edit)       req_cmd_edit ;;
         d|dup)        req_cmd_dup ;;
@@ -126,24 +126,44 @@ req_nav_selected_dir() {
 
 req_cmd_rename_dir() {
     local dir
-    dir=$(req_nav_selected_dir) || { REQ_STATUS="select a directory on the list first"; return 0; }
+    if ! dir=$(req_nav_selected_dir); then
+        if req_nav_selected_request >/dev/null; then
+            REQ_STATUS=":ed renames a directory; edit a request with :e"
+        else
+            REQ_STATUS="select a directory on the list first"
+        fi
+        return 0
+    fi
     req_nav_prompt_begin
-    if req_wizard_rename_dir "$dir" "$REQ_NAV_BASE/$REQ_PROJECT_FILE" "$1"; then
+    if req_wizard_rename_dir "$dir" "$1"; then
         req_nav_refresh "$REQ_LAST_DIR"
         REQ_STATUS="renamed to ${REQ_LAST_DIR##*/}"
     fi
     req_nav_prompt_end
 }
 
-req_cmd_copy_dir() {
-    local dir
-    dir=$(req_nav_selected_dir) || { REQ_STATUS="select a directory on the list first"; return 0; }
-    req_nav_prompt_begin
-    if req_wizard_copy_dir "$dir" "$REQ_NAV_BASE/$REQ_PROJECT_FILE" "$1"; then
-        req_nav_refresh "$REQ_LAST_DIR"
-        REQ_STATUS="copied to ${REQ_LAST_DIR##*/}"
+# req_cmd_copy [name] - :cp on the item under the cursor: a directory is copied with its
+# contents, a request is copied as it is; the new name is asked for, no edit menu follows.
+req_cmd_copy() {
+    local target
+    if target=$(req_nav_selected_request); then
+        req_nav_prompt_begin
+        if req_wizard_copy_request "$target" "$1"; then
+            [[ $REQ_VIEW == detail ]] && REQ_VIEW=list
+            req_nav_refresh "$REQ_LAST_FILE"
+            REQ_STATUS="copied to ${REQ_LAST_FILE##*/}"
+        fi
+        req_nav_prompt_end
+    elif target=$(req_nav_selected_dir); then
+        req_nav_prompt_begin
+        if req_wizard_copy_dir "$target" "$1"; then
+            req_nav_refresh "$REQ_LAST_DIR"
+            REQ_STATUS="copied to ${REQ_LAST_DIR##*/}"
+        fi
+        req_nav_prompt_end
+    else
+        REQ_STATUS="select a request or a directory first"
     fi
-    req_nav_prompt_end
 }
 
 req_cmd_remove() {
@@ -154,7 +174,7 @@ req_cmd_remove() {
     fi
     req_nav_prompt_begin
     if [[ $kind == directory ]]; then
-        req_wizard_remove_dir "$target" "$REQ_NAV_BASE/$REQ_PROJECT_FILE" && REQ_LAST_FILE=$REQ_LAST_DIR || REQ_LAST_FILE=""
+        req_wizard_remove_dir "$target" "$REQ_NAV_ROOT" && REQ_LAST_FILE=$REQ_LAST_DIR || REQ_LAST_FILE=""
     else
         req_wizard_remove_request "$target" || REQ_LAST_FILE=""
     fi
