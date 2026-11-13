@@ -2,7 +2,7 @@
 
 The interactive request tool for your terminal. A bash + curl utility to register, browse and fire HTTP requests, with persistence in plain JSON files.
 
-> Work in progress. The roadmap lives in [TASKS.md](TASKS.md); architecture, conventions and open questions are in [DEVELOPMENT.md](DEVELOPMENT.md).
+> The roadmap lives in [TASKS.md](TASKS.md); architecture, conventions and open questions are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Requirements
 
@@ -41,9 +41,9 @@ req run path/to/login.post.json   # run one request and show the response and ti
 req --version
 ```
 
-The response is shown in the terminal (indented JSON; text and HTML as received) and nothing is written to disk. Optional variables: `REQ_TIMEOUT` (default 60s) and `REQ_CONNECT_TIMEOUT` (default 10s).
+The response is shown in the terminal (indented JSON; text and HTML as received). Nothing is written to disk unless you turn the log on (see "Log"). `req run` exits with 0 whenever an HTTP response arrives, whatever its status code, and with 1 when the request is invalid or nothing came back (the exit code for 4xx and 5xx answers is an open question, see TA.8 in [TASKS.md](TASKS.md)). Optional variables: `REQ_TIMEOUT` (default 60s) and `REQ_CONNECT_TIMEOUT` (default 10s).
 
-Central state: the first time `req` opens a project (or `req init` creates one) it is registered in `~/.req/projects/<name>/`, where its state will live; `~/.req/current` points to the project in use. If `~/.req` cannot be written, `req` warns once and works without it. `REQ_CONFIG_DIR` changes that directory.
+Central state: the first time `req` opens a project (or `req init` creates one) it is registered in `~/.req/projects/<id>/`, where its state lives; `~/.req/current` points to the project in use. If `~/.req` cannot be written, `req` warns once and works without it. `REQ_CONFIG_DIR` changes that directory. See "The central directory" below for every file in it.
 
 ### Interactive menu
 
@@ -109,7 +109,7 @@ lib/log.sh     the project's log of the requests sent (`req.log`)
 lib/config.sh  settings (global `~/.req/config` and the project's `config`) and their table of keys
 lib/env.sh     environments and variables (loading `vars` and `env/<env>`)
 lib/home.sh    the central directory in ~/.req: `key=value` files, projects and the current-project pointer
-tests/         plain bash tests (no dependencies; see Requirements)
+tests/         plain bash tests (no dependencies; see Requirements) and `container.sh`
 Makefile       test, lint, install and uninstall
 ```
 
@@ -165,8 +165,28 @@ Settings are `key=value` lines in two files: `~/.req/projects/<id>/config` (or u
 | `time_stats` | `yes` | show the timing stages (DNS, TCP, TLS, Wait, Download) after a request runs, in the menu and in `req run` |
 | `time_stat_total` | `yes` | show the total time line of that profile |
 | `restore_cursor` | `yes` | reopen the menu in the directory and on the item where it was left; `no` always opens at the workspace root |
+| `log` | `no` | write the requests and responses to the project's `req.log` (see "Log") |
 
 The position is saved per project in `~/.req/projects/<id>/cursor` when you leave (`:q`, end of input, Ctrl-C). If the directory or the item is gone when you come back, `req` falls back to the nearest existing directory or to the first item.
+
+## The central directory
+
+Everything `req` keeps outside your repository lives in `~/.req` (or `REQ_CONFIG_DIR`), one folder per project, all of it plain text:
+
+```
+~/.req/
+  config                  global settings (key=value)
+  current                 id of the project in use
+  projects/<id>/
+    project               name= and path= of the project folder
+    config                the project's settings (win over the global ones)
+    vars                  variables shared by every environment
+    env/<env>             variables of one environment (dev, prod, ...)
+    cursor                dir= and item= where the menu was left
+    req.log               the log of requests and responses (only with log=yes)
+```
+
+`<id>` is a slug made from the folder's name (`my-api`, then `my-api-2` for another folder with the same name). Every file is `key=value`, one per line, with blank lines and `#` comments allowed. `req` creates `project` and `cursor` itself; you create `config`, `vars` and `env/<env>` (or `:config` does it) when you need them.
 
 ## Verbose
 

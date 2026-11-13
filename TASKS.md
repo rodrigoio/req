@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T7.4** (Fase 7; T7.1 e T7.2 feitas; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T8.1** (Fase 8; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1238 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1264 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -171,9 +171,9 @@ Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; ca
 - [x] T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`. Feita com `tests/container.sh` (`make container IMAGE=...`), como usuário comum: debian 12 (bash 5.2) passa com 1238 asserts, 0 falhas e 0 testes pulados.
 - [x] T7.2 Validação em containers centos e rhel, com os mesmos pontos: CentOS Stream 9 e UBI 9 (bash 5.1) e UBI 8 (RHEL 8: bash 4.4, curl 7.61, Python 3.6) passam. Achados: faltava `diffutils` (`cmp`) na imagem mínima, e o `mock_server.py` usava `ThreadingHTTPServer` (Python 3.7+), o que pulava os testes de execução em silêncio; corrigido, e o script passa a falhar com testes pulados.
 - [x] T7.3 `shellcheck`: corrigir os avisos (feito: `make lint` limpo em `bin/`, `lib/` e `tests/`).
-- T7.4 Documentação de uso.
-- T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do `.req` (`workspace`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
-- T7.6 Teste ponta a ponta do fluxo completo.
+- [x] T7.4 Documentação de uso (README): uso, código de saída do `req run`, seção "The central directory" e correção de trechos desatualizados ("nada é gravado em disco", a chave `log` na tabela de configurações).
+- [x] T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do `.req` (`workspace`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
+- [x] T7.6 Teste ponta a ponta do fluxo completo: `tests/test_e2e.sh` roda o `bin/req` real num pseudo-terminal (`tests/pty_run.py`, que também cobre a TA.9) com o mock server: `init`, criar a request pelo menu, variáveis e ambientes, `:env`, variável de processo, chave faltante, `:log`, `:v`, `:config log=yes` e `req run`.
 
 ### Adicionais — pendências e ajustes pós-validação (antes da Fase 8)
 Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das validações com usuários: confirmar a necessidade antes de implementar. O que uma validação confirma sai daqui e vira tarefa de uma seção de revisão (ver "Revisão 1"). Origem de cada ponto em `DEVELOPMENT.md`, seção "Open items to validate with users".
@@ -185,7 +185,7 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 - ~~TA.6~~ Decidida pela Revisão 3 (R11): a raiz é o `workspace` e lista requests e diretórios; `:n` na raiz cria a request (TR3.4).
 - TA.7 Redimensionamento do terminal: o menu não trata `SIGWINCH`; verificar o redesenho e o apagamento ao redimensionar. Inclui telas mais altas que o terminal (ajuda, detalhes com `raw_data` longo).
 - TA.8 Código de saída de `req run` para respostas 4xx e 5xx (hoje 0; só falha em erro de transporte). Decisão pendente.
-- TA.9 Teste em pseudo-terminal dentro da suíte (init, navegação, `:n`, `:q` e a chamada do editor externo), hoje só feito à mão; requer `python3` e é pulado sem ele.
+- TA.9 Teste em pseudo-terminal dentro da suíte (init, navegação, `:n`, `:q` e a chamada do editor externo), hoje só feito à mão; requer `python3` e é pulado sem ele. **Parcialmente feita pela T7.6** (`tests/pty_run.py`: init, `:n`, navegação, `:env`, `:v`, `:log`, `:config`, `:q`); falta a chamada do editor externo (`:e`).
 - TA.10 `REQ_ESC_TIMEOUT` (50 ms) em conexões lentas, como SSH: validar e documentar o ajuste.
 - TA.11 Validar em terminais reais sem UTF-8 e com `NO_COLOR`; os fallbacks existem, mas só foram testados em teste automatizado.
 - TA.12 Descrição com várias linhas na tela de detalhes (hoje as quebras viram espaço).
