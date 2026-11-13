@@ -22,7 +22,7 @@ REQ_NAV_ROOT=""         # the menu root: the workspace of the project (set only 
 REQ_CUR_DIR=""          # directory being shown ("" = project root)
 REQ_STACK_DIR=()        # navigation stack: previous directories and selections
 REQ_STACK_SEL=()
-REQ_VIEW=list           # list | detail | help
+REQ_VIEW=list           # list | detail | help | config
 REQ_DETAIL_FILE=""
 REQ_DETAIL_VALID=0
 
@@ -269,6 +269,22 @@ req_nav_build_help() {
     REQ_SCREEN_LINES+=("${c_dim}Press any key to go back${c_reset}")
 }
 
+# req_nav_build_config - the settings screen (:config): every known key with its value
+# in the global file and its default, and what it does.
+req_nav_build_config() {
+    local cols key w=0 value def c_dim c_bold c_reset
+    cols=$(req_term_cols)
+    c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
+    REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
+    for key in "${REQ_CONFIG_KEYS[@]}"; do (( ${#key} > w )) && w=${#key}; done
+    REQ_SCREEN_LINES+=("${c_bold}req${c_reset} settings   ${c_dim}$(req_config_file)${c_reset}")
+    for key in "${REQ_CONFIG_KEYS[@]}"; do
+        value=$(req_config_get "$key"); def=${REQ_CONFIG_DEFAULT[$key]}
+        REQ_SCREEN_LINES+=("  $(req_trunc "$(printf '%-*s  %-4s  default %-4s  %s' "$w" "$key" "$value" "$def" "${REQ_CONFIG_DESC[$key]}")" $((cols - 3)))")
+    done
+    REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value   Press any key to go back${c_reset}")
+}
+
 # req_nav_detail_section <title> <width> [line...]
 # Appends the title and the given lines; does nothing if there are no lines.
 req_nav_detail_section() {
@@ -323,8 +339,8 @@ req_nav_handle() {
         req_cmd_key "$key"
         return 0
     fi
-    if [[ $REQ_VIEW == help ]]; then
-        REQ_VIEW=$REQ_HELP_BACK     # any key closes the help
+    if [[ $REQ_VIEW == help || $REQ_VIEW == config ]]; then
+        REQ_VIEW=$REQ_HELP_BACK     # any key closes the help and the settings
         return 0
     fi
     if [[ $key == : ]]; then
@@ -369,6 +385,7 @@ req_nav_run() {
             case $REQ_VIEW in
                 detail) req_nav_build_detail ;;
                 help)   req_nav_build_help ;;
+                config) req_nav_build_config ;;
                 *)      req_nav_build_list ;;
             esac
             REQ_BASE_LINES=("${REQ_SCREEN_LINES[@]}"); REQ_BASE_EXTRA=$REQ_SCREEN_EXTRA

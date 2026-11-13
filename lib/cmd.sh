@@ -10,6 +10,7 @@
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
+#   :config [k=v] show the settings, or set one in the global configuration (~/.req/config)
 #   :h            help: every key and command (alias :help)
 # Esc leaves command mode; Backspace on an empty line does too.
 
@@ -36,6 +37,7 @@ REQ_HELP_ROWS=(
     ":rm|remove the selected request or directory, with a y/N question first"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
+    ":config [key=value]|show the settings, or change one (global ~/.req/config)"
     ":h|this help (alias :help)"
     ":q|quit (alias :quit)"
 )
@@ -84,6 +86,7 @@ req_cmd_run() {
         rm)           req_cmd_remove ;;
         e|edit)       req_cmd_edit ;;
         d|dup)        req_cmd_dup ;;
+        config)       req_cmd_config "$arg" ;;
         h|help)       REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=help ;;
         *)            REQ_STATUS="unknown command :$cmd (:h lists the commands)" ;;
     esac
@@ -237,4 +240,36 @@ req_cmd_dup() {
         req_nav_refresh "$REQ_LAST_FILE"
     fi
     req_nav_prompt_end
+}
+
+# req_cmd_config [key=value] - :config. Without an argument it opens the settings screen
+# (every known key, its value and its default). With key=value it checks the key and the
+# value against the table (req_config_valid) and writes the global configuration file.
+req_cmd_config() {
+    local arg=$1 key value
+    if [[ -z $arg ]]; then
+        req_config_load 2>/dev/null
+        REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=config
+        return 0
+    fi
+    if [[ $arg != *=* ]]; then
+        REQ_STATUS="usage: :config [key=value] (known keys: ${REQ_CONFIG_KEYS[*]})"
+        return 0
+    fi
+    key=$(req_trim "${arg%%=*}"); value=$(req_trim "${arg#*=}")
+    if ! req_config_known "$key"; then
+        REQ_STATUS="unknown setting \"$key\" (known keys: ${REQ_CONFIG_KEYS[*]})"
+        return 0
+    fi
+    if ! req_config_valid "$key" "$value"; then
+        REQ_STATUS="$key must be $(req_config_expect "$key"), not \"$value\""
+        return 0
+    fi
+    if req_kv_set "$(req_config_file)" "$key" "$value" 2>/dev/null; then
+        req_config_load 2>/dev/null
+        REQ_STATUS="$key=$value saved in $(req_config_file)"
+    else
+        REQ_STATUS="cannot write $(req_config_file)"
+    fi
+    return 0
 }

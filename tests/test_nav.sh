@@ -1,20 +1,35 @@
 #!/usr/bin/env bash
+# The libraries are linted on their own. Following all ten of them from here takes too
+# much time and memory, so they are not followed, and the REQ_* settings that the tests
+# set for them look unused.
+# shellcheck disable=SC2034
 # Tests for lib/nav.sh. Outside a terminal there are no colors and nothing is erased.
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 source "$ROOT/tests/helpers.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/core.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/ui.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/store.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/home.sh"
+# shellcheck source=/dev/null
+source "$ROOT/lib/config.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/http.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/nav.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/wizard.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/cmd.sh"
 
 # shellcheck disable=SC2031  # lib/store.sh sets LC_ALL in a subshell on purpose
 export LC_ALL=C COLUMNS=60 LINES=24
 TMP=$(mktemp -d)
+export REQ_CONFIG_DIR=$TMP/cfg      # never touch the real ~/.req
 SERVER_PID=""
 cleanup() { [[ -n $SERVER_PID ]] && kill "$SERVER_PID" 2>/dev/null; rm -rf "$TMP"; }
 trap cleanup EXIT
@@ -586,6 +601,51 @@ test_command_copy() {
     REQ_INPUT_FD=0
 }
 
+test_command_config() {
+    echo "nav: :config"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local out f=$REQ_CONFIG_DIR/config
+    rm -f "$f"
+
+    type_keys : c o n f i g enter
+    assert_eq "config" "$REQ_VIEW" ":config opens the settings screen"
+    REQ_NAV_DIRTY=1; req_nav_build_config; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
+    assert_contains "time_stats" "$out" "lists a key"
+    assert_contains "restore_cursor" "$out" "lists every known key"
+    assert_contains "default yes" "$out" "with its default"
+    assert_contains "$f" "$out" "and says which file it is"
+    assert_contains "Press any key" "$out" "and how to go back"
+    req_nav_handle x
+    assert_eq "list" "$REQ_VIEW" "any key returns to the list"
+
+    type_keys : c o n f i g ' ' t i m e _ s t a t s = n o enter
+    assert_eq "list" "$REQ_VIEW" ":config key=value stays on the list"
+    assert_contains "time_stats=no saved" "$REQ_STATUS" "and says it was saved"
+    assert_eq "no" "$(req_kv_get "$f" time_stats)" "the value is written to the global file"
+    assert_eq "no" "$(req_config_get time_stats)" "and is in effect"
+    type_keys : c o n f i g enter
+    REQ_NAV_DIRTY=1; req_nav_build_config; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
+    assert_contains "time_stats       no    default yes" "$out" "the screen shows the new value next to the default"
+    req_nav_handle x
+
+    REQ_CMD_BUF="config time_stats = yes"; type_keys :; REQ_CMD_BUF="config time_stats = yes"; req_nav_handle enter
+    assert_eq "yes" "$(req_kv_get "$f" time_stats)" "spaces around the = are fine"
+
+    REQ_STATUS=""; type_keys : c o n f i g ' ' c o l o r = r e d enter
+    assert_contains 'unknown setting "color"' "$REQ_STATUS" "an unknown key is explained"
+    assert_contains "time_stat_total" "$REQ_STATUS" "with the valid keys"
+    type_keys : c o n f i g ' ' t i m e _ s t a t s = m a y b e enter
+    assert_contains "time_stats must be yes or no" "$REQ_STATUS" "a wrong value says what is accepted"
+    assert_eq "yes" "$(req_kv_get "$f" time_stats)" "and nothing is written"
+    type_keys : c o n f i g ' ' t i m e _ s t a t s enter
+    assert_contains "usage: :config" "$REQ_STATUS" "a key without a value shows the usage"
+    [[ $(<"$f") != *color* ]]; assert_eq "0" "$?" "an invalid setting never reaches the file"
+
+    out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
+    assert_contains ":config" "$out" "the help lists :config"
+}
+
 test_command_remove() {
     echo "nav: :rm on a request"
     make_project
@@ -847,6 +907,7 @@ test_help
 test_dynamic_root
 test_command_rename_dir
 test_command_copy
+test_command_config
 test_command_remove
 test_command_remove_dir
 test_command_flow
