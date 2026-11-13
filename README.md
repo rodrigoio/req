@@ -153,7 +153,9 @@ Manually edited files that become invalid are never fixed: `req` only reports th
 |-----|---------|--------------|
 | `time_stats` | `yes` | show the timing stages (DNS, TCP, TLS, Wait, Download) after a request runs, in the menu and in `req run` |
 | `time_stat_total` | `yes` | show the total time line of that profile |
-| `restore_cursor` | `yes` | reopen the menu where it was left (not applied yet) |
+| `restore_cursor` | `yes` | reopen the menu in the directory and on the item where it was left; `no` always opens at the workspace root |
+
+The position is saved per project in `~/.req/projects/<id>/cursor` when you leave (`:q`, end of input, Ctrl-C). If the directory or the item is gone when you come back, `req` falls back to the nearest existing directory or to the first item.
 
 ## Environments and variables (in progress)
 

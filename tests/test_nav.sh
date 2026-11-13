@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The libraries are linted on their own. Following all ten of them from here takes too
 # much time and memory, so they are not followed, and the REQ_* settings that the tests
-# set for them look unused.
-# shellcheck disable=SC2034
+# set for them look unused. SC2030 and SC2031: the signal test sets state in a subshell on purpose.
+# shellcheck disable=SC2034,SC2030,SC2031
 # Tests for lib/nav.sh. Outside a terminal there are no colors and nothing is erased.
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -906,6 +906,68 @@ test_cursor_saved() {
     REQ_PROJECT_ID=""
 }
 
+test_cursor_restore() {
+    echo "nav: the cursor is restored on open"
+    local f i
+    make_project
+    req_project_activate "$PROJ" || return
+    f=$(req_cursor_file "$REQ_PROJECT_ID")
+    mkdir -p "$PROJ/api/v2/deep"
+    req_request_write "$PROJ/api/v2" ping GET http://x/p >/dev/null
+
+    req_cursor_save "$REQ_PROJECT_ID" "api/v2" "api/v2/ping.get.json"
+    req_nav_init "$PROJ/.req"; req_nav_restore_cursor
+    assert_eq "$PROJ/api/v2" "$REQ_CUR_DIR" "the directory is reopened"
+    assert_eq "ping" "${REQ_ITEM_LABEL[REQ_SEL]}" "and the item is selected"
+    assert_eq "list" "$REQ_VIEW" "on the list"
+    assert_eq "2" "${#REQ_STACK_DIR[@]}" "the Esc stack has one level per directory"
+    req_nav_back
+    assert_eq "$PROJ/api" "$REQ_CUR_DIR" "Esc goes up to the parent"
+    assert_eq "v2" "${REQ_ITEM_LABEL[REQ_SEL]}" "with the directory just left selected"
+    req_nav_back
+    assert_eq "" "$REQ_CUR_DIR" "and up to the root"
+    assert_eq "api" "${REQ_ITEM_LABEL[REQ_SEL]}" "with its directory selected"
+
+    req_cursor_save "$REQ_PROJECT_ID" "api/gone/deeper" "api/gone/deeper/x.get.json"
+    req_nav_init "$PROJ/.req"; req_nav_restore_cursor
+    assert_eq "$PROJ/api" "$REQ_CUR_DIR" "a missing directory leads to its nearest existing ancestor"
+    assert_eq "0" "$REQ_SEL" "with the first item selected"
+
+    req_cursor_save "$REQ_PROJECT_ID" "api/v2" "api/v2/nope.get.json"
+    req_nav_init "$PROJ/.req"; req_nav_restore_cursor
+    assert_eq "$PROJ/api/v2" "$REQ_CUR_DIR" "a missing item keeps the directory"
+    assert_eq "0" "$REQ_SEL" "and selects the first item"
+
+    req_cursor_save "$REQ_PROJECT_ID" "" "auth"
+    req_nav_init "$PROJ/.req"; req_nav_restore_cursor
+    assert_eq "" "$REQ_CUR_DIR" "an empty directory is the root"
+    assert_eq "auth" "${REQ_ITEM_LABEL[REQ_SEL]}" "with the saved item selected"
+
+    rm -f "$f"
+    req_nav_init "$PROJ/.req"; req_nav_restore_cursor; assert_eq "0" "$?" "a missing file is not an error"
+    assert_eq "" "$REQ_CUR_DIR" "and stays at the root"
+    for bad in $'dir=../outside\nitem=' $'dir=/etc\nitem=' $'dir=api//v2\nitem=' $'dir=api/\nitem=' $'dir=./api\nitem=' $'item=../x' 'garbage' ''; do
+        printf '%s\n' "$bad" >"$f"
+        req_nav_init "$PROJ/.req"; req_nav_restore_cursor
+        assert_eq "|0" "$REQ_CUR_DIR|$REQ_SEL" "an invalid file leaves the root: $(printf %q "$bad")"
+    done
+
+    rm -f "$f"; req_cursor_save "$REQ_PROJECT_ID" "api" "api/v2"
+    REQ_CONFIG=([restore_cursor]=no)
+    req_nav_init "$PROJ/.req"; req_nav_restore_cursor
+    assert_eq "" "$REQ_CUR_DIR" "restore_cursor=no keeps the root"
+    REQ_CONFIG=()
+    REQ_PROJECT_ID=""
+    req_nav_init "$PROJ/.req"; req_nav_restore_cursor
+    assert_eq "" "$REQ_CUR_DIR" "without a project nothing is restored"
+    REQ_PROJECT_ID=$(req_project_find_id "$PROJ")
+
+    # Through the main loop: reopen where it was left, then leave again at the same place.
+    req_cursor_save "$REQ_PROJECT_ID" "api" "api/v2"
+    { keys : q enter; } | req_nav_run "$PROJ/.req" >/dev/null 2>&1
+    assert_eq $'dir=api\nitem=api/v2' "$(<"$f")" "the loop reopens at the cursor and saves the same place"
+}
+
 test_start_init() {
     echo "nav: init prompt"
     local d=$TMP/fresh out
@@ -943,6 +1005,7 @@ test_command_flow
 test_review_flow
 test_workspace_flow
 test_cursor_saved
+test_cursor_restore
 test_start_init
 test_end_to_end
 test_summary

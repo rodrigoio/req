@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir) e a Revisão 2 até a TR2.8. Próxima tarefa: **TR2.9** (Revisão 2: retomar o cursor ao abrir). A Revisão 3 (TR3.1 a TR3.7) está concluída.
+- Feito: Fases 0 a 4, a T5.1, a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir) e a Revisão 2 até a TR2.9. Próxima tarefa: **TR2.10** (Revisão 2: verificação final). A Revisão 3 (TR3.1 a TR3.7) está concluída.
 - Ordem combinada: **Revisão 3 (R11, `.req` com `workspace` e raiz dinâmica) agora**, depois a TR2.4 (ambientes por projeto), e então as demais tarefas da Revisão 2 e a Fase 5. As TR2.1 a TR2.4 continuam sendo pré-requisito da Fase 5.
-- Suíte: `make check` com 985 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1012 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -209,7 +209,7 @@ Tarefas (R9):
 
 Tarefas (R8):
 - [x] TR2.8 (R8) Gravar o cursor ao sair (`:q`, fim da entrada e sinais) em `projects/<id>/cursor`: diretório atual e item selecionado, relativos ao `workspace`, em `chave=valor`.
-- TR2.9 (R8) Retomar o cursor ao abrir: volta ao diretório e ao item (a pilha do Esc é refeita); diretório inexistente leva ao ancestral mais próximo, item inexistente ao primeiro; arquivo ausente ou inválido leva à raiz sem erro; a chave `restore_cursor` (padrão `yes`) desliga a retomada.
+- [x] TR2.9 (R8) Retomar o cursor ao abrir: volta ao diretório e ao item (a pilha do Esc é refeita); diretório inexistente leva ao ancestral mais próximo, item inexistente ao primeiro; arquivo ausente ou inválido leva à raiz sem erro; a chave `restore_cursor` (padrão `yes`) desliga a retomada.
 - TR2.10 Verificação da Revisão 2: fluxo integrado pelo laço principal (sair e reabrir no mesmo lugar, `:config`, projeto registrado), demonstração em terminal real (pty) e revisão final do README e do `DEVELOPMENT.md`.
 
 ### Revisão 3 — achado R11 (executar agora, antes da TR2.4)

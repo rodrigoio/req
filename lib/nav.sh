@@ -144,6 +144,56 @@ req_nav_save_cursor() {
     return 0
 }
 
+# req_nav_cursor_path_ok <relative path> - succeeds for "" or a plain relative path
+# (no leading or trailing slash, no empty, "." or ".." component), so a hand-edited
+# cursor file cannot lead outside the workspace.
+req_nav_cursor_path_ok() {
+    local parts comp
+    [[ -z $1 ]] && return 0
+    [[ $1 != /* && $1 != */ ]] || return 1
+    IFS=/ read -ra parts <<<"$1"
+    for comp in "${parts[@]}"; do
+        [[ -n $comp && $comp != . && $comp != .. ]] || return 1
+    done
+}
+
+# req_nav_restore_cursor - puts the menu where the project's cursor file says: the
+# directory (the Esc stack is rebuilt on the way down) and the selected item. A directory
+# that is gone leads to its nearest existing ancestor, an item that is gone to the first
+# one; a missing or invalid file, no project or restore_cursor=no leave the root. Never
+# an error. Call it right after req_nav_init.
+req_nav_restore_cursor() {
+    local file dir item path comp i found parts
+    [[ -n $REQ_PROJECT_ID && -n $REQ_NAV_ROOT ]] || return 0
+    [[ $(req_config_get restore_cursor) == yes ]] || return 0
+    file=$(req_cursor_file "$REQ_PROJECT_ID")
+    [[ -f $file ]] || return 0
+    dir=$(req_kv_get "$file" dir) || dir=""
+    item=$(req_kv_get "$file" item) || item=""
+    req_nav_cursor_path_ok "$dir" && req_nav_cursor_path_ok "$item" || return 0
+    if [[ -n $dir ]]; then
+        IFS=/ read -ra parts <<<"$dir"
+        path=${REQ_CUR_DIR:-$REQ_NAV_ROOT}
+        for comp in "${parts[@]}"; do
+            path=$path/$comp; found=-1
+            for i in "${!REQ_ITEM_PATH[@]}"; do
+                [[ ${REQ_ITEM_KIND[i]} == d && ${REQ_ITEM_PATH[i]} == "$path" ]] && found=$i
+            done
+            if (( found < 0 )); then item=""; break; fi
+            REQ_SEL=$found
+            REQ_STACK_DIR+=("$REQ_CUR_DIR"); REQ_STACK_SEL+=("$REQ_SEL")
+            REQ_CUR_DIR=$path
+            req_nav_load
+        done
+    fi
+    [[ -n $item ]] || return 0
+    path=$REQ_NAV_ROOT/$item
+    for i in "${!REQ_ITEM_PATH[@]}"; do
+        [[ ${REQ_ITEM_PATH[i]} == "$path" ]] && REQ_SEL=$i
+    done
+    return 0
+}
+
 # req_nav_refresh <path> - reloads the current directory (or the project root) and
 # selects <path> in it, if present.
 req_nav_refresh() {
@@ -392,6 +442,7 @@ req_nav_overlay() {
 # shellcheck disable=SC2034  # REQ_EXIT_HOOK is read by req_on_exit (core.sh)
 req_nav_run() {
     req_nav_init "$1" || return 1
+    req_nav_restore_cursor
     REQ_EXIT_HOOK=req_nav_save_cursor      # a signal ends the process: save the cursor then too
     [[ -t 1 ]] && printf '\033[?25l'
     [[ -t 0 ]] && stty -echo 2>/dev/null

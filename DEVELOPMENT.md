@@ -36,7 +36,7 @@ folder itself may be reached through a link: only the workspace part is checked.
 | 5 Environments and secrets | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR2.9** (restore the cursor on open; TR2.5 to TR2.8, the global configuration, `:config`, the `time_stats` keys and saving the cursor, are done; Review 3 and TR2.4 are done). Order agreed: the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
+Next task: **TR2.10** (Review 2 verification; TR2.5 to TR2.9, the global configuration, `:config`, the `time_stats` keys and the cursor save and restore, are done; Review 3 and TR2.4 are done). Order agreed: the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
 
@@ -171,7 +171,7 @@ finds the id by that path (symbolic links and `..` resolve first). The id is the
 name (`req_project_slug`), with `-2`, `-3`... when another path already uses it. The project in use
 is `~/.req/current` (`project=<id>`): `req_current_get` returns nothing when the file is missing,
 the id is not a slug or its directory is gone; `req_current_set` refuses unknown projects. The
-files `vars` and `env/<env>` are read by `lib/env.sh` (TR2.4), `config` by `lib/config.sh` and `cursor` is written by the menu on exit (`req_nav_save_cursor`, TR2.8: `dir` and `item`, relative to the workspace, saved on `:q`, at the end of the input and on a signal through `REQ_EXIT_HOOK`, which the EXIT trap `req_on_exit` runs); reading it back is TR2.9.
+files `vars` and `env/<env>` are read by `lib/env.sh` (TR2.4), `config` by `lib/config.sh` and `cursor` is written by the menu on exit (`req_nav_save_cursor`, TR2.8: `dir` and `item`, relative to the workspace, saved on `:q`, at the end of the input and on a signal through `REQ_EXIT_HOOK`, which the EXIT trap `req_on_exit` runs); `req_nav_restore_cursor` (TR2.9, called by `req_nav_run` right after `req_nav_init`) rebuilds the Esc stack down to the saved directory and selects the item; a gone directory falls back to its nearest ancestor, a gone item to the first, and a missing or invalid file (including `..`, absolute or empty components), no project or `restore_cursor=no` mean the root.
 
 Registration (TR2.3): `req_project_activate <dir>` finds or creates the project and makes it the
 current one, setting `REQ_PROJECT_ID`. It runs on `req init` and whenever the menu opens a `.req`
@@ -182,7 +182,7 @@ line (`req_warn` in `core.sh`) and returns 1; `req init` and the menu carry on w
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 985 asserts at the time of writing.
+`assert_contains`, `test_summary`). 1012 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed
