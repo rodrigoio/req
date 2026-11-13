@@ -204,7 +204,8 @@ req_print_body() {
 # and a line of "=" that separates the result from the menu redrawn after it. Before
 # sending, every ${key} in the url, headers, query, parameters and raw_data is replaced
 # by its value in the environment REQ_ENV (default "default"); a key without a value
-# stops the request with an error that says how to define it.
+# stops the request with an error that says how to define it. With the "log" setting on,
+# the request is written to the project's log just before it is sent (log.sh).
 req_run_request() {
     local file=$1 json status env=${REQ_ENV:-default}
     req_request_check "$file" || return 1
@@ -212,6 +213,7 @@ req_run_request() {
     req_vars_load "$env" || return 1
     req_subst_json "$json" "$env" || return 1
     req_build_curl_args "$REQ_SUBST_OUT" || return 1
+    req_log_request "$file" "$env"
 
     req_method_color "$REQ_P_METHOD"; printf '%s' "$REQ_P_METHOD"; req_color reset
     printf ' %s\n' "$REQ_P_URL"
