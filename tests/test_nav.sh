@@ -781,6 +781,42 @@ test_review_flow() {
     assert_eq "0" "$?" "the filesystem ends as expected"
 }
 
+test_workspace_flow() {
+    echo "nav: workspace flow through the main loop"
+    local p=$TMP/ws out before
+    mkdir -p "$p/requests" "$p/other"
+    printf '# project\nworkspace=requests\n' >"$p/.req"
+    printf 'keep\n' >"$p/other/notes.txt"; printf 'keep\n' >"$p/readme.txt"
+    before=$(<"$p/.req")
+    # One stream of keys and answers: create a directory and a request at the root,
+    # rename the directory, copy and remove the copy, then work inside the directory:
+    # create a request, copy it, remove the copy. Quit.
+    out=$({
+        keys : n d ' ' a p i enter
+        keys : n enter; printf 'top\nGET\nhttp://x/t\nn\n'
+        keys up; keys : e d ' ' g a t e w a y enter
+        keys : c p enter; printf '\n'
+        keys : r m enter; printf 'y\n'
+        keys up; keys enter
+        keys : n enter; printf 'inner\nGET\nhttp://x/i\nn\n'
+        keys : c p ' ' i n n e r 2 enter
+        keys : r m enter; printf 'y\n'
+        keys : q enter
+    } | req_nav_run "$p/.req" 2>&1)
+    assert_contains "renamed to gateway" "$out" ":ed renamed the directory"
+    assert_contains "copied to gateway-copy" "$out" ":cp copied the directory"
+    assert_contains "removed gateway-copy" "$out" ":rm removed the copy"
+    assert_contains "copied to inner2.get.json" "$out" ":cp copied a request"
+    assert_contains "removed inner2.get.json" "$out" ":rm removed a request"
+    [[ -f $p/requests/top.get.json && -f $p/requests/gateway/inner.get.json ]]
+    assert_eq "0" "$?" "requests live in the workspace"
+    [[ ! -e $p/requests/api && ! -e $p/requests/gateway-copy && ! -e $p/requests/gateway/inner2.get.json ]]
+    assert_eq "0" "$?" "the renamed and removed items are gone"
+    assert_eq "$before" "$(<"$p/.req")" "the .req was never rewritten"
+    assert_eq "keep keep" "$(<"$p/other/notes.txt") $(<"$p/readme.txt")" "files outside the workspace are untouched"
+    assert_eq "" "$(find "$p" -mindepth 1 -maxdepth 1 ! -name requests ! -name other ! -name readme.txt ! -name .req)" "nothing was created outside the workspace"
+}
+
 test_start_init() {
     echo "nav: init prompt"
     local d=$TMP/fresh out
@@ -815,6 +851,7 @@ test_command_remove
 test_command_remove_dir
 test_command_flow
 test_review_flow
+test_workspace_flow
 test_start_init
 test_end_to_end
 test_summary
