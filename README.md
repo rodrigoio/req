@@ -62,9 +62,9 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 
 | Command | Action |
 |---|---|
-| `:n` | new request in the current directory: asks for the name (a slug), method and url, then optionally for a description, a format preset (json, text, html), headers, query and parameters |
+| `:n` | new request in the current directory: asks for the name (a slug), method and url, then optionally for a description, a format preset (json, text, html), headers and query. For POST, PUT and PATCH with a preset, it offers to write the body (`raw_data`) in your editor; declining, or choosing no preset, asks for `parameters` instead |
 | `:nd [name]` | new directory (alias `:mkdir`). At the root it is also added to the `.req`; inside a directory it creates a real subdirectory |
-| `:e` | edit the selected request (or the one open on the details screen) through a field menu; changing the name or the method renames the file |
+| `:e` | edit the selected request (or the one open on the details screen) through a field menu; changing the name or the method renames the file. Option `8) raw data` opens the body in your editor (`$VISUAL`, `$EDITOR`, `vim`, `vi`, like git); without one it asks for a single line (`-` clears). JSON objects and lists are stored as native JSON; other text is stored as a string, and you are offered to edit it again first unless the request has a non-JSON `Content-Type` |
 | `:d` | duplicate the selected request under a new name and open the edit menu on the copy |
 | `:h` | help: lists every key and command (alias `:help`); any key goes back. A new command is added to the `REQ_HELP_ROWS` table in `lib/cmd.sh` |
 | `:q` | quit, without asking for confirmation |

@@ -13,7 +13,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR.7** (`8) raw data` in the edit menu; TR.1 to TR.6 are done). Phase 5 resumes at T5.2 after TR.15. See
+Next task: **TR.9** (`.req` helpers, infrastructure; TR.1 to TR.8 are done). Phase 5 resumes at T5.2 after TR.15. See
 "Review 1 findings" below.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
@@ -91,7 +91,7 @@ caller hands the terminal over first (`req_nav_prompt_begin`); the helper does n
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 529 asserts at the time of writing.
+`assert_contains`, `test_summary`). 559 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed
@@ -148,7 +148,7 @@ worth observing in usability sessions; each one is cheap to change.
 7. **Requests cannot be created at the root**, only inside a directory (the root is
    the list of directories in `.req`). `:n` there explains it and suggests `:nd`.
 8. **Directory names are slugs** (no uppercase, dots or underscores), same as requests.
-9. **Edit menu** is numbered fields (`1`-`7`, `s`, `q`) and is redrawn after each
+9. **Edit menu** is numbered fields (`1`-`8`, `s`, `q`) and is redrawn after each
    field; long header/query sets are edited one `key: value` line at a time.
 10. **Long lists and long names**: scrolling is by window and names are truncated with
     `…`; very long names or paths on narrow terminals deserve a look.

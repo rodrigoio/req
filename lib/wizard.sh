@@ -6,6 +6,7 @@
 # accepts its default with Enter.
 
 REQ_REPLY_JSON="{}"     # last object built by req_ask_pairs / req_ask_preset
+REQ_PRESET=none         # format chosen by the last req_ask_preset: json, text, html or none
 REQ_LAST_FILE=""        # last request file written by a wizard
 REQ_LAST_DIR=""         # last directory created by a wizard
 
@@ -63,7 +64,7 @@ req_preset_headers() {
 }
 
 # req_ask_preset - asks for a popular format (json, text, html); the matching
-# headers object ends up in REQ_REPLY_JSON.
+# headers object ends up in REQ_REPLY_JSON and the choice in REQ_PRESET.
 req_ask_preset() {
     local choice
     while :; do
@@ -75,6 +76,7 @@ req_ask_preset() {
             4|none) choice=none ;;
             *) req_err "choose 1-4"; continue ;;
         esac
+        REQ_PRESET=$choice
         REQ_REPLY_JSON=$(req_preset_headers "$choice")
         return 0
     done
@@ -110,9 +112,55 @@ req_ask_pairs() {
     REQ_REPLY_JSON=$json
 }
 
+# req_raw_text <json value> - prints raw_data as editable text: indented JSON for an
+# object or list, the string itself otherwise ("" when there is no value).
+req_raw_text() {
+    [[ -n ${1-} ]] || return 0
+    if [[ $(jq -r type <<<"$1") == string ]]; then jq -r . <<<"$1"; else jq . <<<"$1"; fi
+}
+
+# req_ask_raw_data <current> [ask] - edits the raw body (raw_data). <current> is the
+# JSON value now stored ("" when none). The text is edited in the external editor
+# (req_edit_text), or on one prompt line when there is no editor. An empty result
+# clears raw_data. An object or list is stored as native JSON; any other text is
+# stored as a string, but when [ask] is 1 (the default) the user is first offered to
+# edit it again, since it was probably meant to be JSON. On success REQ_REPLY_JSON
+# holds the new JSON value ("" = clear) and the status is 0; status 1 keeps it as is.
+req_ask_raw_data() {
+    local text native status ask=${2:-1}
+    text=$(req_raw_text "${1-}")
+    while :; do
+        if req_edit_text "$text" .json; then
+            text=$REQ_EDIT_TEXT
+        else
+            status=$?
+            if (( status == 1 )); then req_err "the editor failed; raw data left as it was"; return 1; fi
+            local def=$text
+            [[ $def == *$'\n'* ]] && def=$(jq -c . <<<"$def" 2>/dev/null || tr '\n' ' ' <<<"$def")
+            req_prompt "Raw data on one line (- clears; set an editor with \$EDITOR for more)" "$def" || return 1
+            text=$REQ_REPLY
+            [[ $text == - ]] && text=""
+        fi
+        if [[ -z $(req_trim "$text") ]]; then REQ_REPLY_JSON=""; return 0; fi
+        native=$(jq -c 'select(type == "object" or type == "array")' <<<"$text" 2>/dev/null)
+        if [[ -n $native ]]; then REQ_REPLY_JSON=$native; return 0; fi
+        if (( ask )); then
+            req_prompt "Not a JSON object or list: 1) edit again  2) keep as text  3) discard" "1" || return 1
+            case ${REQ_REPLY,,} in
+                1|e|edit) continue ;;
+                3|d|discard) return 1 ;;
+                2|k|keep|t|text) ;;
+                *) req_err "choose 1-3"; continue ;;
+            esac
+        fi
+        REQ_REPLY_JSON=$(jq -cn --arg t "$text" '$t')
+        return 0
+    done
+}
+
 # req_wizard_new <directory> - creates a request in the directory.
 req_wizard_new() {
-    local dir=$1 name method url desc="" headers="{}" query="{}" params="{}" json target
+    local dir=$1 name method url desc="" headers="{}" query="{}" params="{}" raw="" json target
     req_ask_name "" || { req_cancelled; return 1; }
     name=$REQ_REPLY
     req_ask_method GET || { req_cancelled; return 1; }
@@ -124,16 +172,29 @@ req_wizard_new() {
 
     if req_confirm "Add optional fields (description, headers, query, parameters)?" n; then
         req_prompt "Description" "" && desc=$REQ_REPLY
+        REQ_PRESET=none
         req_ask_preset && headers=$REQ_REPLY_JSON
         req_ask_pairs "Headers" ":" "$headers" && headers=$REQ_REPLY_JSON
         req_ask_pairs "Query" "=" "{}" && query=$REQ_REPLY_JSON
         case $method in
-            POST|PUT|PATCH) req_ask_pairs "Parameters" "=" "{}" && params=$REQ_REPLY_JSON ;;
+            POST|PUT|PATCH)
+                # With a format preset the body is usually raw: offer the editor first, and
+                # ask for form parameters only when it is declined (or there is no preset).
+                if [[ $REQ_PRESET != none ]] &&
+                   req_confirm "Write the body (raw data) in your editor?" y; then
+                    # Only JSON is questioned when the text is not an object or list.
+                    local ask=0; [[ $REQ_PRESET == json ]] && ask=1
+                    req_ask_raw_data "" "$ask" && raw=$REQ_REPLY_JSON
+                else
+                    req_ask_pairs "Parameters" "=" "{}" && params=$REQ_REPLY_JSON
+                fi ;;
         esac
     fi
 
     json=$(jq -cn --arg d "$desc" --argjson h "$headers" --argjson q "$query" --argjson p "$params" \
-        '{description: $d, headers: $h, query: $q, parameters: $p}')
+        --arg r "$raw" \
+        '{description: $d, headers: $h, query: $q, parameters: $p}
+         + (if $r == "" then {} else {raw_data: ($r | fromjson)} end)')
     REQ_LAST_FILE=$(req_request_write "$dir" "$name" "$method" "$url" "$json") || return 1
     printf 'Created %s\n' "$REQ_LAST_FILE"
 }
@@ -148,13 +209,17 @@ req_edit_show() {
         "  4) description  \(.description // "")",
         "  5) headers      \((.headers // {}) | count)",
         "  6) query        \((.query // {}) | count)",
-        "  7) parameters   \((.parameters // {}) | count)"' <<<"$1"
+        "  7) parameters   \((.parameters // {}) | count)",
+        "  8) raw data     \(.raw_data // "" | if . == "" then "none"
+                              elif type == "string" then "text, \(length) chars"
+                              elif type == "array" then "JSON list, \(length) items"
+                              else "JSON object, \(length) keys" end)"' <<<"$1"
 }
 
 # req_wizard_edit <file> - field menu for a request. Changing the name or the
 # method renames the file. Returns 0 after saving and 1 when cancelled.
 req_wizard_edit() {
-    local file=$1 dir json name method url target fields newfile cur
+    local file=$1 dir json name method url target fields newfile cur ask
     dir=$(dirname "$file")
     req_request_check "$file" 2>/dev/null || {
         req_err "cannot edit an invalid request, fix the file first: $(req_abs_path "$file")"; return 1; }
@@ -163,7 +228,7 @@ req_wizard_edit() {
     while :; do
         printf 'Editing %s\n' "${file##*/}"
         req_edit_show "$json"
-        req_prompt "Field to edit (1-7), s to save, q to cancel" "" || { req_cancelled; return 1; }
+        req_prompt "Field to edit (1-8), s to save, q to cancel" "" || { req_cancelled; return 1; }
         case ${REQ_REPLY,,} in
             1) req_ask_name "$(jq -r .name <<<"$json")" &&
                    json=$(jq -c --arg v "$REQ_REPLY" '.name = $v' <<<"$json") ;;
@@ -182,6 +247,19 @@ req_wizard_edit() {
                    json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.query = $v' <<<"$json") ;;
             7) req_ask_pairs "Parameters" "=" "$(jq -c '.parameters // {}' <<<"$json")" &&
                    json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.parameters = $v' <<<"$json") ;;
+            8) cur=$(jq -c '.raw_data // ""' <<<"$json")
+               [[ $cur == '""' ]] && cur=""
+               # Free text is not questioned when the request declares a non-JSON Content-Type.
+               ask=$(jq -r '[(.headers // {}) | to_entries[] | select(.key | ascii_downcase == "content-type")
+                             | .value | tostring | ascii_downcase] as $c
+                            | if ($c | length) > 0 and ($c | all(contains("json") | not)) then 0 else 1 end' <<<"$json")
+               if req_ask_raw_data "$cur" "$ask"; then
+                   if [[ -z $REQ_REPLY_JSON ]]; then
+                       json=$(jq -c 'del(.raw_data)' <<<"$json")
+                   else
+                       json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.raw_data = $v' <<<"$json")
+                   fi
+               fi ;;
             s|save)
                 name=$(jq -r .name <<<"$json"); method=$(jq -r '.method | ascii_upcase' <<<"$json")
                 url=$(jq -r .url <<<"$json")
@@ -197,7 +275,7 @@ req_wizard_edit() {
                 printf 'Saved %s\n' "$newfile"
                 return 0 ;;
             q|quit|cancel) req_cancelled; return 1 ;;
-            *) req_err "choose 1-7, s or q" ;;
+            *) req_err "choose 1-8, s or q" ;;
         esac
     done
 }

@@ -25,6 +25,9 @@ run() {
     OUT=$(<"$TMP/out")
 }
 
+# fake_editor <path> <sh commands> - an "editor" script that runs the commands on "$1".
+fake_editor() { printf '#!/bin/sh\n%s\n' "$2" >"$1"; chmod +x "$1"; }
+
 fresh() { D=$TMP/$1; rm -rf "$D"; mkdir -p "$D"; }
 
 test_pairs_and_presets() {
@@ -61,13 +64,46 @@ test_new() {
     assert_eq "$D/my-req.post.json" "$REQ_LAST_FILE" "REQ_LAST_FILE points to it"
 
     fresh full
-    IN=$'full\nPOST\nhttp://x/a\ny\nthe desc\n1\nX-A: 1\n-Accept\n\npage=2\n\nuser=ann\n\n'; run req_wizard_new "$D"
+    IN=$'full\nPOST\nhttp://x/a\ny\nthe desc\n1\nX-A: 1\n-Accept\n\npage=2\n\nn\nuser=ann\n\n'; run req_wizard_new "$D"
     assert_eq "0" "$STATUS" "creates a request with optional fields"
     f=$D/full.post.json
     assert_eq "the desc" "$(req_request_get "$f" description)" "description"
     assert_eq '{"Content-Type":"application/json","X-A":"1"}' "$(req_request_get "$f" headers)" "preset plus edits on the headers"
     assert_eq '{"page":"2"}' "$(req_request_get "$f" query)" "query"
-    assert_eq '{"user":"ann"}' "$(req_request_get "$f" parameters)" "parameters"
+    assert_eq '{"user":"ann"}' "$(req_request_get "$f" parameters)" "declining the editor asks for parameters"
+
+    # With a format preset the body is offered in the editor instead of parameters.
+    local bin=$TMP/newbin
+    mkdir -p "$bin"
+    # shellcheck disable=SC2016  # the editor script is run by sh, not expanded here
+    fake_editor "$bin/json-ed" 'printf "{\"user\": \"ann\"}\n" >"$1"'
+    fresh rawnew
+    VISUAL=$bin/json-ed IN=$'rn\nPOST\nhttp://x\ny\n\n1\n\n\ny\n'; export VISUAL; run req_wizard_new "$D"
+    f=$D/rn.post.json
+    assert_eq "0" "$STATUS" "creates a request with a raw body"
+    assert_eq '{"user":"ann"}' "$(jq -c .raw_data "$f")" "the body typed in the editor is stored as raw_data"
+    assert_eq '{}' "$(req_request_get "$f" parameters)" "and parameters are not asked for"
+    [[ $OUT != *"Parameters:"* ]]; assert_eq "0" "$?" "no parameters prompt"
+    assert_eq "0" "$(req_request_check "$f" 2>/dev/null; echo $?)" "the file is valid"
+
+    # shellcheck disable=SC2016
+    fake_editor "$bin/text-ed" 'printf "a plain body\n" >"$1"'
+    fresh rawtext
+    VISUAL=$bin/text-ed IN=$'rt\nPUT\nhttp://x\ny\n\n2\n\n\n\n'; export VISUAL; run req_wizard_new "$D"
+    assert_eq "a plain body" "$(jq -r .raw_data "$D/rt.put.json")" "text preset stores the body as text without questions"
+    [[ $OUT != *"Not a JSON"* ]]; assert_eq "0" "$?" "no JSON question with the text preset"
+
+    fresh rawempty
+    # shellcheck disable=SC2016
+    fake_editor "$bin/empty-ed" ': >"$1"'
+    VISUAL=$bin/empty-ed IN=$'re\nPOST\nhttp://x\ny\n\n1\n\n\ny\n'; export VISUAL; run req_wizard_new "$D"
+    assert_eq "null" "$(jq -c .raw_data "$D/re.post.json")" "an emptied editor stores no raw_data"
+
+    fresh nopreset
+    VISUAL=$bin/json-ed IN=$'np\nPOST\nhttp://x\ny\n\n4\n\n\nk=v\n\n'; export VISUAL; run req_wizard_new "$D"
+    assert_eq '{"k":"v"}' "$(req_request_get "$D/np.post.json" parameters)" "without a preset the parameters are asked as before"
+    assert_eq "null" "$(jq -c .raw_data "$D/np.post.json")" "and there is no raw_data"
+    unset VISUAL
 
     fresh get
     IN=$'g\nGET\nhttp://x\ny\n\n4\n\n\n'; run req_wizard_new "$D"
@@ -114,7 +150,7 @@ test_edit() {
     assert_contains "5) headers      1 entry" "$OUT" "shows entry counts"
 
     IN=$'9\nq\n'; run req_wizard_edit "$f"
-    assert_contains "choose 1-7, s or q" "$OUT" "an invalid choice is explained"
+    assert_contains "choose 1-8, s or q" "$OUT" "an invalid choice is explained"
 
     IN=$'1\nnew-name\n2\nput\n3\nhttp://y\n4\nhello\n5\nX-B: 2\n-A\n\n6\nq=1\n\n7\nk=v\n\ns\n'; run req_wizard_edit "$f"
     assert_eq "0" "$STATUS" "edits and saves"
@@ -145,6 +181,88 @@ test_edit() {
     assert_eq "{broken" "$(<"$D/oops.get.json")" "the invalid file is not touched"
 
     IN='<EOF>'; run req_wizard_edit "$n"; assert_eq "1" "$STATUS" "end of input cancels"
+}
+
+test_raw_data() {
+    echo "wizard: raw data"
+    fresh raw
+    local bin=$TMP/rawbin f
+    mkdir -p "$bin"
+    req_request_write "$D" base POST http://x '{"raw_data":{"a":1}}' >/dev/null
+    f=$D/base.post.json
+
+    assert_eq $'{\n  "a": 1\n}' "$(req_raw_text '{"a":1}')" "an object is shown indented"
+    assert_eq $'two\nlines' "$(req_raw_text '"two\nlines"')" "a string is shown as it is"
+    assert_eq "" "$(req_raw_text '')" "nothing when there is no value"
+
+    IN=$'q\n'; run req_wizard_edit "$f"
+    assert_contains "8) raw data     JSON object, 1 keys" "$OUT" "the menu summarizes raw_data"
+
+    # With an editor: a script that replaces the text, as a user would.
+    # shellcheck disable=SC2016  # the editor script is run by sh, not expanded here
+    fake_editor "$bin/json-ed" 'printf "{\"user\": \"ann\", \"tags\": [1, 2]}\n" >"$1"'
+    VISUAL=$bin/json-ed; export VISUAL
+    IN=$'8\ns\n'; run req_wizard_edit "$f"
+    assert_eq '{"user":"ann","tags":[1,2]}' "$(jq -c .raw_data "$f")" "valid JSON is stored as native JSON"
+
+    # shellcheck disable=SC2016
+    fake_editor "$bin/text-ed" 'printf "plain text\nsecond line\n" >"$1"'
+    VISUAL=$bin/text-ed
+    IN=$'8\n2\ns\n'; run req_wizard_edit "$f"
+    assert_contains "Not a JSON object or list" "$OUT" "text that is not JSON is questioned"
+    assert_eq $'plain text\nsecond line' "$(jq -r .raw_data "$f")" "2 keeps it as a string"
+    assert_eq "string" "$(jq -r '.raw_data | type' "$f")" "stored as a string"
+    assert_contains "text, 22 chars" "$(IN=$'q\n'; run req_wizard_edit "$f"; printf '%s' "$OUT")" "the menu summarizes text"
+
+    IN=$'8\n3\ns\n'; run req_wizard_edit "$f"
+    assert_eq $'plain text\nsecond line' "$(jq -r .raw_data "$f")" "3 discards the edit"
+
+    # 1 edits again: the second round sees the first round's text.
+    # shellcheck disable=SC2016
+    fake_editor "$bin/two-step" 'if [ -e "$0.done" ]; then printf "}" >>"$1"; else printf "{\"fixed\": true" >"$1"; : >"$0.done"; fi'
+    VISUAL=$bin/two-step
+    IN=$'8\n1\ns\n'; run req_wizard_edit "$f"
+    assert_eq '{"fixed":true}' "$(jq -c .raw_data "$f")" "1 opens the editor again on the same text"
+
+    # An emptied text clears the field.
+    # shellcheck disable=SC2016
+    fake_editor "$bin/empty-ed" ': >"$1"'
+    VISUAL=$bin/empty-ed
+    IN=$'8\ns\n'; run req_wizard_edit "$f"
+    assert_eq "null" "$(jq -c '.raw_data' "$f")" "an empty text removes raw_data"
+
+    # A non-JSON Content-Type does not question free text.
+    req_request_write "$D" page POST http://x '{"headers":{"Content-Type":"text/html"}}' >/dev/null
+    # shellcheck disable=SC2016
+    fake_editor "$bin/html-ed" 'printf "<p>hi</p>\n" >"$1"'
+    VISUAL=$bin/html-ed
+    IN=$'8\ns\n'; run req_wizard_edit "$D/page.post.json"
+    [[ $OUT != *"Not a JSON"* ]]; assert_eq "0" "$?" "no question with a text Content-Type"
+    assert_eq "<p>hi</p>" "$(jq -r .raw_data "$D/page.post.json")" "and the text is stored"
+
+    # An editor that fails leaves the field alone.
+    # shellcheck disable=SC2016
+    fake_editor "$bin/failer" 'echo oops >"$1"; exit 1'
+    VISUAL=$bin/failer
+    IN=$'8\ns\n'; run req_wizard_edit "$D/page.post.json"
+    assert_contains "the editor failed" "$OUT" "an editor failure is reported"
+    assert_eq "<p>hi</p>" "$(jq -r .raw_data "$D/page.post.json")" "and raw_data is unchanged"
+
+    # No editor: one prompt line.
+    unset VISUAL; EDITOR=''; export EDITOR
+    # shellcheck disable=SC2317  # called by req_ask_raw_data
+    req_editor() { return 1; }
+    IN=$'8\n{"x": [1,2]}\ns\n'; run req_wizard_edit "$f"
+    assert_eq '{"x":[1,2]}' "$(jq -c .raw_data "$f")" "without an editor the JSON is typed on one line"
+    IN=$'8\n-\ns\n'; run req_wizard_edit "$f"
+    assert_eq "null" "$(jq -c .raw_data "$f")" "- clears raw_data"
+    IN=$'8\nhello\n2\ns\n'; run req_wizard_edit "$f"
+    assert_eq "hello" "$(jq -r .raw_data "$f")" "free text typed on the line is kept as text"
+    IN=$'8\n\ns\n'; run req_wizard_edit "$f"
+    assert_eq "hello" "$(jq -r .raw_data "$f")" "Enter keeps the default (the current text)"
+    unset -f req_editor
+    source "$ROOT/lib/core.sh"
+    unset EDITOR
 }
 
 test_duplicate() {
@@ -203,6 +321,7 @@ test_mkdir() {
 test_pairs_and_presets
 test_new
 test_edit
+test_raw_data
 test_duplicate
 test_mkdir
 test_summary
