@@ -224,3 +224,28 @@ req_current_set() {
     fi
     req_kv_set "$(req_config_dir)/current" project "$1"
 }
+
+REQ_PROJECT_ID=""       # id of the project opened by req_project_activate
+
+# shellcheck disable=SC2034  # REQ_PROJECT_ID is read by the environment and cursor code
+# req_project_activate <project dir> - registers the project in ~/.req when it is not
+# there yet and makes it the one in use. Sets REQ_PROJECT_ID. When ~/.req cannot be
+# written, one warning is printed, REQ_PROJECT_ID stays empty, nothing else is affected
+# (the menu works without saved state) and the status is 1.
+req_project_activate() {
+    local dir=$1 id problem
+    REQ_PROJECT_ID=""
+    if ! id=$(req_project_find_id "$dir"); then
+        id=$(req_project_create "$dir" 2>&1) || { problem=$id; id=""; }
+    fi
+    if [[ -n $id ]]; then
+        problem=$(req_current_set "$id" 2>&1) || id=""
+    fi
+    if [[ -z $id ]]; then
+        req_warn "the project state in $(req_config_dir) cannot be saved; continuing without it"
+        problem=${problem%%$'\n'*}
+        printf '  %s\n' "${problem#req: error: }" >&2
+        return 1
+    fi
+    REQ_PROJECT_ID=$id
+}

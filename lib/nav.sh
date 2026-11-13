@@ -412,5 +412,6 @@ req_nav_start() {
         printf 'Created %s and %s/\n' "$REQ_PROJECT_FILE" "$REQ_PROJECT_DEFAULT_DIR"
         pfile=$(req_project_find .) || return 1
     fi
+    req_project_activate "$(dirname "$pfile")"
     req_nav_run "$pfile"
 }

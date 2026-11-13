@@ -11,6 +11,11 @@ req_err() {
     printf 'req: error: %s\n' "$*" >&2
 }
 
+# req_warn <message> - prints a warning to stderr without exiting.
+req_warn() {
+    printf 'req: warning: %s\n' "$*" >&2
+}
+
 # req_trim <text> - prints the text without leading and trailing whitespace.
 req_trim() {
     local s=$1

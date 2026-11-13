@@ -54,6 +54,7 @@ main() {
     case ${1-} in
         init)
             req_project_init . || return 1
+            req_project_activate . || true     # only a warning: the project itself exists
             printf 'Initialized req project in %s\n  %s\n  %s/\n' \
                 "$PWD" "$REQ_PROJECT_FILE" "$REQ_PROJECT_DEFAULT_DIR"
             ;;

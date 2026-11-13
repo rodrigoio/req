@@ -156,10 +156,58 @@ test_current() {
     req_current_get >/dev/null; assert_eq "1" "$?" "a hand-edited pointer outside the slug rule is ignored"
 }
 
+test_activate() {
+    echo "home: project activation"
+    local a=$TMP/act/one b=$TMP/act/two out status cfg=$REQ_CONFIG_DIR
+    mkdir -p "$a" "$b"
+    REQ_CONFIG_DIR=$TMP/act-cfg
+
+    req_project_activate "$a"; assert_eq "0" "$?" "activating an unknown project succeeds"
+    assert_eq "one" "$REQ_PROJECT_ID" "REQ_PROJECT_ID is set"
+    assert_eq "one" "$(req_current_get)" "and it becomes the current project"
+    assert_eq "$a" "$(req_kv_get "$TMP/act-cfg/projects/one/project" path)" "the project file is written"
+
+    req_project_activate "$b"; assert_eq "two" "$REQ_PROJECT_ID" "a second project gets its own id"
+    assert_eq "two" "$(req_current_get)" "and takes over the pointer"
+    req_project_activate "$a"
+    assert_eq "one" "$REQ_PROJECT_ID" "reopening a registered project reuses its id"
+    assert_eq "one" "$(req_current_get)" "and moves the pointer back"
+    assert_eq "2" "$(find "$TMP/act-cfg/projects" -mindepth 1 -maxdepth 1 | wc -l)" "no duplicate project was created"
+
+    # ~/.req cannot be written: one warning, no failure of the caller's flow.
+    printf 'x' >"$TMP/not-a-dir"
+    REQ_CONFIG_DIR=$TMP/not-a-dir
+    out=$(req_project_activate "$a" 2>&1); status=$?
+    assert_eq "1" "$status" "an unwritable central directory fails softly"
+    assert_contains "req: warning: the project state in $TMP/not-a-dir cannot be saved" "$out" "with a warning"
+    assert_eq "1" "$(grep -c "warning" <<<"$out")" "printed once"
+    req_project_activate "$a" 2>/dev/null
+    assert_eq "" "$REQ_PROJECT_ID" "REQ_PROJECT_ID stays empty"
+    REQ_CONFIG_DIR=$cfg
+}
+
+test_init_command() {
+    echo "home: req init registers the project"
+    local d=$TMP/initproj out
+    mkdir -p "$d"
+    out=$(cd "$d" && bash "$ROOT/bin/req" init 2>&1); assert_eq "0" "$?" "req init succeeds"
+    assert_contains "Initialized req project" "$out" "and reports it"
+    assert_eq "initproj" "$(req_project_find_id "$d")" "the project is registered under its folder name"
+    assert_eq "initproj" "$(req_current_get)" "and is the current one"
+    out=$(cd "$d" && REQ_CONFIG_DIR=$TMP/not-a-dir bash "$ROOT/bin/req" init 2>&1)
+    assert_contains "already exists" "$out" "init still refuses an existing project"
+    rm -rf "$d/.req" "$d/requests"
+    out=$(cd "$d" && REQ_CONFIG_DIR=$TMP/not-a-dir bash "$ROOT/bin/req" init 2>&1); assert_eq "0" "$?" "an unwritable ~/.req does not fail init"
+    assert_contains "Initialized req project" "$out" "the project is still created"
+    assert_contains "warning: the project state" "$out" "and the warning is shown"
+}
+
 test_kv_read
 test_kv_check
 test_kv_write
 test_central_dir
 test_projects
 test_current
+test_activate
+test_init_command
 test_summary

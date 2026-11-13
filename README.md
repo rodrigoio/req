@@ -43,6 +43,8 @@ req --version
 
 The response is shown in the terminal (indented JSON; text and HTML as received) and nothing is written to disk. Optional variables: `REQ_TIMEOUT` (default 60s) and `REQ_CONNECT_TIMEOUT` (default 10s).
 
+Central state: the first time `req` opens a project (or `req init` creates one) it is registered in `~/.req/projects/<name>/`, where its state will live; `~/.req/current` points to the project in use. If `~/.req` cannot be written, `req` warns once and works without it. `REQ_CONFIG_DIR` changes that directory.
+
 ### Interactive menu
 
 | Key | Action |

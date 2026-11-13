@@ -14,7 +14,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR2.3** (project registration; TR2.1 and TR2.2 are done). Review 2 changes where environments live (one
+Next task: **TR2.4** (per-project environments; TR2.1 to TR2.3 are done). Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
 
@@ -151,11 +151,16 @@ is `~/.req/current` (`project=<id>`): `req_current_get` returns nothing when the
 the id is not a slug or its directory is gone; `req_current_set` refuses unknown projects. The
 project/state files themselves (`config`, `vars`, `env/`, `cursor`) are made by later tasks.
 
+Registration (TR2.3): `req_project_activate <dir>` finds or creates the project and makes it the
+current one, setting `REQ_PROJECT_ID`. It runs on `req init` and whenever the menu opens a `.req`
+(`req_nav_start`), not on `req run`. If `~/.req` cannot be written it prints one `req: warning:`
+line (`req_warn` in `core.sh`) and returns 1; `req init` and the menu carry on without saved state.
+
 ## Testing
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 787 asserts at the time of writing.
+`assert_contains`, `test_summary`). 808 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed
