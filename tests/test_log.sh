@@ -46,9 +46,9 @@ test_write() {
     [[ $out =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{4}\ TEST\ hello$'\n' ]]
     assert_eq "0" "$?" "each starts with an ISO timestamp, the event and the text"
     assert_contains 'TEST a\nb\nc' "$out" "line breaks are written as \\n and carriage returns dropped"
-    chmod 555 "$TMP/cfg/projects/shop"; chmod 444 "$f"
+    rm -f "$f"; mkdir "$f"      # a directory where the file should be: unwritable even for root
     out=$(req_log_write TEST "x" 2>&1); assert_eq "1" "$?" "an unwritable log fails"
-    chmod 755 "$TMP/cfg/projects/shop"; chmod 644 "$f"
+    rmdir "$f"
     assert_contains "cannot write the log $f" "$out" "with a warning that names the file"
 }
 

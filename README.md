@@ -89,7 +89,10 @@ In the prompts, Enter accepts the default shown in brackets and an empty name ca
 make test    # run the tests
 make lint    # shellcheck (if installed) + syntax check
 make check   # lint + tests
+make container IMAGE=debian:12-slim   # the tests in a container (needs docker)
 ```
+
+`make container` copies the repository into the image, installs `curl`, `jq`, `python3`, `vi` and `make`, and runs the suite as a normal user. It was run on `debian:12-slim` (bash 5.2), `quay.io/centos/centos:stream9` and `registry.access.redhat.com/ubi9/ubi` (bash 5.1) and `registry.access.redhat.com/ubi8/ubi` (RHEL 8: bash 4.4, curl 7.61, Python 3.6), all with every test passing.
 
 ## Layout
 

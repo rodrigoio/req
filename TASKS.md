@@ -6,7 +6,7 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T7.1** (Fase 7; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T7.4** (Fase 7; T7.1 e T7.2 feitas; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
 - Suíte: `make check` com 1238 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
@@ -165,10 +165,11 @@ Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; ca
 - Q3 (T6.4) O verbose é só a variável `REQ_VERBOSE` (ou `:v` na T6.6); não há chave `verbose` na config nem opção `-v` no `req run`. Decidir se deve haver.
 - Q4 (T6.5) No verbose, a resposta mostra só a linha de status e os headers com `<<`; o corpo continua na exibição normal (formatado), sem `<<`. Decidir se cada linha do corpo também deve levar `<<`.
 - Q5 (T6.6) `:log` e `:v` valem só na sessão e não alteram a configuração (o `:log` sobrepõe a chave `log` até sair). Decidir se `:log`/`:v` devem poder gravar a chave, e se `:v` deve ter uma chave `verbose` (ligada à Q3).
+- Q6 (T7.1/T7.2) Validado até o bash 4.4 (RHEL 8); as funções usam `declare -g` e outras construções do bash 4.2, mas não há teste em bash 4.0 a 4.3 (por exemplo o CentOS 7, já sem suporte). Decidir se o mínimo declarado deve passar a "bash 4.4+" ou se vale buscar uma imagem com bash 4.2.
 
 ### Fase 7 — Portabilidade, qualidade e entrega
-- T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`.
-- T7.2 Validação em containers centos e rhel, com os mesmos pontos.
+- [x] T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`. Feita com `tests/container.sh` (`make container IMAGE=...`), como usuário comum: debian 12 (bash 5.2) passa com 1238 asserts, 0 falhas e 0 testes pulados.
+- [x] T7.2 Validação em containers centos e rhel, com os mesmos pontos: CentOS Stream 9 e UBI 9 (bash 5.1) e UBI 8 (RHEL 8: bash 4.4, curl 7.61, Python 3.6) passam. Achados: faltava `diffutils` (`cmp`) na imagem mínima, e o `mock_server.py` usava `ThreadingHTTPServer` (Python 3.7+), o que pulava os testes de execução em silêncio; corrigido, e o script passa a falhar com testes pulados.
 - [x] T7.3 `shellcheck`: corrigir os avisos (feito: `make lint` limpo em `bin/`, `lib/` e `tests/`).
 - T7.4 Documentação de uso.
 - T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do `.req` (`workspace`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
