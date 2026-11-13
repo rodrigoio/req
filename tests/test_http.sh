@@ -57,6 +57,14 @@ test_args() {
     REQ_TIMEOUT=20 req_build_curl_args '{"method":"get","url":"http://x","timeout":2.5}'
     assert_eq "2.5" "$(arg_after --max-time)" "the request's timeout wins over REQ_TIMEOUT"
 
+    req_build_curl_args '{"method":"get","url":"http://x"}'
+    has_arg -L; assert_eq "1" "$?" "redirects are not followed by default"
+    req_build_curl_args '{"method":"get","url":"http://x","follow_redirects":false}'
+    has_arg -L; assert_eq "1" "$?" "nor with follow_redirects false"
+    req_build_curl_args '{"method":"get","url":"http://x","follow_redirects":true}'
+    has_arg -L && has_arg --max-redirs; assert_eq "0" "$?" "follow_redirects true adds -L and a limit"
+    assert_eq "10" "$(arg_after --max-redirs)" "of 10 redirects"
+
     local m
     for m in GET DELETE; do
         req_build_curl_args "{\"method\":\"$m\",\"url\":\"http://x\",\"parameters\":{\"a\":1},\"headers\":{\"Content-Type\":\"application/json\"}}"
@@ -163,6 +171,14 @@ test_headers() {
     req_split_headers "just text"
     assert_eq "" "$REQ_RESP_STATUSLINE" "text without a header block has no status line"
     assert_eq "just text" "$REQ_RESP_BODY" "and is all body"
+    REQ_P_FOLLOW=true
+    req_split_headers "HTTP/1.1 301 Moved${crlf}Location: /b${crlf}${crlf}HTTP/1.1 200 OK${crlf}X-Final: 1${crlf}${crlf}end"
+    assert_eq "HTTP/1.1 200 OK" "$REQ_RESP_STATUSLINE" "with follow_redirects the last hop's status line counts"
+    assert_eq "X-Final: 1" "${REQ_RESP_HEADERS[*]}" "and its headers"
+    assert_eq "end" "$REQ_RESP_BODY" "and its body"
+    REQ_P_FOLLOW=false
+    req_split_headers "HTTP/1.1 301 Moved${crlf}Location: /b${crlf}${crlf}HTTP/1.1 200 OK${crlf}${crlf}end"
+    assert_eq "HTTP/1.1 301 Moved" "$REQ_RESP_STATUSLINE" "without it the 301 is the response"
     REQ_VERBOSE=1; REQ_RESP_STATUSLINE="HTTP/1.1 200 OK"; REQ_RESP_HEADERS=("A: 1" "B: 2")
     assert_eq $'<< HTTP/1.1 200 OK\n<< A: 1\n<< B: 2' "$(NO_COLOR=1 req_verbose_response)" "verbose on: the status line and each header get <<"
     assert_eq "4" "$(req_verbose_response | wc -l | tr -d ' ')" "followed by one blank line"
@@ -330,6 +346,19 @@ test_execute() {
     printf '{"name":"slow","method":"GET","url":"%s/sleep/300","timeout":5}\n' "$base" >"$TMP/slow.get.json"
     out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/slow.get.json" 2>&1); assert_eq "0" "$?" "a longer timeout lets it finish"
     assert_contains "slept" "$out" "and shows the response"
+
+    # follow_redirects (T8.2)
+    printf '{"name":"moved","method":"GET","url":"%s/redirect"}\n' "$base" >"$TMP/moved.get.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/moved.get.json" 2>&1)
+    assert_contains "HTTP 302" "$out" "a redirect is shown as it is by default"
+    printf '{"name":"moved","method":"GET","url":"%s/redirect","follow_redirects":true}\n' "$base" >"$TMP/moved.get.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/moved.get.json" 2>&1)
+    assert_contains "HTTP 200" "$out" "with follow_redirects the final response is shown"
+    assert_contains "hello text" "$out" "with its body"
+    [[ $out != *moved* ]]; assert_eq "0" "$?" "and not the body of the redirect"
+    printf '{"name":"loop","method":"GET","url":"%s/loop","follow_redirects":true}\n' "$base" >"$TMP/loop.get.json"
+    out=$(NO_COLOR=1 req_run_request "$TMP/loop.get.json" 2>&1); assert_eq "1" "$?" "an endless redirect stops"
+    assert_contains "curl exit code 47" "$out" "at the limit, with curl's exit code"
 
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"
