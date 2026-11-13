@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.gitignore` permanece.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4 e a T5.1. Próxima tarefa: **T5.2** (Fase 5: resolução de uma chave). A Revisão 1 está concluída, exceto a TR.14, que segue adiada até o usuário decidir.
+- Feito: Fases 0 a 4, a T5.1 e a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir). Próxima tarefa: **TR2.1** (Revisão 2: helpers de arquivo `chave=valor`).
+- A "Revisão 2" (R8 a R10, seção ao final do plano) muda o armazenamento de ambientes: cada projeto passa a ter seu diretório em `~/.req`. **As TR2.1 a TR2.4 são pré-requisito da Fase 5**: a T5.2 só começa depois delas.
 - Suíte: `make check` com 710 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
-- A seção "Revisão 1" (TR.1 a TR.15) reúne os achados confirmados na primeira validação de uso e vem antes da Fase 5. A TR.14 está adiada: confirmar com o usuário antes de implementar.
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -16,9 +16,9 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - **Shell:** bash 4+. **Dependências:** apenas `curl` e `jq`.
 - **Código:** organizado em funções, sem scripts procedurais soltos (boas práticas do manifest).
 - **Ambientes:** troca interativa via `:env <nome>`.
-- **Precedência:** variável de ambiente vence o arquivo de secrets.
-- **Placeholder ausente:** `${chave}` sem valor gera erro amigável que indica ao usuário como proceder (arquivo e variável esperados, ex.: definir `DEV_URL` ou adicionar `url` em `~/.req/env/dev/secrets.json`); a requisição não é enviada.
-- **JSON válido:** requests e secrets são sempre gravados como JSON válido. Se o usuário o invalidar manualmente, o `req` apenas indica o erro (arquivo e detalhe do jq), sem tentar corrigir nem sobrescrever.
+- **Precedência:** variável de ambiente vence o arquivo do ambiente, que vence as variáveis do projeto (ver "Controle central de projetos").
+- **Placeholder ausente:** `${chave}` sem valor gera erro amigável que indica ao usuário como proceder (arquivo e variável esperados, ex.: definir `DEV_URL` ou adicionar `url=...` no arquivo do ambiente `dev` do projeto); a requisição não é enviada.
+- **JSON válido:** as requests são sempre gravadas como JSON válido. Se o usuário o invalidar manualmente, o `req` apenas indica o erro (arquivo e detalhe do jq), sem tentar corrigir nem sobrescrever.
 - **Git:** `manifest` permanece no `.gitignore`.
 - **Enter em duas etapas:** o 1º Enter em uma request abre os detalhes (url, params), o 2º dispara; Esc volta. Assim o usuário confere antes de executar.
 - **Ambiente padrão:** `default`, usado quando `REQ_ENV` não está definido; troca em sessão via `:env <nome>`.
@@ -33,7 +33,22 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - **Ajuda:** `:h` lista todas as teclas e comandos; todo comando novo entra nela.
 - **Erro de dependências:** só nomeia os pacotes faltantes, em laranja, sem comandos de instalação.
 - **Métodos:** GET (verde), POST (azul), PUT (laranja), PATCH (marrom), DELETE (vermelho).
-- **Secrets:** arquivo `~/.req/env/<env>/secrets.json` ou variáveis de ambiente com prefixo, `${url}` resolve para `DEV_URL` (ambiente `dev`, chave em maiúsculas).
+- **Secrets:** arquivo `chave=valor` do ambiente do projeto (ver abaixo) ou variáveis de ambiente com prefixo; `${url}` resolve para `DEV_URL` (ambiente `dev`, chave em maiúsculas). O formato antigo `~/.req/env/<env>/secrets.json` (T5.1) é substituído pela TR2.4, sem migração.
+- **Controle central de projetos (R10, a partir da TR2.1):** tudo que não é do repositório do usuário fica em `~/.req`, um diretório por projeto. Tudo é texto `chave=valor` (linhas em branco e `#` ignoradas), pois são só flags e variáveis simples. Layout (proposta, confirmar ao iniciar a TR2.2):
+  ```
+  ~/.req/
+    current                  ponteiro: id do projeto em uso
+    config                   configurações globais
+    projects/<id>/
+      project                name=... e path=... (diretório do .req)
+      config                 configurações do projeto (vencem as globais)
+      vars                   variáveis do projeto (valem em todos os ambientes)
+      env/<ambiente>         variáveis do ambiente (vencem as do projeto)
+      cursor                 última posição no menu (R8)
+  ```
+  O `<id>` é o slug do nome da pasta do projeto, com sufixo numérico se já existir para outro caminho.
+- **Configuração (R9):** `:config` lista as chaves e `:config chave=valor` grava em `~/.req/config`; chaves conhecidas ficam numa tabela única (tipo, padrão, descrição), como a ajuda `:h`. Chave desconhecida ou valor inválido é recusado com mensagem.
+- **Cursor (R8):** ao sair, o `req` grava o diretório e o item selecionado em `projects/<id>/cursor` e, ao abrir, volta para lá; a chave `restore_cursor` (padrão `yes`) desliga isso.
 - **Tarefas prontas:** o que já está implementado conta como feito, sem nova validação; o trabalho segue apenas com o que falta.
 - **Tamanho das tarefas (revisão):** cada tarefa entrega um único comportamento, em cerca de 100 a 200 linhas contando os testes, e vira um commit. Infraestrutura (helpers) entra em commit próprio, antes da feature que a usa. Cada tarefa leva só os testes do seu comportamento; os cenários integrados ficam numa tarefa de verificação no fim da fase. Se uma tarefa estourar o tamanho, ela é dividida antes de commitar.
 
@@ -118,17 +133,18 @@ Tarefas:
 - [x] TR.15 Verificação da revisão: fluxo integrado pelo laço principal, demonstração em terminal real (pty) e revisão final do README e do `DEVELOPMENT.md`.
 
 ### Fase 5 — Ambientes e secrets
-- [x] T5.1 Leitura de `~/.req/env/<env>/secrets.json` via jq; JSON inválido apenas indica o erro.
-- T5.2 Resolução de uma chave: variável `<ENV>_<CHAVE>` precede o arquivo.
-- T5.3 Substituição de `${chave}` em um texto (função pura), com erro amigável que lista as chaves ausentes e orienta o usuário.
+Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde ficam os ambientes de cada projeto. As tarefas abaixo já estão ajustadas a isso.
+- [x] T5.1 Leitura de `~/.req/env/<env>/secrets.json` via jq; JSON inválido apenas indica o erro. (Substituída pela TR2.4: o carregador passa a ler `chave=valor` do projeto.)
+- T5.2 Resolução de uma chave, em ordem de precedência: variável `<ENV>_<CHAVE>`, arquivo do ambiente (`projects/<id>/env/<ambiente>`), variáveis do projeto (`projects/<id>/vars`).
+- T5.3 Substituição de `${chave}` em um texto (função pura), com erro amigável que lista as chaves ausentes e orienta o usuário (variável esperada e arquivo do ambiente do projeto).
 - T5.4 Aplicar a substituição a url, headers, query, `parameters` e `raw_data` (incluindo as strings dentro do JSON nativo) antes de executar.
-- T5.5 Ambiente ativo (`REQ_ENV`, padrão `default`) exibido no cabeçalho do menu.
-- T5.6 `:env <nome>` troca o ambiente na sessão e valida ambiente inexistente; entra na ajuda `:h`.
+- T5.5 Projeto e ambiente ativos (`REQ_ENV`, padrão `default`) exibidos no cabeçalho do menu.
+- T5.6 `:env <nome>` troca o ambiente na sessão e valida ambiente inexistente (arquivo em `projects/<id>/env/`); sem argumento lista os ambientes do projeto; entra na ajuda `:h`.
 - T5.7 Mascaramento de valores secretos (função e testes), para uso em logs, no verbose e na linha `MÉTODO url` mostrada ao executar.
-- T5.8 Verificação da fase e documentação dos ambientes.
+- T5.8 Verificação da fase e documentação dos ambientes e das variáveis de projeto.
 
 ### Fase 6 — Logs e verbose
-- T6.1 Configuração global (`~/.req/config`) e local (no projeto): formato, nomes dos arquivos e precedência (local vence).
+- T6.1 Configuração local do projeto (`projects/<id>/config`) sobre a global (`~/.req/config`, criada na TR2.5), reaproveitando os helpers `chave=valor` e a tabela de chaves: precedência (local vence), chaves de log (formato e nomes dos arquivos) e edição do local por `:config` (proposta: `:config -p chave=valor`).
 - T6.2 Log da requisição enviada, com timestamp, em arquivo.
 - T6.3 Log da resposta recebida, no mesmo arquivo.
 - T6.4 Verbose: dados enviados (`parameters` ou `raw_data`) com `>>` no terminal.
@@ -141,7 +157,7 @@ Tarefas:
 - T7.2 Validação em containers centos e rhel, com os mesmos pontos.
 - [x] T7.3 `shellcheck`: corrigir os avisos (feito: `make lint` limpo em `bin/`, `lib/` e `tests/`).
 - T7.4 Documentação de uso.
-- T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`) e dos ambientes.
+- T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
 - T7.6 Teste ponta a ponta do fluxo completo.
 
 ### Adicionais — pendências e ajustes pós-validação (antes da Fase 8)
@@ -169,8 +185,32 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 - T8.6 Valores aninhados em `query`.
 - ~~T8.7~~ Removida: JSON aninhado vai em `raw_data`; `parameters` fica plano (campos de formulário).
 
+### Revisão 2 — achados da validação de uso (R8 a R10; ao final do plano)
+Continuação do arquivo local `reviews` (R1 a R7 estão na Revisão 1). As TR2.1 a TR2.4 vêm antes da Fase 5.
+
+Achados:
+- **R8** Ao sair, a navegação recomeça na raiz. Sugestão: salvar a posição do cursor no diretório de configuração (`~/.req`) e retomar dela ao abrir o `req`.
+- **R9** Falta um comando para editar configurações globais (apresentação e features futuras), por chave e valor: `:config time_stats=no`, `:config time_stat_total=yes`.
+- **R10** Falta um controle central de projetos em `~/.req`: para cada projeto inicializado, um controle com seus próprios ambientes e variáveis; um arquivo ponteiro para o projeto em uso; um arquivo por ambiente, só `chave=valor`. Impacta a Fase 5 e a configuração da T6.1.
+
+Tarefas (R10, antes da Fase 5):
+- TR2.1 (R10) Helpers de arquivo `chave=valor`: ler uma chave, listar, gravar e remover, preservando comentários, linhas em branco e ordem; nomes `[A-Za-z_][A-Za-z0-9_]*`, valores de uma linha. Infraestrutura, commit próprio.
+- TR2.2 (R10) Diretório central: helpers do layout (`~/.req` ou `REQ_CONFIG_DIR`, `projects/<id>/`, arquivo `project` com `name` e `path`), id do projeto a partir da pasta, e o ponteiro `current` (ler e gravar). Infraestrutura, commit próprio.
+- TR2.3 (R10) Registro do projeto: `req init` e a primeira abertura de um `.req` ainda não registrado criam o controle do projeto; abrir um projeto registrado atualiza `current`; se `~/.req` não for gravável, o menu segue funcionando e avisa uma vez.
+- TR2.4 (R10) Ambientes por projeto: o carregador de secrets (T5.1) lê `projects/<id>/env/<ambiente>` e `projects/<id>/vars` em `chave=valor`, com o ambiente vencendo as variáveis do projeto; `secrets.json` deixa de ser lido (sem migração; se o arquivo antigo existir, um aviso aponta o novo local).
+
+Tarefas (R9):
+- TR2.5 (R9) Configuração global: `~/.req/config` em `chave=valor`, com a tabela única de chaves conhecidas (tipo, padrão, descrição) e leitura validada; chave desconhecida no arquivo é avisada e ignorada. Infraestrutura, commit próprio.
+- TR2.6 (R9) `:config`: sem argumento lista as chaves com valor atual e padrão; `:config chave=valor` valida e grava; chave desconhecida ou valor inválido explica e lista as válidas; entra na ajuda `:h`.
+- TR2.7 (R9) Chaves de apresentação `time_stats` (perfil de tempos) e `time_stat_total` (linha de total), `yes` ou `no`, padrão `yes`, aplicadas por `req_run_request` e por `req run`.
+
+Tarefas (R8):
+- TR2.8 (R8) Gravar o cursor ao sair (`:q`, fim da entrada e sinais) em `projects/<id>/cursor`: diretório atual e item selecionado, relativos ao `.req`, em `chave=valor`.
+- TR2.9 (R8) Retomar o cursor ao abrir: volta ao diretório e ao item (a pilha do Esc é refeita); diretório inexistente leva ao ancestral mais próximo, item inexistente ao primeiro; arquivo ausente ou inválido leva à raiz sem erro; a chave `restore_cursor` (padrão `yes`) desliga a retomada.
+- TR2.10 Verificação da Revisão 2: fluxo integrado pelo laço principal (sair e reabrir no mesmo lugar, `:config`, projeto registrado), demonstração em terminal real (pty) e revisão final do README e do `DEVELOPMENT.md`.
+
 ## Arquivos críticos (a criar)
-`bin/req`, `lib/{core,ui,store,http,nav,cmd,wizard,env,log}.sh`, `tests/*`, `README.md`, `TASKS.md`.
+`bin/req`, `lib/{core,ui,store,http,nav,cmd,wizard,env,home,log}.sh` (`home.sh`: `~/.req`, projetos, configuração e cursor), `tests/*`, `README.md`, `TASKS.md`.
 
 ## Verificação
-Cada fase termina com seus testes passando e uma demonstração manual: Fase 2 dispara uma request real e mostra tempos; Fase 3 navega com setas/Enter/Esc; Fase 4 cria, edita e duplica requests geradas em disco; Revisão 1 mostra a ajuda `:h`, envia um POST com JSON editado no vim e renomeia, copia e remove diretórios conferindo o `.req`; Fase 5 troca de ambiente com `:env` e resolve secrets; Fase 6 gera log e verbose com `>>`/`<<`; Fase 7 roda em containers debian/centos.
+Cada fase termina com seus testes passando e uma demonstração manual: Fase 2 dispara uma request real e mostra tempos; Fase 3 navega com setas/Enter/Esc; Fase 4 cria, edita e duplica requests geradas em disco; Revisão 1 mostra a ajuda `:h`, envia um POST com JSON editado no vim e renomeia, copia e remove diretórios conferindo o `.req`; Revisão 2 registra um projeto em `~/.req`, muda uma configuração com `:config` e reabre o `req` no mesmo lugar; Fase 5 troca de ambiente com `:env` e resolve secrets; Fase 6 gera log e verbose com `>>`/`<<`; Fase 7 roda em containers debian/centos.

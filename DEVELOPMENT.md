@@ -10,11 +10,13 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 |---|---|
 | 0 Foundation, 1 Data model, 2 curl execution, 3 Navigation, 4 Command mode | done |
 | Review 1, usability findings (TR.1 to TR.15) | done, except TR.14 (postponed, needs the user's decision) |
+| Review 2, R8 to R10 (central project control in `~/.req`, `:config`, cursor; TR2.1 to TR2.10) | pending; TR2.1 to TR2.4 come before Phase 5 |
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **T5.2** (Phase 5 resumes; TR.14 waits for the user's answer). See "Review 1 findings"
-below for what the review changed.
+Next task: **TR2.1** (`key=value` file helpers). Review 2 changes where environments live (one
+directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
+waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - One task = one behavior, about 100 to 200 lines including tests, one commit.
@@ -250,13 +252,18 @@ screen, TR.6 external editor helper, TR.7 `8) raw data` in the edit menu, TR.8 r
 body in `:n`, TR.9 `.req` entry helpers, TR.10 `:ed`, TR.11 `:c`, TR.12 `:rm` on a
 request, TR.13 `:rm` on a directory, TR.14 (postponed), TR.15 verification.
 
+Review 2 (R8 to R10, in TASKS.md) goes before Phase 5: TR2.1 `key=value` helpers, TR2.2 central
+directory and pointer, TR2.3 project registration, TR2.4 per-project environments (replaces the
+`secrets.json` loader in `lib/env.sh`), TR2.5 to TR2.7 global config, `:config` and the
+`time_stats` keys, TR2.8 and TR2.9 cursor save and restore, TR2.10 verification.
+
 Phase 5: T5.2 key resolution, T5.3 pure `${key}` substitution with a friendly error
 that lists the missing keys and tells how to fix them, T5.4 apply it to url, headers,
 query, `parameters` and `raw_data`, T5.5 active environment (`REQ_ENV`, default
 `default`) in the menu header, T5.6 `:env <name>`, T5.7 secret masking helper, T5.8
 verification and docs.
 Environment variable names are `<ENV>_<KEY>` in upper case (`${url}` in `dev` is
-`DEV_URL`); the variable wins over the file.
+`DEV_URL`); the variable wins over the environment file, which wins over the project variables.
 Then Phase 6 (logs, verbose with `>>` and `<<`), Phase 7 (portability, docs), the
 "Adicionais" section of TASKS.md (TA.2 to TA.13: everything still unconfirmed, mostly
 navigation changes) and Phase 8 (per-request options, file upload, nested query
