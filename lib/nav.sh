@@ -19,7 +19,7 @@ REQ_SCREEN_EXTRA=0      # rows beyond one per line, from long lines that wrap
 REQ_BASE_EXTRA=0
 
 REQ_NAV_BASE=""         # directory of the .req file
-REQ_NAV_ROOTS=()       # directories listed in the .req
+REQ_NAV_ROOT=""         # the menu root: the workspace of the project (set only by req_nav_root)
 REQ_CUR_DIR=""          # directory being shown ("" = project root)
 REQ_STACK_DIR=()        # navigation stack: previous directories and selections
 REQ_STACK_SEL=()
@@ -93,43 +93,42 @@ req_marker() {
 
 # --- data -----------------------------------------------------------------
 
-# req_nav_rel <path> - path relative to the .req directory, when possible.
+# req_nav_rel <path> - path relative to the menu root (the workspace), when possible.
 req_nav_rel() {
-    printf '%s' "${1#"$REQ_NAV_BASE"/}"
+    printf '%s' "${1#"$REQ_NAV_ROOT"/}"
 }
 
-# req_nav_load - loads the items of the current directory (or the project root).
+# req_nav_root <.req file> - decides the directory the menu starts in and never leaves:
+# the project's workspace (REQ_NAV_ROOT). The single place that knows where the root is.
+# Fails, with the reason already printed, when the workspace is not valid.
+req_nav_root() {
+    REQ_NAV_ROOT=$(req_project_workspace "$1") || { REQ_NAV_ROOT=""; return 1; }
+}
+
+# req_nav_load - loads the items of the current directory; at the root ("") they are
+# the items of the workspace: its directories and its requests.
 req_nav_load() {
-    local dir kind a b c
+    local kind a b c
     REQ_ITEM_KIND=(); REQ_ITEM_LABEL=(); REQ_ITEM_METHOD=(); REQ_ITEM_PATH=()
-    if [[ -z $REQ_CUR_DIR ]]; then
-        for dir in "${REQ_NAV_ROOTS[@]}"; do
-            REQ_ITEM_KIND+=(d); REQ_ITEM_LABEL+=("$(req_nav_rel "$dir")")
-            REQ_ITEM_METHOD+=(""); REQ_ITEM_PATH+=("$dir")
-        done
-    else
-        while IFS=$'\t' read -r kind a b c; do
-            REQ_ITEM_KIND+=("$kind"); REQ_ITEM_LABEL+=("$a")
-            if [[ $kind == d ]]; then
-                REQ_ITEM_METHOD+=(""); REQ_ITEM_PATH+=("$b")
-            else
-                REQ_ITEM_METHOD+=("$b"); REQ_ITEM_PATH+=("$c")
-            fi
-        done < <(req_list_dir "$REQ_CUR_DIR")
-    fi
+    while IFS=$'\t' read -r kind a b c; do
+        REQ_ITEM_KIND+=("$kind"); REQ_ITEM_LABEL+=("$a")
+        if [[ $kind == d ]]; then
+            REQ_ITEM_METHOD+=(""); REQ_ITEM_PATH+=("$b")
+        else
+            REQ_ITEM_METHOD+=("$b"); REQ_ITEM_PATH+=("$c")
+        fi
+    done < <(req_list_dir "${REQ_CUR_DIR:-$REQ_NAV_ROOT}")
     REQ_SEL=0
     REQ_TOP=0
 }
 
+# shellcheck disable=SC2034  # REQ_NAV_BASE is read by cmd.sh (the .req path)
 # req_nav_init <.req file> - sets the state up at the project root.
 req_nav_init() {
-    local pfile=$1 dir
+    local pfile=$1
     [[ -f $pfile ]] || { req_err "project file not found: $pfile"; return 1; }
     REQ_NAV_BASE=$(cd -P "$(dirname "$pfile")" && pwd)
-    REQ_NAV_ROOTS=()
-    while IFS= read -r dir; do
-        REQ_NAV_ROOTS+=("$dir")
-    done < <(req_project_dirs "$pfile")
+    req_nav_root "$pfile" || return 1
     REQ_CUR_DIR=""; REQ_STACK_DIR=(); REQ_STACK_SEL=()
     REQ_VIEW=list; REQ_DETAIL_FILE=""; REQ_DETAIL_VALID=0
     REQ_CMD_ACTIVE=0; REQ_CMD_BUF=""; REQ_STATUS=""; REQ_QUIT=0; REQ_NAV_DIRTY=1
@@ -139,13 +138,7 @@ req_nav_init() {
 # req_nav_refresh <path> - reloads the current directory (or the project root) and
 # selects <path> in it, if present.
 req_nav_refresh() {
-    local want=$1 i dir
-    if [[ -z $REQ_CUR_DIR ]]; then
-        REQ_NAV_ROOTS=()
-        while IFS= read -r dir; do
-            REQ_NAV_ROOTS+=("$dir")
-        done < <(req_project_dirs "$REQ_NAV_BASE/$REQ_PROJECT_FILE" 2>/dev/null)
-    fi
+    local want=$1 i
     req_nav_load
     for i in "${!REQ_ITEM_PATH[@]}"; do
         [[ ${REQ_ITEM_PATH[i]} == "$want" ]] && REQ_SEL=$i

@@ -64,10 +64,10 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 | Command | Action |
 |---|---|
 | `:n` | new request in the current directory: asks for the name (a slug), method and url, then optionally for a description, a format preset (json, text, html), headers and query. For POST, PUT and PATCH with a preset, it offers to write the body (`raw_data`) in your editor; declining, or choosing no preset, asks for `parameters` instead |
-| `:nd [name]` | new directory (alias `:mkdir`). At the root it is also added to the `.req`; inside a directory it creates a real subdirectory |
-| `:ed [name]` | rename the directory under the cursor (asks for the name unless given). The contents move with it and a `.req` entry for it is updated; only the last path component changes |
-| `:c [name]` | copy the directory under the cursor with everything inside (default name `<name>-copy`, symbolic links are copied as links). A directory listed in the `.req` has its copy listed too |
-| `:rm` | remove the selected request (or the one open on the details screen), after a `[y/N]` confirmation; Enter keeps it. It also works on an invalid request. On a directory it removes the directory and everything inside it, after a red warning with the full path and the number of files and subdirectories and the same `[y/N]` question; a listed directory also leaves the `.req`. Only directories inside the project are ever deleted: for a directory outside it, or a symbolic link, `:rm` only offers to unlist it from the `.req` |
+| `:nd [name]` | new directory (alias `:mkdir`). it creates a real subdirectory of the current directory (the workspace at the root) |
+| `:ed [name]` | rename the directory under the cursor (asks for the name unless given). The contents move with it; only the last path component changes |
+| `:c [name]` | copy the directory under the cursor with everything inside (default name `<name>-copy`, symbolic links are copied as links). |
+| `:rm` | remove the selected request (or the one open on the details screen), after a `[y/N]` confirmation; Enter keeps it. It also works on an invalid request. On a directory it removes the directory and everything inside it, after a red warning with the full path and the number of files and subdirectories and the same `[y/N]` question. Only directories inside the project are ever deleted, and never a symbolic link |
 | `:e` | edit the selected request (or the one open on the details screen) through a field menu; changing the name or the method renames the file. Option `8) raw data` opens the body in your editor (`$VISUAL`, `$EDITOR`, `vim`, `vi`, like git); without one it asks for a single line (`-` clears). JSON objects and lists are stored as native JSON; other text is stored as a string, and you are offered to edit it again first unless the request has a non-JSON `Content-Type` |
 | `:d` | duplicate the selected request under a new name and open the edit menu on the copy |
 | `:h` | help: lists every key and command (alias `:help`); any key goes back. A new command is added to the `REQ_HELP_ROWS` table in `lib/cmd.sh` |
@@ -137,13 +137,9 @@ The `.req` file marks a folder as an initialized `req` project. `req init` write
 workspace=.
 ```
 
-`workspace` is the directory `req` works on: a path **relative to the folder of the `.req`**, or `.` (the folder itself, the default). It must be an existing directory inside the project folder; absolute paths, a `..` that leaves the project and symbolic links in the path are refused. Use it to keep the `req` content in a subfolder (`workspace=requests`) of a folder that has other files. (`req init` no longer creates any directory. The menu will start reading the workspace in an upcoming change; until then it still lists the directories named in the `.req`, one per line, relative to the `.req` itself. Blank lines and lines starting with `#` are ignored:)
+`workspace` is the directory `req` works on: a path **relative to the folder of the `.req`**, or `.` (the folder itself, the default). It must be an existing directory inside the project folder; absolute paths, a `..` that leaves the project and symbolic links in the path are refused. Use it to keep the `req` content in a subfolder (`workspace=requests`) of a folder that has other files. `req init` creates no directory.
 
-```
-# project
-api
-auth
-```
+The menu root is the workspace, and it lists **everything in it**: every directory (shown as `dir`) and every request file (shown with its method), hidden items aside. Commands act on the item under the cursor according to its type. Directories are read straight from the disk each time, so a folder you create by hand shows up on the next redraw; the `.req` is never rewritten. A `.req` from an earlier version with one directory per line still works: those lines are ignored.
 
 Manually edited files that become invalid are never fixed: `req` only reports the error, with the file's absolute path.
 

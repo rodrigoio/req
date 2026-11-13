@@ -6,6 +6,7 @@ source "$ROOT/tests/helpers.sh"
 source "$ROOT/lib/core.sh"
 source "$ROOT/lib/ui.sh"
 source "$ROOT/lib/store.sh"
+source "$ROOT/lib/home.sh"
 source "$ROOT/lib/http.sh"
 source "$ROOT/lib/nav.sh"
 source "$ROOT/lib/wizard.sh"
@@ -40,6 +41,7 @@ keys() {
 
 make_project() {
     local p=$TMP/proj
+    rm -rf "$p"
     mkdir -p "$p/api/v2" "$p/auth"
     printf 'api\nauth\n' >"$p/.req"
     req_request_write "$p/api" list-users GET http://x/users \
@@ -390,7 +392,8 @@ test_command_actions() {
     type_keys : n d
     req_nav_handle enter 3<<<"billing" >/dev/null
     assert_eq "$PROJ/billing" "$REQ_LAST_DIR" ":nd at the root creates the directory"
-    assert_contains "billing" "$(<"$PROJ/.req")" "and lists it in the .req"
+    [[ -d $PROJ/billing ]]; assert_eq "0" "$?" "and it is a plain directory"
+    assert_eq $'api\nauth' "$(<"$PROJ/.req")" "the .req is not touched"
     assert_eq "api auth billing" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed"
     assert_eq "2" "$REQ_SEL" "and the new directory is selected"
     assert_contains "created directory billing" "$REQ_STATUS" "status mentions it"
@@ -508,22 +511,20 @@ test_command_rename_dir() {
     type_keys : e d
     req_nav_handle enter 3<<<"gateway" >/dev/null
     [[ -d $PROJ/gateway/v2 && ! -e $PROJ/api ]]; assert_eq "0" "$?" ":ed renames the directory under the cursor"
-    assert_eq $'gateway\nauth' "$(<"$PROJ/.req")" "and updates the .req"
-    assert_eq "gateway auth" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed"
+    assert_eq "auth gateway" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed (sorted)"
     assert_eq "gateway" "${REQ_ITEM_LABEL[REQ_SEL]}" "the renamed directory stays selected"
     assert_contains "renamed to gateway" "$REQ_STATUS" "status mentions it"
 
     type_keys :
     REQ_CMD_BUF="ed identity"
-    REQ_SEL=1; req_nav_handle enter >/dev/null
+    REQ_SEL=0; req_nav_handle enter >/dev/null
     [[ -d $PROJ/identity ]]; assert_eq "0" "$?" ":ed <name> skips the prompt"
-    assert_eq "gateway identity" "${REQ_ITEM_LABEL[*]}" "the list shows the new entry"
+    assert_eq "gateway identity" "${REQ_ITEM_LABEL[*]}" "the list shows the new name"
 
     REQ_SEL=0; req_nav_handle enter              # gateway
     type_keys : e d
     req_nav_handle enter 3<<<"v9" >/dev/null
     [[ -d $PROJ/gateway/v9 ]]; assert_eq "0" "$?" ":ed renames a subdirectory"
-    assert_eq $'gateway\nidentity' "$(<"$PROJ/.req")" "without touching the .req"
     assert_eq "v9" "${REQ_ITEM_LABEL[REQ_SEL]}" "and selects it"
 
     # On a request there is nothing to rename.
@@ -542,14 +543,13 @@ test_command_copy_dir() {
     type_keys : c
     req_nav_handle enter 3<<<"" >/dev/null
     [[ -f $PROJ/api-copy/list-users.get.json && -d $PROJ/api-copy/v2 ]]; assert_eq "0" "$?" ":c copies the directory under the cursor"
-    assert_eq $'api\nauth\napi-copy' "$(<"$PROJ/.req")" "and lists the copy in the .req"
-    assert_eq "api auth api-copy" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed"
+    assert_eq "api api-copy auth" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed (sorted)"
     assert_eq "api-copy" "${REQ_ITEM_LABEL[REQ_SEL]}" "and the copy is selected"
     assert_contains "copied to api-copy" "$REQ_STATUS" "status mentions it"
 
     type_keys :
     REQ_CMD_BUF="c replica"
-    REQ_SEL=1; req_nav_handle enter >/dev/null
+    REQ_SEL=2; req_nav_handle enter >/dev/null
     [[ -d $PROJ/replica ]]; assert_eq "0" "$?" ":c <name> skips the prompt"
 
     REQ_SEL=0; req_nav_handle enter              # api
@@ -630,7 +630,6 @@ test_command_remove_dir() {
     type_keys : r m
     req_nav_handle enter 3<<<"y" >/dev/null
     [[ ! -e $PROJ/api ]]; assert_eq "0" "$?" ":rm removes the directory under the cursor after y"
-    assert_eq "auth" "$(<"$PROJ/.req")" "and its .req entry"
     assert_eq "auth" "${REQ_ITEM_LABEL[*]}" "the root list is refreshed"
     assert_eq "0" "$REQ_SEL" "with a valid selection"
     assert_contains "removed api" "$REQ_STATUS" "status mentions it"
@@ -640,6 +639,73 @@ test_command_remove_dir() {
     assert_eq "0" "${#REQ_ITEM_KIND[@]}" "the last directory can go too"
     [[ -f $PROJ/.req ]]; assert_eq "0" "$?" "and the project file stays"
     REQ_INPUT_FD=0
+}
+
+test_dynamic_root() {
+    echo "nav: dynamic root (workspace)"
+    local p=$TMP/dyn out
+    rm -rf "$p"; mkdir -p "$p/zeta" "$p/alpha/inner" "$p/.hidden"
+    printf 'old-entry\nzeta/\n' >"$p/.req"       # old one-directory-per-line entries
+    req_request_write "$p" at-root GET http://x/r >/dev/null
+    printf 'not a request' >"$p/notes.txt"
+
+    req_nav_init "$p/.req"
+    assert_eq "alpha zeta at-root" "${REQ_ITEM_LABEL[*]}" "the root lists every directory, then the requests"
+    assert_eq "d d r" "${REQ_ITEM_KIND[*]}" "with their types"
+    assert_eq "  GET" "${REQ_ITEM_METHOD[2]:+  }${REQ_ITEM_METHOD[2]}" "a request at the root has its method"
+    assert_eq "$p" "$REQ_NAV_ROOT" "the root is the workspace (here the project folder)"
+    screen list; assert_contains "req /" "$OUT" "the header shows the root"
+    assert_contains "dir    alpha/" "$OUT" "directories show as dir"
+    assert_contains "GET    at-root" "$OUT" "requests show their method"
+    [[ $OUT != *notes* && $OUT != *hidden* && $OUT != *old-entry* ]]
+    assert_eq "0" "$?" "other files, hidden directories and old .req entries do not show"
+    assert_eq "alpha zeta at-root" "${REQ_ITEM_LABEL[*]}" "and the .req entries do not decide what is listed"
+
+    # A directory created by hand shows up on the next load, without touching the .req.
+    mkdir "$p/beta"
+    req_nav_refresh "$p/beta"
+    assert_eq "alpha beta zeta at-root" "${REQ_ITEM_LABEL[*]}" "a new directory appears after a refresh"
+    assert_eq "beta" "${REQ_ITEM_LABEL[REQ_SEL]}" "and can be selected"
+    assert_eq $'old-entry\nzeta/' "$(<"$p/.req")" "the .req is never rewritten"
+
+    # Navigation stays relative to the root; Esc at the root stays there.
+    REQ_SEL=0; req_nav_handle enter
+    assert_eq "/alpha" "$(req_nav_crumb)" "the breadcrumb is relative to the root"
+    req_nav_handle esc; req_nav_handle esc
+    assert_eq "" "$REQ_CUR_DIR" "Esc goes back to the root and stops there"
+    REQ_SEL=3; req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "Enter on a request at the root opens its details"
+    req_nav_handle esc
+
+    # workspace points at a subdirectory: only that directory is seen.
+    rm -rf "$p"; mkdir -p "$p/content/api" "$p/code/src"
+    printf 'workspace=content\n' >"$p/.req"
+    req_request_write "$p/content/api" ping GET http://x >/dev/null
+    req_nav_init "$p/.req"
+    assert_eq "api" "${REQ_ITEM_LABEL[*]}" "only the workspace is listed"
+    assert_eq "$p/content" "$REQ_NAV_ROOT" "the root is the workspace"
+    req_nav_handle enter
+    assert_eq "/api" "$(req_nav_crumb)" "paths are relative to the workspace, not to the .req"
+    assert_eq "ping" "${REQ_ITEM_LABEL[*]}" "and its requests are listed"
+    req_nav_handle esc
+    assert_eq "api" "${REQ_ITEM_LABEL[*]}" "back at the workspace root"
+
+    # :nd at the root creates the directory inside the workspace, not next to the .req.
+    REQ_INPUT_FD=3
+    type_keys : n d
+    req_nav_handle enter 3<<<"newdir" >/dev/null
+    REQ_INPUT_FD=0
+    [[ -d $p/content/newdir && ! -e $p/newdir ]]; assert_eq "0" "$?" ":nd at the root creates inside the workspace"
+    assert_eq "api newdir" "${REQ_ITEM_LABEL[*]}" "and it is listed"
+    assert_eq "workspace=content" "$(<"$p/.req")" "without touching the .req"
+
+    # An invalid workspace stops the menu with the reason.
+    printf 'workspace=../elsewhere\n' >"$p/.req"
+    out=$(req_nav_init "$p/.req" 2>&1); assert_eq "1" "$?" "an invalid workspace refuses to open"
+    assert_contains "leaves the project folder" "$out" "and says why"
+    printf 'workspace=nope\n' >"$p/.req"
+    out=$(req_nav_run "$p/.req" </dev/null 2>&1); assert_eq "1" "$?" "the main loop refuses it too"
+    assert_contains "does not exist" "$out" "with the reason"
 }
 
 test_command_flow() {
@@ -680,7 +746,6 @@ test_review_flow() {
     assert_contains "removed gateway-copy" "$out" ":rm removed a directory"
     [[ -f $p/gateway/ping.get.json && ! -e $p/svc && ! -e $p/gateway-copy ]]
     assert_eq "0" "$?" "the filesystem ends as expected"
-    assert_eq $'# project\ngateway' "$(<"$p/.req")" "and so does the .req"
 }
 
 test_start_init() {
@@ -710,6 +775,7 @@ test_empty_project
 test_command_mode
 test_command_actions
 test_help
+test_dynamic_root
 test_command_rename_dir
 test_command_copy_dir
 test_command_remove

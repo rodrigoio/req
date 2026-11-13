@@ -186,10 +186,8 @@ req_cmd_new() {
 }
 
 req_cmd_mkdir() {
-    local pfile=""
-    [[ -z $REQ_CUR_DIR ]] && pfile=$REQ_NAV_BASE/$REQ_PROJECT_FILE
     req_nav_prompt_begin
-    if req_wizard_mkdir "$REQ_CUR_DIR" "$pfile" "$1"; then
+    if req_wizard_mkdir "${REQ_CUR_DIR:-$REQ_NAV_ROOT}" "" "$1"; then
         REQ_VIEW=list
         req_nav_refresh "$REQ_LAST_DIR"
         REQ_STATUS="created directory ${REQ_LAST_DIR##*/}"
