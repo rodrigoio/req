@@ -191,3 +191,27 @@ req_subst_json() {
                        then gsub("\\$\\{(?<k>[A-Za-z_][A-Za-z0-9_]*)\\}"; $m[.k]) else . end);
         with_entries(if (.key | IN($f[])) then .value |= fill else . end)' <<<"$json")
 }
+
+# req_env_list [project id] - prints the names of the project's environments (the files
+# in projects/<id>/env/ whose name is a slug), one per line, sorted. Nothing without a
+# project or a folder.
+req_env_list() {
+    local id=${1-$REQ_PROJECT_ID} dir f name
+    [[ -n $id ]] || return 0
+    dir=$(req_project_state_dir "$id" env)
+    [[ -d $dir ]] || return 0
+    for f in "$dir"/*; do
+        [[ -f $f ]] || continue
+        name=${f##*/}
+        req_valid_name "$name" && printf '%s\n' "$name"
+    done | LC_ALL=C sort
+}
+
+# req_env_exists <env> [project id] - succeeds when the environment can be used: it has a
+# file in the project, or it is "default", which needs none.
+req_env_exists() {
+    local env=$1 id=${2-$REQ_PROJECT_ID}
+    req_valid_name "$env" || return 1
+    [[ $env == default ]] && return 0
+    [[ -n $id && -f $(req_env_file "$id" "$env") ]]
+}

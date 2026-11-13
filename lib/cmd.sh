@@ -10,6 +10,7 @@
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
+#   :env [name]   show the project's environments, or switch the session to one
 #   :config [k=v] show the settings, or set one in the global configuration (~/.req/config)
 #   :h            help: every key and command (alias :help)
 # Esc leaves command mode; Backspace on an empty line does too.
@@ -37,6 +38,7 @@ REQ_HELP_ROWS=(
     ":rm|remove the selected request or directory, with a y/N question first"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
+    ":env [name]|show the environments of the project, or switch to one (REQ_ENV)"
     ":config [key=value]|show the settings, or change one (global ~/.req/config)"
     ":h|this help (alias :help)"
     ":q|quit (alias :quit)"
@@ -86,6 +88,7 @@ req_cmd_run() {
         rm)           req_cmd_remove ;;
         e|edit)       req_cmd_edit ;;
         d|dup)        req_cmd_dup ;;
+        env)          req_cmd_env "$arg" ;;
         config)       req_cmd_config "$arg" ;;
         h|help)       REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=help ;;
         *)            REQ_STATUS="unknown command :$cmd (:h lists the commands)" ;;
@@ -270,6 +273,39 @@ req_cmd_config() {
         REQ_STATUS="$key=$value saved in $(req_config_file)"
     else
         REQ_STATUS="cannot write $(req_config_file)"
+    fi
+    return 0
+}
+
+# shellcheck disable=SC2034  # REQ_ENV is read by req_run_request and the header
+# req_cmd_env [name] - :env. Without an argument it lists the project's environments and
+# the one in use. With a name it switches the session to that environment (REQ_ENV, shown
+# in the header and used by the next request) when the project has a file for it
+# ("default" always works); otherwise it says which ones exist and where to create it.
+req_cmd_env() {
+    local name=$1 current=${REQ_ENV:-default} list
+    list=$(req_env_list | tr '\n' ' '); list=${list% }
+    if [[ -z $name ]]; then
+        if [[ -n $list ]]; then
+            REQ_STATUS="environments: ${list// /, } (in use: $current)"
+        else
+            REQ_STATUS="no environments yet (in use: $current); add a file in $(req_project_state_dir "${REQ_PROJECT_ID:-<project>}" env)"
+        fi
+        return 0
+    fi
+    if ! req_valid_name "$name"; then
+        REQ_STATUS="invalid environment name \"$name\" (use a slug: lowercase letters, digits and hyphens)"
+    elif ! req_env_exists "$name"; then
+        REQ_STATUS="unknown environment \"$name\""
+        [[ -z $list ]] || REQ_STATUS+=" (known: ${list// /, })"
+        if [[ -n $REQ_PROJECT_ID ]]; then
+            REQ_STATUS+="; create it with a file at $(req_env_file "$REQ_PROJECT_ID" "$name")"
+        else
+            REQ_STATUS+="; the project state in $(req_config_dir) is not available"
+        fi
+    else
+        REQ_ENV=$name
+        REQ_STATUS="environment: $name"
     fi
     return 0
 }

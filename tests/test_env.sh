@@ -212,6 +212,28 @@ test_subst_json() {
     assert_contains "c: set the variable DEV_C, or add c=... to $REQ_CONFIG_DIR/projects/$ID/env/dev" "$err" "with how to define it"
 }
 
+test_env_list() {
+    echo "env: the environments of a project"
+    mkdir -p "$REQ_CONFIG_DIR/projects/lister/env"
+    assert_eq "" "$(req_env_list lister)" "a project without environment files lists none"
+    assert_eq "" "$(req_env_list nothing-here)" "so does a project with no folder"
+    assert_eq "" "$(req_env_list "")" "and no project at all"
+    printf 'a=1\n' >"$REQ_CONFIG_DIR/projects/lister/env/prod"
+    printf 'a=1\n' >"$REQ_CONFIG_DIR/projects/lister/env/dev"
+    printf 'a=1\n' >"$REQ_CONFIG_DIR/projects/lister/env/Bad_Name"
+    mkdir "$REQ_CONFIG_DIR/projects/lister/env/folder"
+    assert_eq $'dev\nprod' "$(req_env_list lister)" "files with a slug name are listed, sorted; other names and folders are not"
+    REQ_PROJECT_ID=lister
+    assert_eq $'dev\nprod' "$(req_env_list)" "the project defaults to REQ_PROJECT_ID"
+    req_env_exists dev; assert_eq "0" "$?" "an environment with a file exists"
+    req_env_exists staging; assert_eq "1" "$?" "one without a file does not"
+    req_env_exists default; assert_eq "0" "$?" "default needs no file"
+    req_env_exists "../x"; assert_eq "1" "$?" "a name that is not a slug never exists"
+    req_env_exists dev ""; assert_eq "1" "$?" "without a project only default exists"
+    req_env_exists default ""; assert_eq "0" "$?" "which is always there"
+    REQ_PROJECT_ID=""
+}
+
 test_paths
 test_load
 test_invalid
@@ -219,4 +241,5 @@ test_legacy
 test_resolve
 test_subst
 test_subst_json
+test_env_list
 test_summary

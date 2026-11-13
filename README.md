@@ -72,6 +72,7 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 | `:ed [name]` | rename the directory under the cursor (asks for the name unless given). The contents move with it; only the last path component changes. On a request it points to `:e` |
 | `:cp [name]` | copy the directory (with everything inside, symbolic links copied as links) or the request under the cursor, or the one open on the details screen. It asks for the new name (default `<name>-copy`) and does not open the edit menu |
 | `:rm` | remove the selected request (or the one open on the details screen), after a `[y/N]` confirmation; Enter keeps it. It also works on an invalid request. On a directory it removes the directory and everything inside it, after a red warning with the full path and the number of files and subdirectories and the same `[y/N]` question. Only directories inside the workspace are ever deleted, and never a symbolic link |
+| `:env [name]` | without an argument, lists the environments of the project and the one in use; with a name, switches the session to it (see "Environments and variables") |
 | `:config [key=value]` | without an argument, shows the settings: every known key with its value and its default. With `key=value` (for example `:config time_stats=no`) it checks the key and the value and writes them to `~/.req/config`; an unknown key or a wrong value is explained and nothing is written |
 | `:e` | edit the selected request (or the one open on the details screen) through a field menu; changing the name or the method renames the file. Option `8) raw data` opens the body in your editor (`$VISUAL`, `$EDITOR`, `vim`, `vi`, like git); without one it asks for a single line (`-` clears). JSON objects and lists are stored as native JSON; other text is stored as a string, and you are offered to edit it again first unless the request has a non-JSON `Content-Type` |
 | `:d` | duplicate the selected request under a new name and open the edit menu on the copy |
@@ -97,7 +98,7 @@ lib/ui.sh      ANSI colors, terminal helpers and per-method formatting
 lib/store.sh   request persistence and the .req project file
 lib/http.sh    curl command building, execution, display and timing profile
 lib/nav.sh     interactive menu: list, details and keys
-lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :config :h :q) and its help table
+lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :env :config :h :q) and its help table
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
 lib/config.sh  global configuration (`~/.req/config`) and its table of keys
 lib/env.sh     environments and secrets (loading `vars` and `env/<env>`)
@@ -190,4 +191,4 @@ The environment is the `REQ_ENV` variable, `default` when it is not set. If a ke
 
 `req run` takes the project files from the project registered for the current folder, if there is one; otherwise only the process variables apply.
 
-Not wired in yet: showing the environment in the menu and switching with `:env <name>`. See the roadmap in [TASKS.md](TASKS.md).
+Switch the environment of the session with `:env <name>`; `:env` alone lists the project's environments (the files in `env/`) and the one in use. An environment must have a file, except `default`, which needs none. The choice is not remembered: the next start uses `REQ_ENV` or `default`. See the roadmap in [TASKS.md](TASKS.md).

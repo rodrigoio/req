@@ -657,6 +657,47 @@ test_command_config() {
     assert_contains ":config" "$out" "the help lists :config"
 }
 
+test_command_env() {
+    echo "nav: :env"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_project_activate "$PROJ" || return
+    local envdir
+    envdir=$(req_project_state_dir "$REQ_PROJECT_ID" env)
+    unset REQ_ENV
+
+    type_keys : e n v enter
+    assert_contains "no environments yet (in use: default)" "$REQ_STATUS" ":env lists nothing when there are no files"
+    assert_contains "$envdir" "$REQ_STATUS" "and says where to create one"
+
+    mkdir -p "$envdir"; printf 'url=http://dev\n' >"$envdir/dev"; printf 'url=http://prod\n' >"$envdir/prod"
+    type_keys : e n v enter
+    assert_contains "environments: dev, prod (in use: default)" "$REQ_STATUS" ":env lists the environments and the one in use"
+
+    type_keys : e n v ' ' d e v enter
+    assert_eq "dev" "$REQ_ENV" ":env <name> switches the session"
+    assert_contains "environment: dev" "$REQ_STATUS" "and says so"
+    req_nav_build_list; assert_contains "proj @ dev" "${REQ_SCREEN_LINES[0]}" "the header follows"
+    type_keys : e n v enter
+    assert_contains "(in use: dev)" "$REQ_STATUS" "and the listing shows the new one"
+
+    type_keys : e n v ' ' s t a g i n g enter
+    assert_eq "dev" "$REQ_ENV" "an unknown environment changes nothing"
+    assert_contains 'unknown environment "staging" (known: dev, prod)' "$REQ_STATUS" "and is explained with the known ones"
+    assert_contains "$envdir/staging" "$REQ_STATUS" "and the file that would create it"
+    type_keys : e n v ' ' B a d enter
+    assert_contains "invalid environment name" "$REQ_STATUS" "a name that is not a slug is refused"
+    assert_eq "dev" "$REQ_ENV" "without a change"
+    type_keys : e n v ' ' d e f a u l t enter
+    assert_eq "default" "$REQ_ENV" "default can always be chosen, even without a file"
+
+    REQ_PROJECT_ID=""; type_keys : e n v ' ' p r o d enter
+    assert_eq "default" "$REQ_ENV" "without a saved project state only default is allowed"
+    assert_contains "not available" "$REQ_STATUS" "and the reason is given"
+    assert_contains ":env" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists :env"
+    unset REQ_ENV
+}
+
 test_command_remove() {
     echo "nav: :rm on a request"
     make_project
@@ -1045,6 +1086,7 @@ test_dynamic_root
 test_command_rename_dir
 test_command_copy
 test_command_config
+test_command_env
 test_command_remove
 test_command_remove_dir
 test_command_flow
