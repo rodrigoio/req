@@ -692,9 +692,8 @@ test_start_init() {
     out=$(printf 'y\n' | req_confirm "Initialize a req project here?")
     assert_contains "Initialize a req project here? [Y/n]" "$out" "prompt text"
     req_project_init "$d" && req_nav_init "$d/.req"
-    assert_eq "requests" "${REQ_ITEM_LABEL[*]}" "the initialized project opens at its default directory"
-    req_nav_handle enter
-    screen list; assert_contains "(empty)" "$OUT" "the default directory starts empty"
+    assert_eq "0" "${#REQ_ITEM_LABEL[@]}" "a freshly initialized project has nothing to list"
+    screen list; assert_contains "(empty)" "$OUT" "so the root starts empty"
 }
 
 test_keys

@@ -55,8 +55,8 @@ main() {
         init)
             req_project_init . || return 1
             req_project_activate . || true     # only a warning: the project itself exists
-            printf 'Initialized req project in %s\n  %s\n  %s/\n' \
-                "$PWD" "$REQ_PROJECT_FILE" "$REQ_PROJECT_DEFAULT_DIR"
+            printf 'Initialized req project in %s\n  %s (workspace: .)\n' "$PWD" "$REQ_PROJECT_FILE"
+            printf 'Use :n to create a new request.\n'
             ;;
         run)
             [[ -n ${2-} ]] || req_die "usage: req run <file.<method>.json>"

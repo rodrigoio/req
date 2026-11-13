@@ -192,6 +192,9 @@ test_init_command() {
     mkdir -p "$d"
     out=$(cd "$d" && bash "$ROOT/bin/req" init 2>&1); assert_eq "0" "$?" "req init succeeds"
     assert_contains "Initialized req project" "$out" "and reports it"
+    assert_contains "Use :n to create a new request." "$out" "and suggests creating a request"
+    assert_contains "workspace=." "$(<"$d/.req")" "the .req carries the workspace"
+    assert_eq "$d/.req" "$(find "$d" -mindepth 1 | tr -d '\n')" "and init creates nothing else"
     assert_eq "initproj" "$(req_project_find_id "$d")" "the project is registered under its folder name"
     assert_eq "initproj" "$(req_current_get)" "and is the current one"
     out=$(cd "$d" && REQ_CONFIG_DIR=$TMP/not-a-dir bash "$ROOT/bin/req" init 2>&1)

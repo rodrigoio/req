@@ -13,7 +13,9 @@ The `.req` file marks "a req project was initialized here" and carries the varia
 (`key=value`): the working directory, a path relative to the `.req`'s folder or `.` (the default,
 the folder itself). `req` sees only the workspace; the menu root is the workspace and its items are
 read dynamically, so the old one-directory-per-line entries are ignored (R11, decided; tasks TR3.1
-to TR3.7 in TASKS.md; only `req_project_workspace` exists so far, the code still reads the entries).
+to TR3.7 in TASKS.md; `req init` and the init offered by the menu already write only the `.req` (comment and
+`workspace=.`, no `requests/`, `REQ_PROJECT_DEFAULT_DIR` is gone) and print `Use :n to create a new
+request.`; the menu root still reads the entries until TR3.3).
 
 `req_project_workspace <.req>` (`lib/home.sh`, TR3.1) prints the absolute workspace path and fails with a
 reason that names the `.req`. Rules: the value (default `.`, also when the key is absent or the `.req`
@@ -34,7 +36,7 @@ folder itself may be reached through a link: only the workspace part is checked.
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR3.2** (`req init` only writes the `.req`; TR3.1, the `workspace` helper, is done). Order agreed: Review 3 (R11) now, then TR2.4
+Next task: **TR3.3** (dynamic menu root; TR3.1 and TR3.2 are done; until TR3.3 a new project opens with an empty root). Order agreed: Review 3 (R11) now, then TR2.4
 (per-project environments), the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
@@ -181,7 +183,7 @@ line (`req_warn` in `core.sh`) and returns 1; `req init` and the menu carry on w
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 867 asserts at the time of writing.
+`assert_contains`, `test_summary`). 872 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

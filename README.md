@@ -29,7 +29,7 @@ req               # no .req here? it offers to initialize the project: [Y/n]
 Or explicitly:
 
 ```sh
-req init          # creates .req and a requests/ directory
+req init          # creates the .req file (workspace=.) and suggests :n to create a request
 ```
 
 ## Usage
@@ -130,7 +130,14 @@ Each request is a file `<slug>.<method>.json` (methods: GET, POST, PUT, PATCH, D
 
 Subdirectories of the project are real directories.
 
-The `.req` file at the project root lists the directories that make it up, one per line, relative to the `.req` itself. Blank lines and lines starting with `#` are ignored:
+The `.req` file marks a folder as an initialized `req` project. `req init` writes it with a comment and the variable `workspace`:
+
+```
+# req project: this folder was initialized with req.
+workspace=.
+```
+
+`workspace` is the directory `req` works on: a path **relative to the folder of the `.req`**, or `.` (the folder itself, the default). It must be an existing directory inside the project folder; absolute paths, a `..` that leaves the project and symbolic links in the path are refused. Use it to keep the `req` content in a subfolder (`workspace=requests`) of a folder that has other files. (`req init` no longer creates any directory. The menu will start reading the workspace in an upcoming change; until then it still lists the directories named in the `.req`, one per line, relative to the `.req` itself. Blank lines and lines starting with `#` are ignored:)
 
 ```
 # project

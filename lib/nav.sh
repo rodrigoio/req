@@ -409,7 +409,7 @@ req_nav_start() {
             return 1
         fi
         req_project_init . || return 1
-        printf 'Created %s and %s/\n' "$REQ_PROJECT_FILE" "$REQ_PROJECT_DEFAULT_DIR"
+        printf 'Created %s (workspace: .)\nUse :n to create a new request.\n' "$REQ_PROJECT_FILE"
         pfile=$(req_project_find .) || return 1
     fi
     req_project_activate "$(dirname "$pfile")"

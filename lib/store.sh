@@ -16,7 +16,6 @@
 
 REQ_METHODS=(GET POST PUT PATCH DELETE)
 REQ_PROJECT_FILE=.req
-REQ_PROJECT_DEFAULT_DIR=requests
 
 # Content checks (independent of the file name): prints one problem per line.
 # shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
@@ -245,16 +244,18 @@ req_project_find() {
     printf '%s\n' "$file"
 }
 
-# req_project_init [directory] - creates a .req and its default directory. Fails
-# if the directory does not exist or already has a .req.
+# req_project_init [directory] - creates the .req file of a new project, and nothing
+# else: a comment and "workspace=." (the working directory, relative to the .req; "." is
+# the folder itself). Fails if the directory does not exist or already has a .req.
 req_project_init() {
     local dir=${1:-.} file
     file=$dir/$REQ_PROJECT_FILE
     [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
     [[ ! -e $file ]] || { req_err "$file already exists"; return 1; }
-    if ! { mkdir -p "$dir/$REQ_PROJECT_DEFAULT_DIR" &&
-            printf '# req project: one directory per line, relative to this file.\n%s\n' \
-                "$REQ_PROJECT_DEFAULT_DIR" >"$file"; } 2>/dev/null; then
+    if ! printf '%s\n' \
+            '# req project: this folder was initialized with req.' \
+            '# workspace: the directory req works on, relative to this folder ("." is the folder itself).' \
+            'workspace=.' >"$file" 2>/dev/null; then
         req_err "cannot write to $dir"
         return 1
     fi

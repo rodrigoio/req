@@ -242,14 +242,17 @@ test_init() {
     local d=$TMP/init out
     mkdir -p "$d"
     req_project_init "$d"; assert_eq "0" "$?" "initializes an empty directory"
-    [[ -f $d/.req && -d $d/requests ]]; assert_eq "0" "$?" "creates .req and requests/"
-    assert_eq "$d/requests" "$(req_project_dirs "$d/.req")" "the .req lists the default directory"
-    assert_contains "# req project" "$(cat "$d/.req")" "the .req has a comment header"
+    [[ -f $d/.req ]]; assert_eq "0" "$?" "creates the .req"
+    assert_eq "$d/.req" "$(find "$d" -mindepth 1 | tr -d '\n')" "and nothing else (no directories)"
+    assert_contains "workspace=." "$(cat "$d/.req")" "the .req has workspace=."
+    assert_contains "# req project" "$(cat "$d/.req")" "and a comment header"
+    assert_eq "" "$(req_project_dirs "$d/.req")" "it lists no directories"
     out=$(req_project_init "$d" 2>&1); assert_eq "1" "$?" "does not overwrite an existing .req"
     assert_contains "already exists" "$out" "error explains why"
     out=$(req_project_init "$TMP/missing" 2>&1); assert_eq "1" "$?" "fails in a missing directory"
     assert_contains "does not exist" "$out" "error names the problem"
-    req_project_init "$TMP/init/requests" >/dev/null 2>&1 && req_project_find "$TMP/init/requests" >/dev/null
+    mkdir -p "$TMP/init/nested"
+    req_project_init "$TMP/init/nested" >/dev/null 2>&1 && req_project_find "$TMP/init/nested" >/dev/null
     assert_eq "0" "$?" "works in a nested directory"
 }
 
