@@ -202,6 +202,72 @@ test_init_command() {
     assert_contains "warning: the project state" "$out" "and the warning is shown"
 }
 
+test_workspace() {
+    echo "home: workspace of the .req"
+    local p=$TMP/ws out f status
+    mkdir -p "$p/content/deep" "$p/other" "$p/outside-target"
+    f=$p/.req
+    printf 'plain' >"$p/afile"
+
+    printf '# req project\nworkspace=.\n' >"$f"
+    assert_eq "$p" "$(req_project_workspace "$f")" "workspace=. is the project folder"
+    : >"$f"
+    assert_eq "$p" "$(req_project_workspace "$f")" "an empty .req defaults to the project folder"
+    printf 'api\nauth/\n# old entries\n' >"$f"
+    assert_eq "$p" "$(req_project_workspace "$f")" "old directory entries are ignored"
+    printf 'workspace = content \r\n' >"$f"
+    assert_eq "$p/content" "$(req_project_workspace "$f")" "spaces and CRLF around the value are tolerated"
+
+    local v
+    for v in content content/ ./content content/deep ./content/./deep/ other/../content; do
+        printf 'workspace=%s\n' "$v" >"$f"
+        out=$(req_project_workspace "$f" 2>&1); status=$?
+        assert_eq "0" "$status" "workspace=$v is accepted"
+    done
+    printf 'workspace=./content/deep/\n' >"$f"
+    assert_eq "$p/content/deep" "$(req_project_workspace "$f")" "the path is printed normalized"
+    printf 'workspace=other/../content\n' >"$f"
+    assert_eq "$p/content" "$(req_project_workspace "$f")" "a .. that stays inside is resolved"
+
+    # Refusals: each fails, explains itself and names the .req by its absolute path.
+    check_refused() {
+        printf 'workspace=%s\n' "$1" >"$f"
+        out=$(req_project_workspace "$f" 2>&1); status=$?
+        assert_eq "1" "$status" "workspace=$1 is refused"
+        assert_contains "$f: workspace" "$out" "  and the message names the .req"
+        assert_contains "$2" "$out" "  and says why"
+    }
+    check_refused "/etc" "must be a relative path"
+    check_refused "$p/content" "must be a relative path"
+    check_refused ".." "leaves the project folder"
+    check_refused "content/../.." "leaves the project folder"
+    check_refused "../ws/content" "leaves the project folder"
+    check_refused "ghost" "does not exist"
+    check_refused "content/ghost" "does not exist"
+    check_refused "afile" "is not a directory"
+    check_refused "afile/sub" "is not a directory"
+    printf 'workspace=\n' >"$f"
+    out=$(req_project_workspace "$f" 2>&1); assert_eq "1" "$?" "an empty value is refused"
+    assert_contains "workspace is empty" "$out" "  and says to use ."
+
+    ln -s "$p/outside-target" "$p/linked"
+    ln -s content "$p/inner-link"
+    check_refused "linked" "symbolic link"
+    check_refused "inner-link" "symbolic link"
+    check_refused "inner-link/deep" "symbolic link"
+    check_refused "linked/../content" "symbolic link"
+    check_refused "content/../linked" "symbolic link"
+
+    out=$(req_project_workspace "$p/none/.req" 2>&1); assert_eq "1" "$?" "a missing .req fails"
+    assert_contains "project file not found" "$out" "  with a message"
+
+    # The project folder itself may be reached through a link: only the workspace path is checked.
+    ln -s "$p" "$TMP/ws-link"
+    printf 'workspace=content\n' >"$f"
+    assert_eq "$p/content" "$(req_project_workspace "$TMP/ws-link/.req")" "a project folder reached through a link works"
+    unset -f check_refused
+}
+
 test_kv_read
 test_kv_check
 test_kv_write
@@ -210,4 +276,5 @@ test_projects
 test_current
 test_activate
 test_init_command
+test_workspace
 test_summary

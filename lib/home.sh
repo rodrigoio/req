@@ -249,3 +249,55 @@ req_project_activate() {
     fi
     REQ_PROJECT_ID=$id
 }
+
+# --- the .req file: workspace ---------------------------------------------------
+
+# req_project_workspace <.req file> - prints the absolute path of the project's workspace,
+# the only directory req looks at. It comes from the "workspace" key of the .req (a
+# key=value file): a path relative to the folder of the .req, or "." (the default, also
+# used when the key is absent) for that folder. Lines of the .req that are not key=value,
+# like the old one-directory-per-line entries, are ignored.
+# The path must be relative, exist, be a real directory inside the project folder and
+# have no symbolic link in it (links of any kind are refused; a directory cannot be hard
+# linked, so a component that is not a plain directory is refused). Every component is
+# checked in order, including those a later ".." cancels, so "link/../x" is refused too.
+# On a problem it prints the reason with the absolute path of the .req and fails.
+req_project_workspace() {
+    local pfile=$1 base abs value comp cur
+    local -a parts
+    [[ -f $pfile ]] || { req_err "project file not found: $pfile"; return 1; }
+    abs=$(req_abs_path "$pfile")
+    base=$(cd -P "$(dirname "$pfile")" && pwd) || { req_err "$abs: cannot enter the project folder"; return 1; }
+    value=$(req_kv_get "$pfile" workspace) || value=.
+    if [[ -z $value ]]; then
+        req_err "$abs: workspace is empty (use . for the project folder)"; return 1
+    fi
+    if [[ $value == /* ]]; then
+        req_err "$abs: workspace \"$value\" must be a relative path"; return 1
+    fi
+
+    cur=$base
+    IFS=/ read -r -a parts <<<"$value"
+    for comp in "${parts[@]}"; do
+        case $comp in
+            ''|.) continue ;;
+            ..)
+                cur=${cur%/*}
+                if [[ $cur != "$base" && $cur != "$base"/* ]]; then
+                    req_err "$abs: workspace \"$value\" leaves the project folder"; return 1
+                fi
+                continue ;;
+        esac
+        cur=$cur/$comp
+        if [[ -L $cur ]]; then
+            req_err "$abs: workspace \"$value\" goes through a symbolic link ($comp); links are not accepted"; return 1
+        fi
+        if [[ ! -e $cur ]]; then
+            req_err "$abs: workspace \"$value\" does not exist"; return 1
+        fi
+        if [[ ! -d $cur ]]; then
+            req_err "$abs: workspace \"$value\" is not a directory ($comp)"; return 1
+        fi
+    done
+    printf '%s\n' "$cur"
+}

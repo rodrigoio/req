@@ -4,17 +4,38 @@ Handoff document: everything needed to pick the project up again without the
 conversation history. User-facing documentation is in [README.md](README.md); the
 roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 
+## Scope of use
+
+`req` is meant, for now, to live **outside** a development project: the project directory holds
+only `req` things (requests and their directories). Using it at the root of a code repository is
+not a goal, so the menu lists every non-hidden item of its working directory without filters.
+The `.req` file marks "a req project was initialized here" and carries the variable `workspace`
+(`key=value`): the working directory, a path relative to the `.req`'s folder or `.` (the default,
+the folder itself). `req` sees only the workspace; the menu root is the workspace and its items are
+read dynamically, so the old one-directory-per-line entries are ignored (R11, decided; tasks TR3.1
+to TR3.7 in TASKS.md; only `req_project_workspace` exists so far, the code still reads the entries).
+
+`req_project_workspace <.req>` (`lib/home.sh`, TR3.1) prints the absolute workspace path and fails with a
+reason that names the `.req`. Rules: the value (default `.`, also when the key is absent or the `.req`
+is empty or holds old entries) must be relative, exist and be a plain directory inside the project
+folder, with no `..` that leaves it and no symbolic link in any component. Components are checked in
+order, including those a later `..` cancels, so `link/../x` is refused. A directory cannot be hard
+linked on Linux, so refusing non-plain components is the whole check for "hard" links. The project
+folder itself may be reached through a link: only the workspace part is checked.
+
 ## Status
 
 | Phase | State |
 |---|---|
 | 0 Foundation, 1 Data model, 2 curl execution, 3 Navigation, 4 Command mode | done |
 | Review 1, usability findings (TR.1 to TR.15) | done, except TR.14 (postponed, needs the user's decision) |
+| Review 3, R11 (`.req` with `workspace`, dynamic root; TR3.1 to TR3.7) | pending; runs next |
 | Review 2, R8 to R10 (central project control in `~/.req`, `:config`, cursor; TR2.1 to TR2.10) | pending; TR2.1 to TR2.4 come before Phase 5 |
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR2.4** (per-project environments; TR2.1 to TR2.3 are done). Review 2 changes where environments live (one
+Next task: **TR3.2** (`req init` only writes the `.req`; TR3.1, the `workspace` helper, is done). Order agreed: Review 3 (R11) now, then TR2.4
+(per-project environments), the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
 
@@ -160,7 +181,7 @@ line (`req_warn` in `core.sh`) and returns 1; `req init` and the menu carry on w
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 808 asserts at the time of writing.
+`assert_contains`, `test_summary`). 867 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

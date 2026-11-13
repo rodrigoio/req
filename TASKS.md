@@ -3,12 +3,12 @@
 ## Context
 O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cadastrar, navegar e disparar requisições HTTP, com persistência em arquivos JSON num diretório de projeto. O repositório está vazio (só `manifest`, `LICENSE`, `.gitignore`). Este plano organiza o manifest em fases incrementais, cada uma entregando uma estrutura ou feature verificável.
 
-Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.gitignore` permanece.
+**Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1 e a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir). Próxima tarefa: **TR2.4** (Revisão 2: ambientes por projeto). TR2.1 a TR2.3 estão feitas.
-- A "Revisão 2" (R8 a R10, seção ao final do plano) muda o armazenamento de ambientes: cada projeto passa a ter seu diretório em `~/.req`. **As TR2.1 a TR2.4 são pré-requisito da Fase 5**: a T5.2 só começa depois delas.
-- Suíte: `make check` com 808 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Feito: Fases 0 a 4, a T5.1, a Revisão 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir) e a Revisão 2 até a TR2.3. Próxima tarefa: **TR3.2** (Revisão 3: `req init` só grava o `.req` com `workspace`). A TR3.1 está feita.
+- Ordem combinada: **Revisão 3 (R11, `.req` com `workspace` e raiz dinâmica) agora**, depois a TR2.4 (ambientes por projeto), e então as demais tarefas da Revisão 2 e a Fase 5. As TR2.1 a TR2.4 continuam sendo pré-requisito da Fase 5.
+- Suíte: `make check` com 867 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -20,6 +20,9 @@ Nota: o `manifest` é local e não deve ser versionado; a linha `manifest` do `.
 - **Placeholder ausente:** `${chave}` sem valor gera erro amigável que indica ao usuário como proceder (arquivo e variável esperados, ex.: definir `DEV_URL` ou adicionar `url=...` no arquivo do ambiente `dev` do projeto); a requisição não é enviada.
 - **JSON válido:** as requests são sempre gravadas como JSON válido. Se o usuário o invalidar manualmente, o `req` apenas indica o erro (arquivo e detalhe do jq), sem tentar corrigir nem sobrescrever.
 - **Git:** `manifest` permanece no `.gitignore`.
+- **`.req` e `workspace` (R11, decidido):** o `.req` indica que o projeto foi inicializado no diretório e traz a variável `workspace` (formato `chave=valor`), o diretório de trabalho do `req`: um caminho relativo ao diretório do `.req` ou `.` (o próprio diretório, o padrão). O `req` só enxerga o `workspace`: a raiz do menu é ele e os diretórios são lidos dinamicamente, sem o mapeamento de linhas do `.req`; as linhas antigas são ignoradas, sem migração. Validação (confirmada pelo usuário): só caminho relativo válido, que existe, é um diretório e fica dentro do diretório do projeto; recusa caminho absoluto, `..` que saia do projeto e qualquer tipo de link (simbólico ou hard) no caminho. Assim a proteção do `:rm` continua valendo. Substitui o mapeamento das TR.9 a TR.13 (marcadas como feitas, mas parte do código sai na Revisão 3).
+- **Raiz lista tudo (R11):** o menu lista todos os itens do `workspace` com o seu tipo (diretório ou request `.json`), e os comandos agem conforme o tipo do item sob o cursor (o alcance de `:ed` e `:c` sobre requests está em aberto, ver TR3.5). Isso fecha a TA.6: `:n` na raiz cria a request ali.
+- **`req init` (R11):** só grava o `.req` (com `workspace=.`), sem criar diretórios, e sugere ao usuário criar uma request: `Use :n to create a new request.`
 - **Enter em duas etapas:** o 1º Enter em uma request abre os detalhes (url, params), o 2º dispara; Esc volta. Assim o usuário confere antes de executar.
 - **Ambiente padrão:** `default`, usado quando `REQ_ENV` não está definido; troca em sessão via `:env <nome>`.
 - **Campos da request:** obrigatórios `name`, `method` e `url` (a `url` pode usar `${chave}`); opcionais `description`, `headers`, `query`, `parameters` e `raw_data`. `parameters` é o novo nome de `data_parameter` (feito na TR.3).
@@ -157,7 +160,7 @@ Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde fi
 - T7.2 Validação em containers centos e rhel, com os mesmos pontos.
 - [x] T7.3 `shellcheck`: corrigir os avisos (feito: `make lint` limpo em `bin/`, `lib/` e `tests/`).
 - T7.4 Documentação de uso.
-- T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
+- T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do `.req` (`workspace`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
 - T7.6 Teste ponta a ponta do fluxo completo.
 
 ### Adicionais — pendências e ajustes pós-validação (antes da Fase 8)
@@ -167,7 +170,7 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 - TA.3 Esc cancela os prompts dos assistentes (`:n`, `:e`, `:d`, `:nd`) e as confirmações novas (`:ed`, `:c`, `:rm`). Hoje só nome vazio ou Ctrl-D cancelam.
 - TA.4 Rever o Enter em duas etapas e a seleção que substitui a cor do método na linha destacada, conforme as validações (podem virar opção). A ordem entre request e resposta ao executar é a TR.14.
 - TA.5 Histórico e Tab no modo comando.
-- TA.6 Decidir se requests podem ser criadas na raiz do projeto (hoje só dentro de diretórios; `:n` na raiz explica e sugere `:nd`).
+- ~~TA.6~~ Decidida pela Revisão 3 (R11): a raiz é o `workspace` e lista requests e diretórios; `:n` na raiz cria a request (TR3.4).
 - TA.7 Redimensionamento do terminal: o menu não trata `SIGWINCH`; verificar o redesenho e o apagamento ao redimensionar. Inclui telas mais altas que o terminal (ajuda, detalhes com `raw_data` longo).
 - TA.8 Código de saída de `req run` para respostas 4xx e 5xx (hoje 0; só falha em erro de transporte). Decisão pendente.
 - TA.9 Teste em pseudo-terminal dentro da suíte (init, navegação, `:n`, `:q` e a chamada do editor externo), hoje só feito à mão; requer `python3` e é pulado sem ele.
@@ -205,12 +208,27 @@ Tarefas (R9):
 - TR2.7 (R9) Chaves de apresentação `time_stats` (perfil de tempos) e `time_stat_total` (linha de total), `yes` ou `no`, padrão `yes`, aplicadas por `req_run_request` e por `req run`.
 
 Tarefas (R8):
-- TR2.8 (R8) Gravar o cursor ao sair (`:q`, fim da entrada e sinais) em `projects/<id>/cursor`: diretório atual e item selecionado, relativos ao `.req`, em `chave=valor`.
+- TR2.8 (R8) Gravar o cursor ao sair (`:q`, fim da entrada e sinais) em `projects/<id>/cursor`: diretório atual e item selecionado, relativos ao `workspace`, em `chave=valor`.
 - TR2.9 (R8) Retomar o cursor ao abrir: volta ao diretório e ao item (a pilha do Esc é refeita); diretório inexistente leva ao ancestral mais próximo, item inexistente ao primeiro; arquivo ausente ou inválido leva à raiz sem erro; a chave `restore_cursor` (padrão `yes`) desliga a retomada.
 - TR2.10 Verificação da Revisão 2: fluxo integrado pelo laço principal (sair e reabrir no mesmo lugar, `:config`, projeto registrado), demonstração em terminal real (pty) e revisão final do README e do `DEVELOPMENT.md`.
+
+### Revisão 3 — achado R11 (executar agora, antes da TR2.4)
+Continuação do arquivo local `reviews`.
+
+Achado:
+- **R11** Usar o `.req` do projeto só como referência de que o diretório foi inicializado, e carregar os diretórios dinamicamente, sem o mapeamento. Respostas do usuário: a raiz lista todos os itens e seus tipos e os comandos agem conforme o tipo; o `.req` terá a variável `workspace` (caminho relativo válido ou `.`), que deve constar na documentação; `req init` só inicializa o arquivo e sugere `:n`.
+
+Tarefas:
+- [x] TR3.1 (R11) Helper `req_project_workspace <.req>`: lê `workspace` pelos helpers `chave=valor` (padrão `.` quando ausente; linhas que não são `chave=valor`, como as entradas antigas, são ignoradas), valida e imprime o caminho físico. Regras: só caminho relativo, que existe e é um diretório dentro do projeto (sem `..` que saia dele, sem caminho absoluto), e nenhum componente do caminho pode ser link simbólico; links hard também são recusados (um diretório não aceita hard link em Linux, então a checagem prática é a de symlink, e um componente que não seja diretório regular é recusado). Erro amigável com o caminho absoluto do `.req` e o motivo. Infraestrutura, commit próprio.
+- TR3.2 (R11) `req init` e a inicialização oferecida pelo menu só gravam o `.req` (comentário e `workspace=.`), sem criar `requests/` (sai `REQ_PROJECT_DEFAULT_DIR`), e mostram `Use :n to create a new request.`; um `.req` existente continua sendo recusado. README: seção sobre o `.req` e a variável `workspace`.
+- TR3.3 (R11) Raiz dinâmica: a raiz do menu é o `workspace` e lista todos os itens (diretórios e requests, com o tipo) pelo `req_list_dir`; saem `REQ_NAV_ROOTS` e `req_project_dirs`. Um único ponto (`req_nav_root`) decide o diretório da raiz; o título e os caminhos relativos partem do `workspace`.
+- TR3.4 (R11, TA.6) Comandos na raiz: `:n` cria a request no `workspace`; `:nd` cria um diretório comum, sem tocar o `.req` (sai `req_project_add_dir`); o aviso "open a directory first" desaparece.
+- TR3.5 (R11) `:ed`, `:c` e `:rm` sem a lógica do `.req` (entrada listada, "fora do projeto", desinscrever), agindo sobre o item sob o cursor: `:ed` renomeia e `:c` copia o diretório, `:rm` remove diretório ou request. O limite de segurança do `:rm` passa a ser o `workspace` (só dentro dele, nunca symlink). **A decidir pelo usuário antes desta tarefa:** se `:ed` e `:c` também passam a valer para request (proposta: `:ed` abre a edição, como o `:e`, e `:c` duplica, como o `:d`); até lá ficam só para diretório, como hoje.
+- TR3.6 (R11) Remover o código morto: helpers de entradas do `.req` (TR.9) e seus testes, mais ajustes nos testes que tratavam do mapeamento; `DEVELOPMENT.md` (itens 6 e 7 dos pontos a validar).
+- TR3.7 Verificação da Revisão 3: fluxo integrado pelo laço principal, demonstração em terminal real (pty) e revisão final do README e do `DEVELOPMENT.md` (a variável `workspace` documentada).
 
 ## Arquivos críticos (a criar)
 `bin/req`, `lib/{core,ui,store,http,nav,cmd,wizard,env,home,log}.sh` (`home.sh`: `~/.req`, projetos, configuração e cursor), `tests/*`, `README.md`, `TASKS.md`.
 
 ## Verificação
-Cada fase termina com seus testes passando e uma demonstração manual: Fase 2 dispara uma request real e mostra tempos; Fase 3 navega com setas/Enter/Esc; Fase 4 cria, edita e duplica requests geradas em disco; Revisão 1 mostra a ajuda `:h`, envia um POST com JSON editado no vim e renomeia, copia e remove diretórios conferindo o `.req`; Revisão 2 registra um projeto em `~/.req`, muda uma configuração com `:config` e reabre o `req` no mesmo lugar; Fase 5 troca de ambiente com `:env` e resolve secrets; Fase 6 gera log e verbose com `>>`/`<<`; Fase 7 roda em containers debian/centos.
+Cada fase termina com seus testes passando e uma demonstração manual: Fase 2 dispara uma request real e mostra tempos; Fase 3 navega com setas/Enter/Esc; Fase 4 cria, edita e duplica requests geradas em disco; Revisão 1 mostra a ajuda `:h`, envia um POST com JSON editado no vim e renomeia, copia e remove diretórios conferindo o `.req`; Revisão 3 inicializa um `.req` com `workspace`, lista a raiz dinamicamente e opera sobre diretórios e requests na raiz; Revisão 2 registra um projeto em `~/.req`, muda uma configuração com `:config` e reabre o `req` no mesmo lugar; Fase 5 troca de ambiente com `:env` e resolve secrets; Fase 6 gera log e verbose com `>>`/`<<`; Fase 7 roda em containers debian/centos.
