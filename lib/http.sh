@@ -31,6 +31,7 @@ REQ_PREPARE_JQ='
 | (.timeout // "") as $t
 | (.follow_redirects // false) as $f
 | (.insecure // false) as $k
+| (.files // {}) as $fl
 | ($m == "POST" or $m == "PUT" or $m == "PATCH") as $body
 | (["method", $m],
    ["url", ((.url // "") as $u
@@ -47,19 +48,21 @@ REQ_PREPARE_JQ='
    (if $body and $r != "" then
         ["raw", (if ($r | type) == "string" then $r else ($r | tojson) end)],
         ["rawjson", (($r | type) != "string" | tostring)]
-    elif $body and ($d | length) > 0 then
-        ($d | to_entries[] | ["form", "\(.key)=\(.value | tostring)"])
+    elif $body and (($d | length) > 0 or ($fl | length) > 0) then
+        ($d | to_entries[] | ["form", "\(.key)=\(.value | tostring)"]),
+        ($fl | to_entries[] | ["file", "\(.key)=\(.value)"])
     else empty end))
 | .[] | (., "\u0000")'
 
 REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false; REQ_P_INSECURE=false
+REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false; REQ_P_INSECURE=false; REQ_P_FILES=()
+REQ_REQUEST_DIR=""      # folder of the request file; relative paths in "files" start here
 
 # req_prepare_request <json> - fills REQ_P_* from the request. Fails without a url.
 req_prepare_request() {
     local tag val
     REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false; REQ_P_INSECURE=false
+    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false; REQ_P_INSECURE=false; REQ_P_FILES=()
     while IFS= read -r -d '' tag && IFS= read -r -d '' val; do
         case $tag in
             method)   REQ_P_METHOD=$val ;;
@@ -72,6 +75,7 @@ req_prepare_request() {
             timeout)  REQ_P_TIMEOUT=$val ;;
             follow)   REQ_P_FOLLOW=$val ;;
             insecure) REQ_P_INSECURE=$val ;;
+            file)     REQ_P_FILES+=("$val") ;;
         esac
     done < <(jq -j "$REQ_PREPARE_JQ" <<<"$1")
     if [[ -z $REQ_P_URL ]]; then
@@ -119,6 +123,8 @@ req_build_curl_args() {
                 REQ_CURL_ARGS+=(-H "Content-Type:")
             fi
         fi
+    elif (( ${#REQ_P_FILES[@]} > 0 )); then
+        req_files_args || return 1
     else
         for line in "${REQ_P_FORM[@]}"; do
             REQ_CURL_ARGS+=(--data-urlencode "$line")
@@ -146,6 +152,28 @@ req_split_headers() {
         [[ $REQ_P_FOLLOW == true && $REQ_RESP_STATUSLINE =~ ^HTTP/[0-9.]+\ 3[0-9][0-9] ]] || break
     done
     REQ_RESP_BODY=$rest
+}
+
+# req_files_args - the multipart form of a request with "files": every parameter as a
+# text field (--form-string, so a value starting with "@" or "<" is never read as a file)
+# and every file as "-F field=@path", quoted so a ";" or "," in the path is not read as an
+# option of curl. A relative path starts at REQ_REQUEST_DIR. A file that cannot be read
+# stops the request.
+req_files_args() {
+    local item name path
+    for item in "${REQ_P_FORM[@]}"; do
+        REQ_CURL_ARGS+=(--form-string "$item")
+    done
+    for item in "${REQ_P_FILES[@]}"; do
+        name=${item%%=*}; path=${item#*=}
+        [[ $path == /* || -z $REQ_REQUEST_DIR ]] || path=$REQ_REQUEST_DIR/$path
+        if [[ ! -f $path || ! -r $path ]]; then
+            req_err "file \"$path\" (field \"$name\") does not exist or cannot be read"
+            return 1
+        fi
+        path=${path//\\/\\\\}; path=${path//\"/\\\"}
+        REQ_CURL_ARGS+=(-F "$name=@\"$path\"")
+    done
 }
 
 # req_curl_exec - runs REQ_CURL_ARGS/REQ_BODY and fills REQ_RESP_*, headers included.
@@ -252,6 +280,7 @@ req_verbose_request() {
             printf '%s\n' "$REQ_BODY"
         else
             for line in "${REQ_P_FORM[@]}"; do printf '%s\n' "$line"; done
+            for line in "${REQ_P_FILES[@]}"; do printf '%s\n' "${line%%=*}=@${line#*=}"; done
         fi
     } | while IFS= read -r line || [[ -n $line ]]; do
         req_color dim; printf '>>'; req_color reset; printf ' %s\n' "${line%$'\r'}"
@@ -283,6 +312,7 @@ req_run_request() {
     json=$(<"$file")
     req_vars_load "$env" || return 1
     req_subst_json "$json" "$env" || return 1
+    REQ_REQUEST_DIR=$(dirname "$(req_abs_path "$file")")
     req_build_curl_args "$REQ_SUBST_OUT" || return 1
     req_log_request "$file" "$env"
 

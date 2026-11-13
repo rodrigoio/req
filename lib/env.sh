@@ -155,11 +155,11 @@ req_subst() {
 
 # The executable fields of a request (the ones sent to curl), where req_subst_json works.
 # Names of properties are never substituted, only values.
-REQ_SUBST_FIELDS='["url","headers","query","parameters","raw_data"]'
+REQ_SUBST_FIELDS='["url","headers","query","parameters","raw_data","files"]'
 
 # shellcheck disable=SC2034  # REQ_SUBST_OUT is read by the callers
 # req_subst_json <request json> <env> [project id] - like req_subst, for a request: every
-# ${key} in the string values of url, headers, query, parameters and raw_data (also the
+# ${key} in the string values of url, headers, query, parameters, raw_data and files (also the
 # strings inside a raw_data that is native JSON) is replaced, and the result, still valid
 # JSON, goes to REQ_SUBST_OUT. Other fields (name, description) are left alone. The keys
 # are resolved first: when some are missing, nothing is replaced, the status is 1 and
