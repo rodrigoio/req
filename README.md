@@ -94,7 +94,7 @@ lib/http.sh    curl command building, execution, display and timing profile
 lib/nav.sh     interactive menu: list, details and keys
 lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :h :q) and its help table
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
-lib/env.sh     environments and secrets (loading `secrets.json`)
+lib/env.sh     environments and secrets (loading `vars` and `env/<env>`)
 lib/home.sh    the central directory in ~/.req: `key=value` files, projects and the current-project pointer
 tests/         plain bash tests (no dependencies; see Requirements)
 Makefile       test, lint, install and uninstall
@@ -143,14 +143,21 @@ The menu root is the workspace, and it lists **everything in it**: every directo
 
 Manually edited files that become invalid are never fixed: `req` only reports the error, with the file's absolute path.
 
-## Environments and secrets (in progress)
+## Environments and variables (in progress)
 
-Secrets are kept per environment in `~/.req/env/<env>/secrets.json` (override the directory with `REQ_CONFIG_DIR`), a flat object of simple values. Keys use letters, digits and underscores, and cannot start with a digit:
+Variables live in the central directory (`~/.req`, or `REQ_CONFIG_DIR`), one folder per project, as plain `key=value` files:
 
-```json
-{"token": "abc123", "base_url": "https://api.example.com", "port": 8080}
+```
+~/.req/projects/<id>/vars          shared by every environment
+~/.req/projects/<id>/env/<env>     one file per environment (dev, prod, ...)
 ```
 
-Environment names are slugs (e.g. `dev`, `prod`). A missing file is fine; an invalid one is reported and nothing is loaded.
+```
+# ~/.req/projects/shop/env/dev
+url=https://api.example.com
+token=abc123
+```
+
+Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. The environment wins over the project variables. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
 
 Not wired in yet: using `${key}` placeholders in requests, `<ENV>_<KEY>` environment variables taking precedence over the file (`${url}` in `dev` would be `DEV_URL`), and switching with `:env <name>`. See the roadmap in [TASKS.md](TASKS.md).

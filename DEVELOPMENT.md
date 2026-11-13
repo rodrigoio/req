@@ -33,11 +33,10 @@ folder itself may be reached through a link: only the workspace part is checked.
 | Review 1, usability findings (TR.1 to TR.15) | done, except TR.14 (postponed, needs the user's decision) |
 | Review 3, R11 (`.req` with `workspace`, dynamic root; TR3.1 to TR3.7) | TR3.1 to TR3.7 done |
 | Review 2, R8 to R10 (central project control in `~/.req`, `:config`, cursor; TR2.1 to TR2.10) | pending; TR2.1 to TR2.4 come before Phase 5 |
-| 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
+| 5 Environments and secrets | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR2.4** (per-project environments; Review 3, TR3.1 to TR3.7, is done). Order agreed: TR2.4
-(per-project environments), the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
+Next task: **TR2.5** (global configuration; Review 3 and TR2.4 are done). Order agreed: the rest of Review 2 and Phase 5. Review 2 changes where environments live (one
 directory per project in `~/.req`, `key=value` files), so TR2.1 to TR2.4 come before T5.2. TR.14
 waits for the user's answer. See "Review 1 findings" below and TASKS.md, section "Revisão 2".
 
@@ -65,7 +64,7 @@ else is functions in `lib/`, all prefixed `req_`.
 | `nav.sh` | the interactive menu: state, screen building, keys, main loop, init prompt |
 | `cmd.sh` | command mode (`:n :nd :e :d :q`) on top of `nav.sh` |
 | `wizard.sh` | the prompts behind `:n`, `:e`, `:d` and `:nd` |
-| `env.sh` | secrets loading (`REQ_SECRETS`, `REQ_CONFIG_DIR`); resolution and substitution come next |
+| `env.sh` | variable loading (`req_secrets_load <env> [id]` fills `REQ_SECRETS` from `projects/<id>/vars` and `env/<env>`, the environment winning; the old `secrets.json` only gets a warning); resolution and substitution come next |
 
 Data flow of a run: `req_nav_run` loops build screen → draw → read key → handle key.
 Running a request: `req_run_request` → `req_request_check` (validate) →
@@ -171,7 +170,7 @@ finds the id by that path (symbolic links and `..` resolve first). The id is the
 name (`req_project_slug`), with `-2`, `-3`... when another path already uses it. The project in use
 is `~/.req/current` (`project=<id>`): `req_current_get` returns nothing when the file is missing,
 the id is not a slug or its directory is gone; `req_current_set` refuses unknown projects. The
-project/state files themselves (`config`, `vars`, `env/`, `cursor`) are made by later tasks.
+files `vars` and `env/<env>` are read by `lib/env.sh` (TR2.4); `config` and `cursor` are made by later tasks.
 
 Registration (TR2.3): `req_project_activate <dir>` finds or creates the project and makes it the
 current one, setting `REQ_PROJECT_ID`. It runs on `req init` and whenever the menu opens a `.req`
@@ -182,7 +181,7 @@ line (`req_warn` in `core.sh`) and returns 1; `req init` and the menu carry on w
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 901 asserts at the time of writing.
+`assert_contains`, `test_summary`). 909 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

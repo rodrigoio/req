@@ -1,56 +1,64 @@
 #!/usr/bin/env bash
 # env.sh - environments and secrets.
 #
-# Secrets live in $REQ_CONFIG_DIR/env/<env>/secrets.json (REQ_CONFIG_DIR defaults
-# to ~/.req), a flat JSON object of simple values: {"token": "abc", "port": 8080}.
-# An invalid file is only reported, never fixed or overwritten.
+# A project keeps its variables in the central directory (see home.sh):
+#   $REQ_CONFIG_DIR/projects/<id>/vars        variables shared by every environment
+#   $REQ_CONFIG_DIR/projects/<id>/env/<env>   variables of one environment
+# Both are plain "key=value" files. The environment wins over the project variables.
+# An invalid file is only reported, never fixed or overwritten. The old format
+# ($REQ_CONFIG_DIR/env/<env>/secrets.json, T5.1) is not read and not migrated.
 
-# Checks a secrets file in a single jq call and emits "tag NUL a NUL b NUL" records:
-# ["kv", key, value] per secret, or ["err", message, ""] per problem.
-REQ_SECRETS_JQ='
-def scalar: type == "string" or type == "number" or type == "boolean";
-(if type != "object" then ["err", "the root must be an object", ""]
- else to_entries[]
-      | if (.key | test("^[A-Za-z_][A-Za-z0-9_]*$") | not)
-            then ["err", "secret \"\(.key)\": invalid name (use letters, digits and underscores)", ""]
-        elif (.value | scalar | not)
-            then ["err", "secret \"\(.key)\": the value must be a string, number or boolean", ""]
-        else ["kv", .key, (.value | tostring)] end
- end)
-| .[] | (., "\u0000")'
+declare -gA REQ_SECRETS=()      # variables of the last loaded environment (key -> value)
 
-declare -gA REQ_SECRETS=()      # secrets of the last loaded environment (key -> value)
+# req_env_file <project id> <env> - path of the file of an environment.
+req_env_file() {
+    req_project_state_dir "$1" "env/$2"
+}
 
-# req_env_secrets_file <env> - path of the secrets file of an environment.
-req_env_secrets_file() {
+# req_vars_file <project id> - path of the project variables.
+req_vars_file() {
+    req_project_state_dir "$1" vars
+}
+
+# req_env_legacy_file <env> - path of the T5.1 secrets file, which is no longer read.
+req_env_legacy_file() {
     printf '%s/env/%s/secrets.json' "$(req_config_dir)" "$1"
 }
 
 # shellcheck disable=SC2034  # REQ_SECRETS is read by the callers
-# req_secrets_load <env> - loads the environment's secrets into REQ_SECRETS. A missing
-# file is not an error (the environment simply has no file secrets). If the file is
-# invalid, every problem is reported with its absolute path, REQ_SECRETS stays empty
-# and the status is 1.
+# req_secrets_load <env> [project id] - loads the variables of the project (default: the
+# one in REQ_PROJECT_ID) and then those of the environment into REQ_SECRETS, so the
+# environment wins. A missing file is not an error. Without a project (its state could
+# not be saved) nothing is loaded. If a file is invalid, every problem is reported with
+# its absolute path, REQ_SECRETS stays empty and the status is 1. When the old
+# secrets.json of the environment exists, a warning says where the variables live now.
 req_secrets_load() {
-    local env=$1 file abs tag a b out problems=0
+    local env=$1 id=${2-$REQ_PROJECT_ID} file legacy line
     local -A loaded=()
     REQ_SECRETS=()
     req_valid_name "$env" || {
         req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
         return 1; }
-    file=$(req_env_secrets_file "$env")
-    [[ -f $file ]] || return 0
-    abs=$(req_abs_path "$file")
+    legacy=$(req_env_legacy_file "$env")
+    [[ -f $legacy ]] && req_warn "$(req_abs_path "$legacy") is no longer read: put its variables as key=value lines in $(req_abs_path "$(req_env_file "${id:-<project>}" "$env")")"
+    [[ -n $id ]] || return 0
+    req_valid_name "$id" || { req_err "invalid project id: \"$id\""; return 1; }
 
-    out=$(jq -r . "$file" 2>&1 >/dev/null) || {
-        req_err "$abs: invalid JSON: $out"; return 1; }
-    while IFS= read -r -d '' tag && IFS= read -r -d '' a && IFS= read -r -d '' b; do
-        case $tag in
-            kv)  loaded[$a]=$b ;;
-            err) req_err "$abs: $a"; problems=1 ;;
-        esac
-    done < <(jq -j "$REQ_SECRETS_JQ" "$file")
-    (( problems )) && return 1
+    local -a files=("$(req_vars_file "$id")" "$(req_env_file "$id" "$env")")
+    local status=0
+    for file in "${files[@]}"; do req_kv_check "$file" || status=1; done
+    (( status )) && return 1
+
+    local -A seen=()
+    for file in "${files[@]}"; do
+        seen=()
+        while IFS= read -r line; do
+            req_kv_parse_line "$line" || continue
+            [[ -n ${seen[$REQ_KV_KEY]+x} ]] && continue     # the first line of a key wins
+            seen[$REQ_KV_KEY]=1
+            loaded[$REQ_KV_KEY]=$REQ_KV_VALUE
+        done < <(req_kv_list "$file")
+    done
     local k
     for k in "${!loaded[@]}"; do REQ_SECRETS[$k]=${loaded[$k]}; done
     return 0
