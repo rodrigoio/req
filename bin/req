@@ -65,6 +65,7 @@ main() {
             [[ -n ${2-} ]] || req_die "usage: req run <file.<method>.json>"
             # The project of the current folder, if it is registered, gives the environment files.
             if req_project_find . >/dev/null; then REQ_PROJECT_ID=$(req_project_find_id .) || REQ_PROJECT_ID=""; fi
+            req_config_load_local || true
             req_run_request "$2"
             ;;
         '')

@@ -60,7 +60,7 @@ test_problems() {
     cfg $'color=blue\ntime_stats=maybe\nnot a setting\nrestore_cursor=no'
     out=$(req_config_load 2>&1); assert_eq "1" "$?" "problems give status 1"
     assert_contains "$f:1: unknown setting \"color\"" "$out" "an unknown key is reported with path and line"
-    assert_contains "known: time_stats time_stat_total restore_cursor" "$out" "and the known keys are listed"
+    assert_contains "known: time_stats time_stat_total restore_cursor log" "$out" "and the known keys are listed"
     assert_contains "$f:2: time_stats must be yes or no, not \"maybe\"" "$out" "a wrong value says what is accepted"
     assert_contains "$f:3: expected key=value" "$out" "a malformed line is reported"
     req_config_load 2>/dev/null
@@ -70,7 +70,41 @@ test_problems() {
     assert_contains "color=blue" "$(<"$f")" "the file is never rewritten"
 }
 
+test_local() {
+    echo "config: the project's file"
+    local out lf
+    REQ_PROJECT_ID=shop; lf=$(req_config_local_file)
+    assert_eq "$TMP/cfg/projects/shop/config" "$lf" "it is config in the project's directory"
+    mkdir -p "$(dirname "$lf")"
+    cfg $'time_stats=no\nrestore_cursor=no'
+    printf 'time_stats=yes\nlog=yes\n' >"$lf"
+    out=$(req_config_load 2>&1); assert_eq "0" "$?" "both files load without warnings"
+    req_config_load
+    assert_eq "yes" "$(req_config_get time_stats)" "the project's value wins over the global one"
+    assert_eq "no" "$(req_config_get restore_cursor)" "a key it leaves out comes from the global file"
+    assert_eq "yes" "$(req_config_get log)" "a key only it sets applies"
+    assert_eq "2" "${#REQ_CONFIG_LOCAL[@]}" "the keys it set are listed"
+    [[ -n ${REQ_CONFIG_LOCAL[log]+x} && -n ${REQ_CONFIG_LOCAL[time_stats]+x} ]]; assert_eq "0" "$?" "by name"
+    printf 'log=maybe\ncolor=1\ntime_stats=no\n' >"$lf"
+    out=$(req_config_load 2>&1); assert_eq "1" "$?" "a problem in the project's file gives status 1"
+    assert_contains "$lf:1: log must be yes or no" "$out" "reported with its own path and line"
+    assert_contains "$lf:2: unknown setting \"color\"" "$out" "an unknown key too"
+    req_config_load 2>/dev/null
+    assert_eq "no" "$(req_config_get time_stats)" "the valid lines still apply"
+    assert_eq "no" "$(req_config_get log)" "an invalid value leaves the default"
+    cfg $'time_stats=no'; rm -f "$lf"
+    req_config_load; assert_eq "no" "$(req_config_get time_stats)" "a missing project file is fine"
+    assert_eq "0" "${#REQ_CONFIG_LOCAL[@]}" "and marks nothing"
+    printf 'log=yes\n' >"$lf"; REQ_PROJECT_ID=""
+    req_config_load; assert_eq "no" "$(req_config_get log)" "without a project only the global file is read"
+    REQ_PROJECT_ID=shop; req_config_load_local
+    assert_eq "yes" "$(req_config_get log)" "req_config_load_local layers the project over what is loaded"
+    assert_eq "no" "$(req_config_get time_stats)" "and keeps the rest"
+    REQ_PROJECT_ID=""
+}
+
 test_table
 test_load
 test_problems
+test_local
 test_summary

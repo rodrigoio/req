@@ -630,8 +630,8 @@ test_command_config() {
     req_nav_handle x
     assert_eq "list" "$REQ_VIEW" "any key returns to the list"
 
-    type_keys : c o n f i g ' ' t i m e _ s t a t s = n o enter
-    assert_eq "list" "$REQ_VIEW" ":config key=value stays on the list"
+    type_keys : c o n f i g ' ' - g ' ' t i m e _ s t a t s = n o enter
+    assert_eq "list" "$REQ_VIEW" ":config -g key=value stays on the list"
     assert_contains "time_stats=no saved" "$REQ_STATUS" "and says it was saved"
     assert_eq "no" "$(req_kv_get "$f" time_stats)" "the value is written to the global file"
     assert_eq "no" "$(req_config_get time_stats)" "and is in effect"
@@ -640,21 +640,54 @@ test_command_config() {
     assert_contains "time_stats       no    default yes" "$out" "the screen shows the new value next to the default"
     req_nav_handle x
 
-    REQ_CMD_BUF="config time_stats = yes"; type_keys :; REQ_CMD_BUF="config time_stats = yes"; req_nav_handle enter
+    REQ_CMD_BUF="config -g time_stats = yes"; type_keys :; REQ_CMD_BUF="config -g time_stats = yes"; req_nav_handle enter
     assert_eq "yes" "$(req_kv_get "$f" time_stats)" "spaces around the = are fine"
 
-    REQ_STATUS=""; type_keys : c o n f i g ' ' c o l o r = r e d enter
+    REQ_STATUS=""; type_keys : c o n f i g ' ' - g ' ' c o l o r = r e d enter
     assert_contains 'unknown setting "color"' "$REQ_STATUS" "an unknown key is explained"
     assert_contains "time_stat_total" "$REQ_STATUS" "with the valid keys"
-    type_keys : c o n f i g ' ' t i m e _ s t a t s = m a y b e enter
+    type_keys : c o n f i g ' ' - g ' ' t i m e _ s t a t s = m a y b e enter
     assert_contains "time_stats must be yes or no" "$REQ_STATUS" "a wrong value says what is accepted"
     assert_eq "yes" "$(req_kv_get "$f" time_stats)" "and nothing is written"
-    type_keys : c o n f i g ' ' t i m e _ s t a t s enter
+    type_keys : c o n f i g ' ' - g ' ' t i m e _ s t a t s enter
     assert_contains "usage: :config" "$REQ_STATUS" "a key without a value shows the usage"
     [[ $(<"$f") != *color* ]]; assert_eq "0" "$?" "an invalid setting never reaches the file"
 
     out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
     assert_contains ":config" "$out" "the help lists :config"
+
+    echo "nav: :config (project by default)"
+    local lf
+    REQ_PROJECT_ID=""
+    type_keys : c o n f i g ' ' l o g = y e s enter
+    assert_contains "no project is open" "$REQ_STATUS" "without a project the setting is refused"
+    assert_contains ":config -g" "$REQ_STATUS" "and -g is suggested"
+    [[ ! -e $f ]] || [[ $(<"$f") != *log* ]]; assert_eq "0" "$?" "nothing is written"
+    REQ_PROJECT_ID=$(req_project_create "$PROJ"); lf=$(req_config_local_file)
+    mkdir -p "$(dirname "$lf")"
+    type_keys : c o n f i g ' ' l o g = y e s enter
+    assert_contains "log=yes saved in $lf" "$REQ_STATUS" "key=value says the project file was written"
+    assert_eq "yes" "$(req_kv_get "$lf" log)" "the value is in the project file"
+    [[ ! -e $f ]] || [[ $(<"$f") != *log* ]]; assert_eq "0" "$?" "and not in the global one"
+    assert_eq "yes" "$(req_config_get log)" "and is in effect"
+    type_keys : c o n f i g ' ' - g ' ' t i m e _ s t a t s = n o enter
+    assert_contains "saved in $f" "$REQ_STATUS" "-g writes the global file"
+    req_kv_set "$lf" time_stats yes; req_config_load
+    assert_eq "yes" "$(req_config_get time_stats)" "the project value wins over the global one"
+    type_keys : c o n f i g enter
+    REQ_NAV_DIRTY=1; req_nav_build_config; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
+    assert_contains "$lf" "$out" "the screen names the project file"
+    assert_contains "-g" "$out" "and the way to change the global one"
+    assert_contains "log              yes   default no    project" "$out" "it marks a value that comes from the project"
+    assert_contains "time_stats       yes   default yes   project" "$out" "even when it equals the default"
+    [[ $out != *"restore_cursor      yes   default yes   project"* ]]; assert_eq "0" "$?" "a global or default value is not marked"
+    req_nav_handle x
+    type_keys : c o n f i g ' ' - g enter
+    assert_contains "usage: :config [-g]" "$REQ_STATUS" "-g alone shows the usage"
+    type_keys : c o n f i g ' ' l o g = m a y b e enter
+    assert_contains "log must be yes or no" "$REQ_STATUS" "the value is checked for the project too"
+    assert_eq "yes" "$(req_kv_get "$lf" log)" "and nothing is written"
+    REQ_PROJECT_ID=""; rm -f "$f" "$lf"; req_config_load
 }
 
 test_command_env() {
@@ -1036,7 +1069,7 @@ test_review2_flow() {
 
     # First session: go into api, select the second request, change a setting, quit.
     out=$({ keys enter; keys down down; keys : c o n f i g enter; keys x
-            keys : c o n f i g ' ' t i m e _ s t a t s = n o enter; keys : q enter
+            keys : c o n f i g ' ' - g ' ' t i m e _ s t a t s = n o enter; keys : q enter
           } | req_nav_run "$p/.req" 2>&1)
     assert_contains "time_stats" "$out" ":config listed the settings"
     assert_contains "time_stats=no saved" "$out" "and :config key=value saved one"

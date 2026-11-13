@@ -339,20 +339,22 @@ req_nav_build_help() {
     REQ_SCREEN_LINES+=("${c_dim}Press any key to go back${c_reset}")
 }
 
-# req_nav_build_config - the settings screen (:config): every known key with its value
-# in the global file and its default, and what it does.
+# req_nav_build_config - the settings screen (:config): every known key with its effective
+# value, its default and what it does; "project" marks the values set by the project's file, which wins over the global one.
 req_nav_build_config() {
-    local cols key w=0 value def c_dim c_bold c_reset
+    local cols key w=0 value def src c_dim c_bold c_reset
     cols=$(req_term_cols)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
     for key in "${REQ_CONFIG_KEYS[@]}"; do (( ${#key} > w )) && w=${#key}; done
     REQ_SCREEN_LINES+=("${c_bold}req${c_reset} settings   ${c_dim}$(req_config_file)${c_reset}")
+    [[ -z $REQ_PROJECT_ID ]] || REQ_SCREEN_LINES+=("${c_dim}project settings   $(req_config_local_file)${c_reset}")
     for key in "${REQ_CONFIG_KEYS[@]}"; do
         value=$(req_config_get "$key"); def=${REQ_CONFIG_DEFAULT[$key]}
-        REQ_SCREEN_LINES+=("  $(req_trunc "$(printf '%-*s  %-4s  default %-4s  %s' "$w" "$key" "$value" "$def" "${REQ_CONFIG_DESC[$key]}")" $((cols - 3)))")
+        src=""; [[ -z ${REQ_CONFIG_LOCAL[$key]+x} ]] || src="project"
+        REQ_SCREEN_LINES+=("  $(req_trunc "$(printf '%-*s  %-4s  default %-4s  %-7s  %s' "$w" "$key" "$value" "$def" "$src" "${REQ_CONFIG_DESC[$key]}")" $((cols - 3)))")
     done
-    REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value   Press any key to go back${c_reset}")
+    REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value (:config -g key=value for the global file)   Press any key to go back${c_reset}")
 }
 
 # req_nav_detail_section <title> <width> [line...]
@@ -495,5 +497,6 @@ req_nav_start() {
         pfile=$(req_project_find .) || return 1
     fi
     req_project_activate "$(dirname "$pfile")"
+    req_config_load_local || true      # the project's settings win over the global ones
     req_nav_run "$pfile"
 }

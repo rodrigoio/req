@@ -1,36 +1,48 @@
 #!/usr/bin/env bash
 # config.sh - the global configuration ($REQ_CONFIG_DIR/config, default ~/.req/config).
 #
-# A "key=value" file (see home.sh for the format). The known keys, with their type,
+# A "key=value" file (see home.sh for the format). The project can have its own file,
+# $REQ_CONFIG_DIR/projects/<id>/config, with the same keys: its values win over the global
+# ones (REQ_CONFIG_LOCAL lists the keys it set). The known keys, with their type,
 # default and description, are listed once, in REQ_CONFIG_KEYS below; every other part
 # of req (the :config command, the presentation code) goes through that table. Reading
 # never blocks the menu: an unknown key, a value of the wrong type or a malformed line
 # is reported as a warning with the absolute path and the line number, and ignored.
 
 # Known keys, in the order they are listed. Types: bool (yes or no).
-REQ_CONFIG_KEYS=(time_stats time_stat_total restore_cursor)
+REQ_CONFIG_KEYS=(time_stats time_stat_total restore_cursor log)
 declare -gA REQ_CONFIG_TYPE=(
     [time_stats]=bool
     [time_stat_total]=bool
     [restore_cursor]=bool
+    [log]=bool
 )
 declare -gA REQ_CONFIG_DEFAULT=(
     [time_stats]=yes
     [time_stat_total]=yes
     [restore_cursor]=yes
+    [log]=no
 )
 # shellcheck disable=SC2034  # read by :config (TR2.6)
 declare -gA REQ_CONFIG_DESC=(
     [time_stats]="show the timing profile after a request runs"
     [time_stat_total]="show the total time line after a request runs"
     [restore_cursor]="reopen the menu where it was left"
+    [log]="write the requests and responses to the project's log"
 )
 
-declare -gA REQ_CONFIG=()       # values of the last loaded file (key -> value)
+declare -gA REQ_CONFIG=()       # values of the loaded files (key -> value)
+declare -gA REQ_CONFIG_LOCAL=() # keys whose value comes from the project's file
 
 # req_config_file - path of the global configuration file.
 req_config_file() {
     printf '%s/config' "$(req_config_dir)"
+}
+
+# req_config_local_file - path of the configuration file of the open project
+# (REQ_PROJECT_ID).
+req_config_local_file() {
+    req_project_state_dir "$REQ_PROJECT_ID" config
 }
 
 # req_config_known <key> - succeeds when the key is in the table.
@@ -55,17 +67,31 @@ req_config_expect() {
     esac
 }
 
-# req_config_load - fills REQ_CONFIG from the global file (see req_config_load_file).
+# req_config_load - fills REQ_CONFIG from the global file and then, when a project is
+# open (REQ_PROJECT_ID), from its own file, which wins.
 req_config_load() {
-    req_config_load_file "$(req_config_file)"
+    local status=0
+    req_config_load_file "$(req_config_file)" || status=1
+    req_config_load_local || status=1
+    return "$status"
 }
 
-# req_config_load_file <file> - fills REQ_CONFIG with the file's values. A missing file is
-# fine. Problems are warnings; the status is 1 when there was any. The first line of a
-# repeated key wins.
+# req_config_load_local - layers the open project's file over what is loaded. Does nothing
+# without a project; a missing file is fine.
+req_config_load_local() {
+    REQ_CONFIG_LOCAL=()
+    [[ -n $REQ_PROJECT_ID ]] || return 0
+    req_config_load_file "$(req_config_local_file)" overlay
+}
+
+# req_config_load_file <file> [overlay] - fills REQ_CONFIG with the file's values (first
+# emptying it, unless "overlay" is given: then the values replace the loaded ones and the
+# keys are listed in REQ_CONFIG_LOCAL). A missing file is fine. Problems are warnings; the
+# status is 1 when there was any. The first line of a repeated key wins.
 req_config_load_file() {
     local file=$1 line n=0 abs status=0
-    REQ_CONFIG=()
+    local -A seen=()
+    if [[ ${2-} != overlay ]]; then REQ_CONFIG=(); REQ_CONFIG_LOCAL=(); fi
     [[ -f $file ]] || return 0
     abs=$(req_abs_path "$file")
     while IFS= read -r line || [[ -n $line ]]; do
@@ -80,12 +106,15 @@ req_config_load_file() {
             req_warn "$abs:$n: unknown setting \"$REQ_KV_KEY\" (known: ${REQ_CONFIG_KEYS[*]}); ignored"
             status=1; continue
         fi
-        [[ -n ${REQ_CONFIG[$REQ_KV_KEY]+x} ]] && continue
+        [[ -n ${seen[$REQ_KV_KEY]+x} ]] && continue
         if ! req_config_valid "$REQ_KV_KEY" "$REQ_KV_VALUE"; then
             req_warn "$abs:$n: $REQ_KV_KEY must be $(req_config_expect "$REQ_KV_KEY"), not \"$REQ_KV_VALUE\"; ignored"
             status=1; continue
         fi
+        seen[$REQ_KV_KEY]=1
         REQ_CONFIG[$REQ_KV_KEY]=$REQ_KV_VALUE
+        # shellcheck disable=SC2034  # read by the settings screen (nav.sh)
+        [[ ${2-} == overlay ]] && REQ_CONFIG_LOCAL[$REQ_KV_KEY]=1
     done <"$file"
     return "$status"
 }

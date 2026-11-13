@@ -73,7 +73,7 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 | `:cp [name]` | copy the directory (with everything inside, symbolic links copied as links) or the request under the cursor, or the one open on the details screen. It asks for the new name (default `<name>-copy`) and does not open the edit menu |
 | `:rm` | remove the selected request (or the one open on the details screen), after a `[y/N]` confirmation; Enter keeps it. It also works on an invalid request. On a directory it removes the directory and everything inside it, after a red warning with the full path and the number of files and subdirectories and the same `[y/N]` question. Only directories inside the workspace are ever deleted, and never a symbolic link |
 | `:env [name]` | without an argument, lists the environments of the project and the one in use; with a name, switches the session to it (see "Environments and variables") |
-| `:config [key=value]` | without an argument, shows the settings: every known key with its value and its default. With `key=value` (for example `:config time_stats=no`) it checks the key and the value and writes them to `~/.req/config`; an unknown key or a wrong value is explained and nothing is written |
+| `:config [-g] [key=value]` | without an argument, shows the settings: every known key with its effective value, its default and `project` when the project sets it. With `key=value` (for example `:config time_stats=no`) it checks the key and the value and writes them to the project's file; with `-g` (`:config -g time_stats=no`) it writes the global `~/.req/config` instead. An unknown key or a wrong value is explained and nothing is written |
 | `:e` | edit the selected request (or the one open on the details screen) through a field menu; changing the name or the method renames the file. Option `8) raw data` opens the body in your editor (`$VISUAL`, `$EDITOR`, `vim`, `vi`, like git); without one it asks for a single line (`-` clears). JSON objects and lists are stored as native JSON; other text is stored as a string, and you are offered to edit it again first unless the request has a non-JSON `Content-Type` |
 | `:d` | duplicate the selected request under a new name and open the edit menu on the copy |
 | `:h` | help: lists every key and command (alias `:help`); any key goes back. A new command is added to the `REQ_HELP_ROWS` table in `lib/cmd.sh` |
@@ -100,7 +100,7 @@ lib/http.sh    curl command building, execution, display and timing profile
 lib/nav.sh     interactive menu: list, details and keys
 lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :env :config :h :q) and its help table
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
-lib/config.sh  global configuration (`~/.req/config`) and its table of keys
+lib/config.sh  settings (global `~/.req/config` and the project's `config`) and their table of keys
 lib/env.sh     environments and variables (loading `vars` and `env/<env>`)
 lib/home.sh    the central directory in ~/.req: `key=value` files, projects and the current-project pointer
 tests/         plain bash tests (no dependencies; see Requirements)
@@ -152,7 +152,7 @@ Manually edited files that become invalid are never fixed: `req` only reports th
 
 ## Settings
 
-`~/.req/config` (or `REQ_CONFIG_DIR/config`) holds the global settings as `key=value` lines. Show them with `:config` and change one with `:config key=value`. An unknown key or a wrong value in the file is reported as a warning (with the file and line) and ignored.
+Settings are `key=value` lines in two files: `~/.req/projects/<id>/config` (or under `REQ_CONFIG_DIR`) for the open project, and `~/.req/config` for every project. The project's file wins, and a key it leaves out falls back to the global file and then to the default. Show them with `:config` and change one for the project with `:config key=value`; `:config -g key=value` changes the global file. An unknown key or a wrong value in a file is reported as a warning (with the file and line) and ignored.
 
 | key | default | what it does |
 |-----|---------|--------------|

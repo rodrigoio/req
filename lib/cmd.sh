@@ -11,7 +11,7 @@
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
 #   :env [name]   show the project's environments, or switch the session to one
-#   :config [k=v] show the settings, or set one in the global configuration (~/.req/config)
+#   :config [-g] [k=v] show the settings, or set one for the project or, with -g, globally (~/.req/config)
 #   :h            help: every key and command (alias :help)
 # Esc leaves command mode; Backspace on an empty line does too.
 
@@ -39,7 +39,7 @@ REQ_HELP_ROWS=(
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
     ":env [name]|show the environments of the project, or switch to one (REQ_ENV)"
-    ":config [key=value]|show the settings, or change one (global ~/.req/config)"
+    ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
     ":h|this help (alias :help)"
     ":q|quit (alias :quit)"
 )
@@ -245,18 +245,27 @@ req_cmd_dup() {
     req_nav_prompt_end
 }
 
-# req_cmd_config [key=value] - :config. Without an argument it opens the settings screen
+# req_cmd_config [-g] [key=value] - :config. Without an argument it opens the settings screen
 # (every known key, its value and its default). With key=value it checks the key and the
-# value against the table (req_config_valid) and writes the global configuration file.
+# value against the table (req_config_valid) and writes the open project's file, which is
+# where settings belong by default; with -g it writes the global file (~/.req/config)
+# instead. The project's file wins over the global one.
 req_cmd_config() {
-    local arg=$1 key value
-    if [[ -z $arg ]]; then
+    local arg=$1 key value file scope=project
+    if [[ $arg == -g || $arg == "-g "* ]]; then
+        scope=global; arg=$(req_trim "${arg#-g}")
+    fi
+    if [[ -z $arg && $scope == project ]]; then
         req_config_load 2>/dev/null
         REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=config
         return 0
     fi
     if [[ $arg != *=* ]]; then
-        REQ_STATUS="usage: :config [key=value] (known keys: ${REQ_CONFIG_KEYS[*]})"
+        REQ_STATUS="usage: :config [-g] [key=value] (known keys: ${REQ_CONFIG_KEYS[*]})"
+        return 0
+    fi
+    if [[ $scope == project && -z $REQ_PROJECT_ID ]]; then
+        REQ_STATUS="no project is open: use :config -g key=value to change the global setting"
         return 0
     fi
     key=$(req_trim "${arg%%=*}"); value=$(req_trim "${arg#*=}")
@@ -268,11 +277,12 @@ req_cmd_config() {
         REQ_STATUS="$key must be $(req_config_expect "$key"), not \"$value\""
         return 0
     fi
-    if req_kv_set "$(req_config_file)" "$key" "$value" 2>/dev/null; then
+    if [[ $scope == project ]]; then file=$(req_config_local_file); else file=$(req_config_file); fi
+    if req_kv_set "$file" "$key" "$value" 2>/dev/null; then
         req_config_load 2>/dev/null
-        REQ_STATUS="$key=$value saved in $(req_config_file)"
+        REQ_STATUS="$key=$value saved in $file"
     else
-        REQ_STATUS="cannot write $(req_config_file)"
+        REQ_STATUS="cannot write $file"
     fi
     return 0
 }
