@@ -162,7 +162,7 @@ Manually edited files that become invalid are never fixed: `req` only reports th
 
 The position is saved per project in `~/.req/projects/<id>/cursor` when you leave (`:q`, end of input, Ctrl-C). If the directory or the item is gone when you come back, `req` falls back to the nearest existing directory or to the first item.
 
-## Environments and variables (in progress)
+## Environments and variables
 
 Variables live in the central directory (`~/.req`, or `REQ_CONFIG_DIR`), one folder per project, as plain `key=value` files:
 

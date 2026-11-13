@@ -33,10 +33,10 @@ folder itself may be reached through a link: only the workspace part is checked.
 | Review 1, usability findings (TR.1 to TR.15) | done, except TR.14 (postponed, needs the user's decision) |
 | Review 3, R11 (`.req` with `workspace`, dynamic root; TR3.1 to TR3.7) | TR3.1 to TR3.7 done |
 | Review 2, R8 to R10 (central project control in `~/.req`, `:config`, cursor; TR2.1 to TR2.10) | done |
-| 5 Environments and variables | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.6 done; T5.7 dropped (no masking); T5.8 pending |
+| 5 Environments and variables | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.6 done; T5.7 dropped (no masking); T5.8 done |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **T5.8** (Phase 5 verification and docs; T5.2 to T5.6 are done, T5.7 was dropped). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 5".
+Next task: **T6.1** (Phase 6; ask the user about the configuration options before implementing it; Phase 5 is done, T5.7 was dropped). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 6".
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - One task = one behavior, about 100 to 200 lines including tests, one commit.
