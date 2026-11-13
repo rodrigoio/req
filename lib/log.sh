@@ -12,9 +12,12 @@ req_log_file() {
     req_project_state_dir "$REQ_PROJECT_ID" req.log
 }
 
-# req_log_enabled - succeeds when the log is on and there is a project to keep it in.
+REQ_LOG_SESSION=""      # yes or no after :log (it wins over the setting until req quits)
+
+# req_log_enabled - succeeds when the log is on (the session's choice, else the "log"
+# setting) and there is a project to keep it in.
 req_log_enabled() {
-    [[ -n $REQ_PROJECT_ID && $(req_config_get log) == yes ]]
+    [[ -n $REQ_PROJECT_ID && ${REQ_LOG_SESSION:-$(req_config_get log)} == yes ]]
 }
 
 # req_log_escape <text> - prints the text on one line (line breaks become \n).
