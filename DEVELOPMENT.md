@@ -13,7 +13,7 @@ roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
 | 5 Environments and secrets | T5.1 done (loading `secrets.json`); T5.2 to T5.8 pending |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **TR.12** (`:rm` on a request; TR.1 to TR.11 are done). Phase 5 resumes at T5.2 after TR.15. See
+Next task: **TR.13** (`:rm` on a directory; TR.1 to TR.12 are done). Phase 5 resumes at T5.2 after TR.15. See
 "Review 1 findings" below.
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
@@ -101,6 +101,11 @@ Directory copy (`req_wizard_copy_dir`, `:c`, TR.11): `cp -RP` next to the origin
 `<name>-copy` (asked again while taken); a directory listed in the `.req` gets its copy appended
 there, and the copy is removed if the `.req` cannot be written.
 
+Request removal (`req_wizard_remove_request`, `:rm`, TR.12): shows the full path, asks `[y/N]` (default no,
+end of input means no) and removes the file. It works for invalid requests, from the list and from the
+details screen; afterwards the list is shown with the selection kept near the removed row. On a
+directory `:rm` says to select a request until TR.13.
+
 ## Conventions
 
 
@@ -123,7 +128,7 @@ there, and the copy is removed if the `.req` cannot be written.
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 638 asserts at the time of writing.
+`assert_contains`, `test_summary`). 663 asserts at the time of writing.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

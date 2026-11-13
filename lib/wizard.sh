@@ -401,3 +401,19 @@ req_wizard_copy_dir() {
     REQ_LAST_DIR=$target
     printf 'Copied %s to %s\n' "$dir" "$target"
 }
+
+# req_wizard_remove_request <file> - asks "[y/N]" and removes the request file. It
+# works for invalid requests too (only the file name matters). Returns 0 after
+# removing; REQ_LAST_FILE is the removed path. Anything but "y" keeps the file.
+req_wizard_remove_request() {
+    local file=$1
+    [[ -f $file ]] || { req_err "request not found: $file"; return 1; }
+    printf 'Remove %s\n' "$(req_abs_path "$file")"
+    if ! req_confirm "Remove this request?" n; then
+        printf 'Kept.\n'
+        return 1
+    fi
+    rm -f -- "$file" 2>/dev/null || { req_err "cannot remove $file"; return 1; }
+    REQ_LAST_FILE=$file
+    printf 'Removed %s\n' "$file"
+}

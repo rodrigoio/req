@@ -564,6 +564,54 @@ test_command_copy_dir() {
     REQ_INPUT_FD=0
 }
 
+test_command_remove() {
+    echo "nav: :rm on a request"
+    make_project
+    req_nav_init "$PROJ/.req"
+    REQ_INPUT_FD=3
+    local i out
+
+    req_nav_handle enter                         # api
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == create ]] && REQ_SEL=$i; done
+    type_keys : r m
+    req_nav_handle enter 3<<<"n" >/dev/null
+    [[ -f $PROJ/api/create.post.json ]]; assert_eq "0" "$?" "answering n keeps the request"
+    assert_eq "create" "${REQ_ITEM_LABEL[REQ_SEL]}" "and the selection stays"
+
+    type_keys : r m
+    req_nav_handle enter 3<<<"y" >/dev/null
+    [[ ! -e $PROJ/api/create.post.json ]]; assert_eq "0" "$?" ":rm removes the selected request after y"
+    assert_contains "removed create.post.json" "$REQ_STATUS" "status mentions it"
+    assert_eq "list-users" "${REQ_ITEM_LABEL[REQ_SEL]}" "the selection moves to the neighbour"
+    assert_eq "list" "$REQ_VIEW" "back on the list"
+
+    # From the details screen, and for an invalid request.
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "opens the details"
+    type_keys : r m
+    req_nav_handle enter 3<<<"y" >/dev/null
+    [[ ! -e $PROJ/api/list-users.get.json ]]; assert_eq "0" "$?" ":rm works on the details screen"
+    assert_eq "list" "$REQ_VIEW" "and returns to the list"
+
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == broken ]] && REQ_SEL=$i; done
+    type_keys : r m
+    req_nav_handle enter 3<<<"y" >/dev/null
+    [[ ! -e $PROJ/api/broken.get.json ]]; assert_eq "0" "$?" ":rm removes an invalid request"
+
+    # The last item: the selection falls back to the previous one.
+    REQ_SEL=$(( ${#REQ_ITEM_KIND[@]} - 1 ))
+    type_keys : r m
+    req_nav_handle enter 3<<<"y" >/dev/null
+    assert_eq "$(( ${#REQ_ITEM_KIND[@]} - 1 ))" "$REQ_SEL" "removing the last item selects the new last one"
+
+    # On a directory there is nothing to remove yet.
+    REQ_SEL=0
+    type_keys : r m; req_nav_handle enter >/dev/null
+    assert_contains "select a request" "$REQ_STATUS" ":rm on a directory explains itself"
+    REQ_INPUT_FD=0
+}
+
 test_command_flow() {
     echo "nav: command flow through the main loop"
     local p=$TMP/flow out
@@ -608,6 +656,7 @@ test_command_actions
 test_help
 test_command_rename_dir
 test_command_copy_dir
+test_command_remove
 test_command_flow
 test_start_init
 test_end_to_end

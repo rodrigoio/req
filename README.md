@@ -66,6 +66,7 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 | `:nd [name]` | new directory (alias `:mkdir`). At the root it is also added to the `.req`; inside a directory it creates a real subdirectory |
 | `:ed [name]` | rename the directory under the cursor (asks for the name unless given). The contents move with it and a `.req` entry for it is updated; only the last path component changes |
 | `:c [name]` | copy the directory under the cursor with everything inside (default name `<name>-copy`, symbolic links are copied as links). A directory listed in the `.req` has its copy listed too |
+| `:rm` | remove the selected request (or the one open on the details screen), after a `[y/N]` confirmation; Enter keeps it. It also works on an invalid request |
 | `:e` | edit the selected request (or the one open on the details screen) through a field menu; changing the name or the method renames the file. Option `8) raw data` opens the body in your editor (`$VISUAL`, `$EDITOR`, `vim`, `vi`, like git); without one it asks for a single line (`-` clears). JSON objects and lists are stored as native JSON; other text is stored as a string, and you are offered to edit it again first unless the request has a non-JSON `Content-Type` |
 | `:d` | duplicate the selected request under a new name and open the edit menu on the copy |
 | `:h` | help: lists every key and command (alias `:help`); any key goes back. A new command is added to the `REQ_HELP_ROWS` table in `lib/cmd.sh` |

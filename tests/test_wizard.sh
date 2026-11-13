@@ -412,6 +412,36 @@ test_copy_dir() {
     assert_eq "1" "$STATUS" "a missing directory fails"
 }
 
+test_remove_request() {
+    echo "wizard: remove request"
+    fresh rm
+    req_request_write "$D" gone GET http://x >/dev/null
+    printf '{broken' >"$D/oops.get.json"
+
+    IN=$'\n'; run req_wizard_remove_request "$D/gone.get.json"
+    assert_eq "1" "$STATUS" "Enter keeps the request (the default is no)"
+    assert_contains "[y/N]" "$OUT" "the prompt shows the default"
+    assert_contains "Remove $D/gone.get.json" "$OUT" "shows the full path first"
+    [[ -f $D/gone.get.json ]]; assert_eq "0" "$?" "the file is still there"
+    IN=$'n\n'; run req_wizard_remove_request "$D/gone.get.json"
+    assert_eq "1" "$STATUS" "n keeps it"
+    IN='<EOF>'; run req_wizard_remove_request "$D/gone.get.json"
+    assert_eq "1" "$STATUS" "end of input keeps it"
+    [[ -f $D/gone.get.json ]]; assert_eq "0" "$?" "still there"
+
+    IN=$'y\n'; run req_wizard_remove_request "$D/gone.get.json"
+    assert_eq "0" "$STATUS" "y removes it"
+    [[ ! -e $D/gone.get.json ]]; assert_eq "0" "$?" "the file is gone"
+    assert_eq "$D/gone.get.json" "$REQ_LAST_FILE" "REQ_LAST_FILE is the removed path"
+
+    IN=$'y\n'; run req_wizard_remove_request "$D/oops.get.json"
+    assert_eq "0" "$STATUS" "an invalid request can be removed"
+    [[ ! -e $D/oops.get.json ]]; assert_eq "0" "$?" "and it is gone"
+
+    run req_wizard_remove_request "$D/ghost.get.json"
+    assert_eq "1" "$STATUS" "a missing request fails"
+}
+
 test_pairs_and_presets
 test_new
 test_edit
@@ -420,4 +450,5 @@ test_duplicate
 test_mkdir
 test_rename_dir
 test_copy_dir
+test_remove_request
 test_summary
