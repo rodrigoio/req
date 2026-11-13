@@ -18,6 +18,7 @@ REQ_SCREEN_DRAWN=0      # rows of the block already printed in the terminal
 REQ_SCREEN_EXTRA=0      # rows beyond one per line, from long lines that wrap
 REQ_BASE_EXTRA=0
 
+REQ_NAV_PROJECT=""      # name of the project (the folder of the .req), shown in the header
 REQ_NAV_ROOT=""         # the menu root: the workspace of the project (set only by req_nav_root)
 REQ_CUR_DIR=""          # directory being shown ("" = project root)
 REQ_STACK_DIR=()        # navigation stack: previous directories and selections
@@ -126,6 +127,7 @@ req_nav_init() {
     local pfile=$1
     [[ -f $pfile ]] || { req_err "project file not found: $pfile"; return 1; }
     req_nav_root "$pfile" || return 1
+    REQ_NAV_PROJECT=$(req_abs_path "$(dirname "$pfile")"); REQ_NAV_PROJECT=${REQ_NAV_PROJECT##*/}
     REQ_CUR_DIR=""; REQ_STACK_DIR=(); REQ_STACK_SEL=()
     REQ_VIEW=list; REQ_DETAIL_FILE=""; REQ_DETAIL_VALID=0
     REQ_CMD_ACTIVE=0; REQ_CMD_BUF=""; REQ_STATUS=""; REQ_QUIT=0; REQ_NAV_DIRTY=1
@@ -214,7 +216,7 @@ req_nav_crumb() {
 # req_nav_build_list - builds REQ_SCREEN_LINES with the current directory's list.
 req_nav_build_list() {
     local n=${#REQ_ITEM_KIND[@]} cols rows visible i end width pos
-    local c_dim c_bold c_reset c_sel arrows hint tag label
+    local c_dim c_bold c_reset c_sel arrows hint tag label tail="" room
     cols=$(req_term_cols); rows=$(req_term_rows)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     c_sel=$(req_color sel)
@@ -222,7 +224,13 @@ req_nav_build_list() {
 
     pos=""
     (( n > 0 )) && pos=" ($((REQ_SEL + 1))/$n)"
-    REQ_SCREEN_LINES+=("${c_bold}req${c_reset} $(req_trunc "$(req_nav_crumb)" $((cols - 5 - ${#pos})))${c_dim}${pos}${c_reset}")
+    # The project and the environment in use go after the position, when there is room.
+    room=$(( cols - 5 - ${#pos} ))
+    if [[ -n $REQ_NAV_PROJECT ]]; then
+        tail="  $REQ_NAV_PROJECT @ ${REQ_ENV:-default}"
+        if (( room - ${#tail} >= 12 )); then room=$(( room - ${#tail} )); else tail=""; fi
+    fi
+    REQ_SCREEN_LINES+=("${c_bold}req${c_reset} $(req_trunc "$(req_nav_crumb)" "$room")${c_dim}${pos}${tail}${c_reset}")
 
     if (( n == 0 )); then
         REQ_SCREEN_LINES+=("  ${c_dim}(empty)${c_reset}")

@@ -57,6 +57,10 @@ Central state: the first time `req` opens a project (or `req init` creates one) 
 
 The menu is redrawn in place without clearing the screen: a request's result stays visible and the menu is redrawn right below it, after the `====` line. The selected row is highlighted in bold bright green. Directories show as `dir  name/` and the other rows show the request's colored method. The details screen also shows `raw_data` (indented JSON or text, up to 15 lines) and flags what will not be sent: `parameters` when `raw_data` takes precedence, and both with GET and DELETE. An invalid request shows its problems on the details screen and is not run.
 
+### The header
+
+The first line of the list shows the path inside the workspace, the position (`3/5`) and, when the terminal is wide enough, the project (the folder of the `.req`) and the environment in use: `req /api (3/5)  shop @ dev`. The environment is `REQ_ENV`, `default` when it is not set.
+
 ### Commands
 
 Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) cancels.

@@ -133,6 +133,15 @@ test_list_screen() {
     screen list; out=$OUT
     assert_contains "req /" "$out" "header at the root"
     assert_contains "(1/2)" "$out" "position in the list"
+    assert_contains "(1/2)  proj @ default" "$out" "the header names the project and the default environment"
+    REQ_ENV=prod screen list
+    assert_contains "proj @ prod" "$OUT" "REQ_ENV chooses the environment shown"
+    COLUMNS=20 screen list
+    [[ $OUT != *"@"* ]]; assert_eq "0" "$?" "on a narrow terminal the project and environment are dropped"
+    assert_contains "req /" "$OUT" "and the path stays"
+    REQ_NAV_PROJECT=""; screen list
+    [[ $OUT != *"@"* ]]; assert_eq "0" "$?" "without a project name there is nothing to show"
+    req_nav_init "$PROJ/.req"; screen list; out=$OUT
     assert_contains "> dir    api/" "$out" "selected directory with a marker"
     assert_contains "  dir    auth/" "$out" "directory without a marker"
     [[ $out != *"Esc back"* ]]; assert_eq "0" "$?" "no Esc hint at the root"
