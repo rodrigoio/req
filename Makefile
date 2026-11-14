@@ -4,7 +4,7 @@ TARGET  := $(DESTDIR)$(BINDIR)/req
 SRC     := $(abspath bin/req)
 
 .DEFAULT_GOAL := help
-.PHONY: help test lint check install uninstall
+.PHONY: help test lint check container install uninstall
 
 help: ## List the available targets
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -23,6 +23,9 @@ lint: ## Run shellcheck (if installed) and check syntax
 	fi
 
 check: lint test ## Lint + tests
+
+container: ## Run the tests in a container: make container IMAGE=debian:12-slim
+	@tests/container.sh "$(IMAGE)"
 
 install: ## Install a symlink at $(BINDIR)/req
 	@mkdir -p "$(DESTDIR)$(BINDIR)"
