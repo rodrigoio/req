@@ -94,7 +94,35 @@ test_response() {
     [[ ! -e $f ]]; assert_eq "0" "$?" "with the log off nothing is written"
 }
 
+test_limit() {
+    echo "log: the line limit"
+    local f out i
+    on; f=$(req_log_file); rm -f "$f"
+    REQ_CONFIG=([log]=yes [log_request_limit]=5)
+    for i in 1 2 3; do req_log_write TEST "line $i"; done
+    assert_eq "3" "$(wc -l <"$f" | tr -d ' ')" "below the limit nothing is dropped"
+    for i in 4 5 6 7 8; do req_log_write TEST "line $i"; done
+    assert_eq "5" "$(wc -l <"$f" | tr -d ' ')" "at the limit the log keeps that many lines"
+    out=$(<"$f")
+    assert_contains "TEST line 8" "$out" "the newest line is kept"
+    assert_contains "TEST line 4" "$out" "back to the fifth newest"
+    [[ $out != *"line 3"* ]]; assert_eq "0" "$?" "and the oldest are gone"
+    assert_eq "" "$(find "$(dirname "$f")" -name 'req.log.*')" "no temporary file is left"
+    REQ_CONFIG=([log]=yes [log_request_limit]=0)
+    for i in 1 2 3 4 5 6 7 8; do req_log_write TEST "more $i"; done
+    assert_eq "13" "$(wc -l <"$f" | tr -d ' ')" "with 0 there is no limit"
+    REQ_CONFIG=([log]=yes [log_request_limit]=2)
+    req_log_write TEST last
+    assert_eq "2" "$(wc -l <"$f" | tr -d ' ')" "a lower limit cuts an existing log at the next write"
+    assert_contains "TEST more 8" "$(<"$f")" "keeping the newest"
+    REQ_CONFIG=([log]=yes)
+    rm -f "$f"; for i in $(seq 1 12); do printf 'x\n' >>"$f"; done
+    req_log_write TEST new
+    assert_eq "13" "$(wc -l <"$f" | tr -d ' ')" "the default (500) leaves a small log alone"
+}
+
 test_enabled
+test_limit
 test_write
 test_request
 test_response

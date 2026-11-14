@@ -639,7 +639,7 @@ test_command_config() {
     assert_eq "no" "$(req_config_get time_stats)" "and is in effect"
     type_keys : c o n f i g enter
     REQ_NAV_DIRTY=1; req_nav_build_config; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
-    assert_contains "time_stats       no    default yes" "$out" "the screen shows the new value next to the default"
+    assert_contains "time_stats         no    default yes" "$out" "the screen shows the new value next to the default"
     req_nav_handle x
 
     REQ_CMD_BUF="config -g time_stats = yes"; type_keys :; REQ_CMD_BUF="config -g time_stats = yes"; req_nav_handle enter
@@ -680,9 +680,9 @@ test_command_config() {
     REQ_NAV_DIRTY=1; req_nav_build_config; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
     assert_contains "$lf" "$out" "the screen names the project file"
     assert_contains "-g" "$out" "and the way to change the global one"
-    assert_contains "log              yes   default no    project" "$out" "it marks a value that comes from the project"
-    assert_contains "time_stats       yes   default yes   project" "$out" "even when it equals the default"
-    [[ $out != *"restore_cursor      yes   default yes   project"* ]]; assert_eq "0" "$?" "a global or default value is not marked"
+    assert_contains "log                yes   default no    project" "$out" "it marks a value that comes from the project"
+    assert_contains "time_stats         yes   default yes   project" "$out" "even when it equals the default"
+    [[ $out != *"restore_cursor     yes   default yes   project"* ]]; assert_eq "0" "$?" "a global or default value is not marked"
     req_nav_handle x
     type_keys : c o n f i g ' ' - g enter
     assert_contains "usage: :config [-g]" "$REQ_STATUS" "-g alone shows the usage"

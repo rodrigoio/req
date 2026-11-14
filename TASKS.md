@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **nenhuma tarefa pendente no plano** (a Fase 8 está concluída, T8.1 a T8.6; as pendências "Adicionais" TA.2 a TA.14 dependem de validação com usuários e as questões Q1 a Q11 aguardam a revisão final; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T9.2** (limite de redirects na configuração; a T9.1, limite do log, está feita; antes disso, **nenhuma tarefa pendente no plano** (a Fase 8 está concluída, T8.1 a T8.6; as pendências "Adicionais" TA.2 a TA.14 dependem de validação com usuários e as questões Q1 a Q11 aguardam a revisão final; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1346 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1376 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -160,7 +160,7 @@ Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde fi
 
 ### Questões para a revisão final (anotadas durante a execução contínua)
 Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; cada item diz o que foi feito e o que decidir.
-- Q1 (T6.2/T6.3) O log guarda o corpo da request e da resposta inteiros, sem limite de tamanho e sem rotação do `req.log`. Decidir se deve haver limite por linha, rotação ou um comando para limpar.
+- ~~Q1~~ Decidida: o `req.log` guarda as últimas `log_request_limit` linhas (padrão 500, configurável; `0` sem limite; chave inteira nova na tabela de configurações). Segue em aberto só o tamanho de cada linha (o corpo inteiro) e um comando para limpar o log.
 - Q2 (T6.3) O log da resposta não traz os headers da resposta. Decidir se devem entrar (a T6.5 os captura para o verbose).
 - Q3 (T6.4) O verbose é só a variável `REQ_VERBOSE` (ou `:v` na T6.6); não há chave `verbose` na config nem opção `-v` no `req run`. Decidir se deve haver.
 - Q4 (T6.5) No verbose, a resposta mostra só a linha de status e os headers com `<<`; o corpo continua na exibição normal (formatado), sem `<<`. Decidir se cada linha do corpo também deve levar `<<`.
@@ -205,6 +205,10 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 - [x] T8.5 Envio de arquivos: campo opcional `files` (`{"campo": "caminho"}`) que envia `multipart/form-data` (`-F campo=@"caminho"`), com os `parameters` como campos de texto (`--form-string`); caminho relativo parte da pasta da request (`REQ_REQUEST_DIR`); `${chave}` vale no campo; arquivo ilegível para a execução; `files` junto com `raw_data` é recusado na validação. Entra no verbose (`>> campo=@caminho`) e no log (`| file: campo=caminho`).
 - [x] T8.6 Valores aninhados em `query`: objeto vira `chave[sub]=valor` e lista vira `chave[]=valor` (colchetes codificados na url; vazios omitidos; `null` recusado). Definição jq compartilhada (`REQ_JQ_LEAVES`) entre validação, tela de detalhes e montagem da url.
 - ~~T8.7~~ Removida: JSON aninhado vai em `raw_data`; `parameters` fica plano (campos de formulário).
+
+### Fase 9 — Ajustes decididos na revisão final
+- [x] T9.1 Limite de linhas do `req.log`: chave `log_request_limit` (inteiro, padrão 500, `0` sem limite), no tipo novo `int` da tabela de configurações; `req_log_trim` corta as linhas mais antigas depois de cada escrita.
+- T9.2 Limite de redirects na configuração (global e do projeto), com valor padrão, no lugar dos 10 fixos de `follow_redirects` (Q8).
 
 ### Revisão 2 — achados da validação de uso (R8 a R10; ao final do plano)
 Continuação do arquivo local `reviews` (R1 a R7 estão na Revisão 1). As TR2.1 a TR2.4 vêm antes da Fase 5.

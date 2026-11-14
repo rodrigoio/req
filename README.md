@@ -170,6 +170,7 @@ Settings are `key=value` lines in two files: `~/.req/projects/<id>/config` (or u
 | `time_stat_total` | `yes` | show the total time line of that profile |
 | `restore_cursor` | `yes` | reopen the menu in the directory and on the item where it was left; `no` always opens at the workspace root |
 | `log` | `no` | write the requests and responses to the project's `req.log` (see "Log") |
+| `log_request_limit` | `500` | lines kept in `req.log`: when it grows past this, the oldest lines are dropped (`0`: no limit) |
 
 The position is saved per project in `~/.req/projects/<id>/cursor` when you leave (`:q`, end of input, Ctrl-C). If the directory or the item is gone when you come back, `req` falls back to the nearest existing directory or to the first item.
 
@@ -204,7 +205,7 @@ With `log=yes` (`:config log=yes` for the project, `:config -g log=yes` for ever
 2026-11-13T22:30:00-0300 REQUEST file=add.post.json env=dev POST https://api.example.com/users | header: X-Token: abc123 | body: {"name":"ana"}
 ```
 
-The values are the real ones, after `${key}` is replaced (nothing is masked). `:log` switches the log for the current session the same way (`:log yes`, `:log no`) without touching the setting; it needs an open project. A request that stops before it is sent (invalid file, missing key) is not logged. If the log cannot be written, `req` warns and sends the request anyway. There is no log without an open project. The response follows on the next line, with the status, the Content-Type, the total time and the whole body (there is no size limit), or, when nothing came back, an `ERROR no response (curl exit code N)` line:
+The values are the real ones, after `${key}` is replaced (nothing is masked). `:log` switches the log for the current session the same way (`:log yes`, `:log no`) without touching the setting; it needs an open project. A request that stops before it is sent (invalid file, missing key) is not logged. The log keeps its last `log_request_limit` lines (500 by default; the oldest go first; `0` turns the limit off); each request and each response is one line, however long its body. If the log cannot be written, `req` warns and sends the request anyway. There is no log without an open project. The response follows on the next line, with the status, the Content-Type, the total time and the whole body (there is no size limit), or, when nothing came back, an `ERROR no response (curl exit code N)` line:
 
 ```
 2026-11-13T22:30:01-0300 RESPONSE status=201 type=application/json total=0.150s | body: {"id":7}
