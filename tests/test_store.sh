@@ -38,7 +38,7 @@ test_names() {
 
 test_write_read() {
     echo "store: writing and reading"
-    local d=$TMP/w out
+    local d=$TMP/w out v
     mkdir -p "$d"
     out=$(req_request_write "$d" users GET http://x/users)
     assert_eq "$d/users.get.json" "$out" "returns the created path"
@@ -133,10 +133,28 @@ test_invalid_manual() {
     printf '{"name":"Bad Name","method":"GET","url":"http://x"}\n' >"$d/j.get.json"
     assert_contains "slug" "$(check_out "$d/j.get.json")" "name outside the slug format"
 
-    printf '{"name":"k","method":"GET","url":"http://x","descr":"x","timeout":5}\n' >"$d/k.get.json"
+    printf '{"name":"k","method":"GET","url":"http://x","descr":"x","retries":5}\n' >"$d/k.get.json"
     out=$(check_out "$d/k.get.json")
     assert_contains 'unknown field "descr"' "$out" "unknown field is invalidated"
-    assert_contains 'unknown field "timeout"' "$out" "another unknown field"
+    assert_contains 'unknown field "retries"' "$out" "another unknown field"
+    printf '{"name":"t1","method":"GET","url":"http://x","timeout":2.5}\n' >"$d/t1.get.json"
+    assert_eq "0" "$(req_request_check "$d/t1.get.json" 2>/dev/null; echo $?)" "timeout accepts a positive number"
+    printf '{"name":"f1","method":"GET","url":"http://x","follow_redirects":true}\n' >"$d/f1.get.json"
+    assert_eq "0" "$(req_request_check "$d/f1.get.json" 2>/dev/null; echo $?)" "follow_redirects accepts a boolean"
+    for v in '"yes"' 1 null '"true"'; do
+        printf '{"name":"f2","method":"GET","url":"http://x","follow_redirects":%s}\n' "$v" >"$d/f2.get.json"
+        assert_contains 'field "follow_redirects" must be true or false' "$(check_out "$d/f2.get.json")" "follow_redirects $v is refused"
+    done
+    printf '{"name":"s1","method":"GET","url":"https://x","insecure":true}\n' >"$d/s1.get.json"
+    assert_eq "0" "$(req_request_check "$d/s1.get.json" 2>/dev/null; echo $?)" "insecure accepts a boolean"
+    for v in '"yes"' 1 null; do
+        printf '{"name":"s2","method":"GET","url":"https://x","insecure":%s}\n' "$v" >"$d/s2.get.json"
+        assert_contains 'field "insecure" must be true or false' "$(check_out "$d/s2.get.json")" "insecure $v is refused"
+    done
+    for v in 0 -1 '"5"' true null '[1]'; do
+        printf '{"name":"t2","method":"GET","url":"http://x","timeout":%s}\n' "$v" >"$d/t2.get.json"
+        assert_contains 'field "timeout" must be a positive number of seconds' "$(check_out "$d/t2.get.json")" "timeout $v is refused"
+    done
 
     printf '{"name":"o","method":"POST","url":"http://x","data_parameter":{"a":"1"}}\n' >"$d/o.post.json"
     assert_contains '"data_parameter" was renamed to "parameters"' "$(check_out "$d/o.post.json")" "the old name points to the new one"
