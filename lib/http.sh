@@ -8,7 +8,10 @@ REQ_RESP_BODY=""        # body of the last response
 REQ_RESP_STATUS=""      # HTTP status code of the last response
 REQ_RESP_CTYPE=""       # Content-Type of the last response
 REQ_RESP_TIMES=()       # dns connect tls pretransfer ttfb total (seconds, cumulative)
+REQ_RESP_STATUSLINE=""  # status line of the last response ("HTTP/1.1 200 OK")
+REQ_RESP_HEADERS=()     # its headers, one "Name: value" per item
 REQ_BAR_WIDTH=30
+REQ_VERBOSE=${REQ_VERBOSE:-0}   # 1: show what is sent (>>) and received (<<); :v toggles it
 
 # Metadata appended by curl at the end of the output; the Content-Type goes last
 # because it can contain any character except a line break.
@@ -112,15 +115,33 @@ req_build_curl_args() {
     REQ_CURL_ARGS+=("$REQ_P_URL")
 }
 
-# req_curl_exec - runs REQ_CURL_ARGS/REQ_BODY and fills REQ_RESP_*.
+# req_split_headers <text> - the text is what curl wrote with "-D -": the header block
+# (CRLF lines, ended by a blank line) and then the body. Fills REQ_RESP_STATUSLINE and
+# REQ_RESP_HEADERS, and puts the body in REQ_RESP_BODY. An interim "1xx" block (such as
+# "100 Continue") is skipped. Text that does not start with "HTTP/" is all body.
+req_split_headers() {
+    local rest=$1 block line crlf=$'\r\n'
+    REQ_RESP_STATUSLINE=""; REQ_RESP_HEADERS=()
+    while [[ $rest == HTTP/* && $rest == *"$crlf$crlf"* ]]; do
+        block=${rest%%"$crlf$crlf"*}; rest=${rest#*"$crlf$crlf"}
+        REQ_RESP_STATUSLINE=${block%%"$crlf"*}; REQ_RESP_HEADERS=()
+        [[ $block == *"$crlf"* ]] && while IFS= read -r line; do
+            [[ -z $line ]] || REQ_RESP_HEADERS+=("${line%$'\r'}")
+        done <<<"${block#*"$crlf"}"
+        [[ $REQ_RESP_STATUSLINE =~ ^HTTP/[0-9.]+\ 1[0-9][0-9] ]] || break
+    done
+    REQ_RESP_BODY=$rest
+}
+
+# req_curl_exec - runs REQ_CURL_ARGS/REQ_BODY and fills REQ_RESP_*, headers included.
 # Returns curl's status (0 = an HTTP response was received, any status code).
 req_curl_exec() {
     local out meta status
-    out=$(printf '%s' "$REQ_BODY" | curl "${REQ_CURL_ARGS[@]}" -w "$REQ_CURL_FORMAT")
+    out=$(printf '%s' "$REQ_BODY" | curl "${REQ_CURL_ARGS[@]}" -D - -w "$REQ_CURL_FORMAT")
     status=$?
 
     meta=${out##*$'\n'}
-    REQ_RESP_BODY=${out%$'\n'*}
+    req_split_headers "${out%$'\n'*}"
     IFS='|' read -r REQ_RESP_STATUS "REQ_RESP_TIMES[0]" "REQ_RESP_TIMES[1]" "REQ_RESP_TIMES[2]" \
         "REQ_RESP_TIMES[3]" "REQ_RESP_TIMES[4]" "REQ_RESP_TIMES[5]" REQ_RESP_CTYPE <<<"$meta"
     return "$status"
@@ -200,11 +221,47 @@ req_print_body() {
     printf '%s\n' "$body"
 }
 
+# req_verbose_on - succeeds when the verbose mode is on.
+req_verbose_on() {
+    [[ $REQ_VERBOSE == 1 ]]
+}
+
+# req_verbose_request - with the verbose mode on, shows the data sent (set by
+# req_build_curl_args), one ">>" line per form field or per line of raw_data. Prints
+# nothing without data (a GET, or no parameters and no raw_data).
+req_verbose_request() {
+    local line
+    req_verbose_on || return 0
+    {
+        if (( REQ_P_RAWSET )); then
+            printf '%s\n' "$REQ_BODY"
+        else
+            for line in "${REQ_P_FORM[@]}"; do printf '%s\n' "$line"; done
+        fi
+    } | while IFS= read -r line || [[ -n $line ]]; do
+        req_color dim; printf '>>'; req_color reset; printf ' %s\n' "${line%$'\r'}"
+    done
+}
+
+# req_verbose_response - with the verbose mode on, shows the status line and the headers
+# of the response (REQ_RESP_STATUSLINE, REQ_RESP_HEADERS), one "<<" line each.
+req_verbose_response() {
+    local line
+    req_verbose_on || return 0
+    for line in "$REQ_RESP_STATUSLINE" "${REQ_RESP_HEADERS[@]}"; do
+        [[ -n $line ]] || continue
+        req_color dim; printf '<<'; req_color reset; printf ' %s\n' "$line"
+    done
+    printf '\n'
+}
+
 # req_run_request <file> - validates, runs and shows: response, timing profile
 # and a line of "=" that separates the result from the menu redrawn after it. Before
 # sending, every ${key} in the url, headers, query, parameters and raw_data is replaced
 # by its value in the environment REQ_ENV (default "default"); a key without a value
-# stops the request with an error that says how to define it.
+# stops the request with an error that says how to define it. With the "log" setting on,
+# the request is written to the project's log just before it is sent and the response (or the
+# failure) right after it arrives (log.sh).
 req_run_request() {
     local file=$1 json status env=${REQ_ENV:-default}
     req_request_check "$file" || return 1
@@ -212,16 +269,22 @@ req_run_request() {
     req_vars_load "$env" || return 1
     req_subst_json "$json" "$env" || return 1
     req_build_curl_args "$REQ_SUBST_OUT" || return 1
+    req_log_request "$file" "$env"
 
     req_method_color "$REQ_P_METHOD"; printf '%s' "$REQ_P_METHOD"; req_color reset
     printf ' %s\n' "$REQ_P_URL"
+    req_verbose_request
 
     req_curl_exec; status=$?
     if (( status != 0 )); then
+        req_log_failure "$status"
         req_err "request failed (curl exit code $status)"
         req_rule '='
         return 1
     fi
+
+    req_log_response
+    req_verbose_response
 
     printf 'HTTP '; req_paint_status "$REQ_RESP_STATUS"
     [[ -n $REQ_RESP_CTYPE ]] && printf '  %s' "$REQ_RESP_CTYPE"
