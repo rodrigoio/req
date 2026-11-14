@@ -36,7 +36,7 @@ folder itself may be reached through a link: only the workspace part is checked.
 | 5 Environments and variables | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.6 done; T5.7 dropped (no masking); T5.8 done |
 | 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
 
-Next task: **T6.2** (Phase 6; T6.1 is done: project settings over the global ones, `log=yes|no` only; Phase 5 is done, T5.7 was dropped). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 6".
+Next task: **T6.7** (Phase 6; T6.6 is done (`req_cmd_log` and `req_cmd_verbose` in `lib/cmd.sh`, with `req_cmd_switch` for the optional yes/no/on/off argument; `REQ_LOG_SESSION` in `lib/log.sh` wins over the `log` setting in `req_log_enabled`); T6.5 is done (`req_curl_exec` now runs curl with `-D -` and `req_split_headers` fills `REQ_RESP_STATUSLINE`, `REQ_RESP_HEADERS` and the body, skipping a `1xx` block; `req_verbose_response` prints them with `<<`); T6.4 is done (`REQ_VERBOSE`, `req_verbose_on`, `req_verbose_request` in `lib/http.sh`, called by `req_run_request` right after the `METHOD url` line); T6.3 is done (`req_log_response` after `req_curl_exec`, `req_log_failure <code>` when curl fails); T6.2 is done (`lib/log.sh`: `req_log_request` is called by `req_run_request` right before the curl call; `req_log_write <event> <text>` is the one writer, to reuse for T6.3); T6.1 is done: project settings over the global ones, `log=yes|no` only; Phase 5 is done, T5.7 was dropped). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 6".
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - One task = one behavior, about 100 to 200 lines including tests, one commit.
@@ -45,7 +45,15 @@ Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - Everything in the repository is in English (code, messages, comments, tests,
   README). The conversation is in Portuguese, and so is TASKS.md.
 - The `manifest` file is the user's and is git-ignored; never commit it.
-- Nothing is committed by the assistant unless asked; the user commits.
+- Branches (`guideline.md`, rule 7): every task gets its own branch, named with one or
+  two words in slug-case plus a three-digit sequence number that never restarts and grows
+  by one per task: `log-request-001`, then `log-response-002`, `verbose-data-003`, and so on
+  (`git branch --list '*-[0-9][0-9][0-9]'` shows the last number). The first branch was
+  created from `main` at `4c82e70` (T6.1 and earlier were committed on `main`); each next
+  task's branch is created from the previous task's branch, not from `main`.
+- The assistant commits on the task's branch (one-line message, no attribution lines) after
+  the tests pass, and never pushes. Merging into `main` is done by another process through
+  pull requests; the assistant does not merge, rebase onto `main` or delete branches.
 
 ## Architecture
 
@@ -62,6 +70,7 @@ else is functions in `lib/`, all prefixed `req_`.
 | `nav.sh` | the interactive menu: state, screen building, keys, main loop, init prompt |
 | `cmd.sh` | command mode (`:n :nd :ed :cp :rm :e :d :config :h :q`) on top of `nav.sh` |
 | `wizard.sh` | the prompts behind `:n`, `:e`, `:d` and `:nd` |
+| `log.sh` | the project's log (`projects/<id>/req.log`): `req_log_enabled` (`log=yes` and a project), `req_log_write <event> <text>` appends `<ISO timestamp> <EVENT> <text>` on one line (line breaks become `\n`; an unwritable file is one warning), `req_log_request <file> <env>` writes the request prepared by `req_build_curl_args` (file, env, method, url, ` | header: ...`, ` | form: ...`, ` | body: ...`), `req_log_response` the `REQ_RESP_*` of `req_curl_exec` (status, type, total time, ` | body: ...`) and `req_log_failure <code>` an `ERROR` line |
 | `config.sh` | the settings: one table of known keys (`REQ_CONFIG_KEYS`, `_TYPE`, `_DEFAULT`, `_DESC`; `log` is only stored until T6.2 uses it), `req_config_load` fills `REQ_CONFIG` from the global `~/.req/config` and then, when `REQ_PROJECT_ID` is set, layers `projects/<id>/config` (`req_config_local_file`) over it with `req_config_load_local`, which also fills `REQ_CONFIG_LOCAL` with the keys the project set (`req_config_load_file <file> [overlay]` is the reader; unknown keys, bad values and bad lines are warnings with path and line, never errors), `req_config_get` falls back to the default. The project is activated after the first load, so `req_nav_start` and `req run` call `req_config_load_local`. `:config key=value` writes the project's file (the default: whoever uses `req` works on one project), `:config -g key=value` the global one |
 | `env.sh` | variable loading (`req_vars_load <env> [id]` fills `REQ_VARS` from `projects/<id>/vars` and `env/<env>`, the environment winning; the old `secrets.json` only gets a warning) and key resolution (`req_resolve_key <env> <key>`: process variable `<ENV>_<KEY>` (`req_env_var_name`, hyphens become underscores), then `REQ_VARS`; a set but empty process variable counts) and substitution (`req_subst <text> <env> [id]` puts the text with every `${key}` replaced in `REQ_SUBST_OUT`, with no subshell so trailing line breaks survive, or fails listing every missing key once with the variable and files that define it; there is no escape for a literal `${key}` yet, see TA.14) and `req_subst_json <request json> <env> [id]`, the same for a request: it only touches the string values of `url`, `headers`, `query`, `parameters` and `raw_data` (walking native JSON too) with jq, resolves every key first so the error lists them all, and keeps the result valid JSON. `req_run_request` calls `req_vars_load` and `req_subst_json` (environment `REQ_ENV`, default `default`) before building the curl command; `req run` looks up the project of the current folder without registering it; `req_env_list [id]` lists the files of `projects/<id>/env/` with a slug name and `req_env_exists <env> [id]` is true for those and for `default`, which `:env <name>` (`req_cmd_env` in `cmd.sh`) uses to validate before setting `REQ_ENV`; the choice lasts only for the session |
 

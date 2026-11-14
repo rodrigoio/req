@@ -43,6 +43,8 @@ main() {
     source "$REQ_HOME/lib/home.sh"
     # shellcheck source=lib/config.sh
     source "$REQ_HOME/lib/config.sh"
+    # shellcheck source=lib/log.sh
+    source "$REQ_HOME/lib/log.sh"
 
     case ${1-} in
         -v|--version) printf 'req %s\n' "$REQ_VERSION"; return 0 ;;
