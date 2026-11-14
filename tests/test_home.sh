@@ -169,9 +169,11 @@ test_cursor() {
     assert_eq "dir=
 item=" "$(<"$f")" "in place of the old lines"
     req_cursor_save shop "a" $'b\nc' 2>/dev/null; assert_eq "1" "$?" "a value with a line break is refused"
-    chmod 000 "$TMP/cur-cfg/projects/shop"
-    req_cursor_save shop "a" "b" 2>/dev/null; assert_eq "1" "$?" "an unwritable folder fails"
-    chmod 700 "$TMP/cur-cfg/projects/shop"
+    if (( EUID != 0 )); then       # root ignores the permissions
+        chmod 000 "$TMP/cur-cfg/projects/shop"
+        req_cursor_save shop "a" "b" 2>/dev/null; assert_eq "1" "$?" "an unwritable folder fails"
+        chmod 700 "$TMP/cur-cfg/projects/shop"
+    fi
     REQ_CONFIG_DIR=$cfg
 }
 

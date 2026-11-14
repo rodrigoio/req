@@ -38,7 +38,7 @@ test_names() {
 
 test_write_read() {
     echo "store: writing and reading"
-    local d=$TMP/w out
+    local d=$TMP/w out v
     mkdir -p "$d"
     out=$(req_request_write "$d" users GET http://x/users)
     assert_eq "$d/users.get.json" "$out" "returns the created path"
@@ -133,10 +133,52 @@ test_invalid_manual() {
     printf '{"name":"Bad Name","method":"GET","url":"http://x"}\n' >"$d/j.get.json"
     assert_contains "slug" "$(check_out "$d/j.get.json")" "name outside the slug format"
 
-    printf '{"name":"k","method":"GET","url":"http://x","descr":"x","timeout":5}\n' >"$d/k.get.json"
+    printf '{"name":"k","method":"GET","url":"http://x","descr":"x","retries":5}\n' >"$d/k.get.json"
     out=$(check_out "$d/k.get.json")
     assert_contains 'unknown field "descr"' "$out" "unknown field is invalidated"
-    assert_contains 'unknown field "timeout"' "$out" "another unknown field"
+    assert_contains 'unknown field "retries"' "$out" "another unknown field"
+    printf '{"name":"t1","method":"GET","url":"http://x","timeout":2.5}\n' >"$d/t1.get.json"
+    assert_eq "0" "$(req_request_check "$d/t1.get.json" 2>/dev/null; echo $?)" "timeout accepts a positive number"
+    printf '{"name":"f1","method":"GET","url":"http://x","follow_redirects":true}\n' >"$d/f1.get.json"
+    assert_eq "0" "$(req_request_check "$d/f1.get.json" 2>/dev/null; echo $?)" "follow_redirects accepts a boolean"
+    for v in '"yes"' 1 null '"true"'; do
+        printf '{"name":"f2","method":"GET","url":"http://x","follow_redirects":%s}\n' "$v" >"$d/f2.get.json"
+        assert_contains 'field "follow_redirects" must be true or false' "$(check_out "$d/f2.get.json")" "follow_redirects $v is refused"
+    done
+    printf '{"name":"s1","method":"GET","url":"https://x","insecure":true}\n' >"$d/s1.get.json"
+    assert_eq "0" "$(req_request_check "$d/s1.get.json" 2>/dev/null; echo $?)" "insecure accepts a boolean"
+    for v in '"yes"' 1 null; do
+        printf '{"name":"s2","method":"GET","url":"https://x","insecure":%s}\n' "$v" >"$d/s2.get.json"
+        assert_contains 'field "insecure" must be true or false' "$(check_out "$d/s2.get.json")" "insecure $v is refused"
+    done
+    printf '{"name":"u1","method":"POST","url":"http://x","files":{"doc":"a.txt"},"parameters":{"n":"1"}}\n' >"$d/u1.post.json"
+    assert_eq "0" "$(req_request_check "$d/u1.post.json" 2>/dev/null; echo $?)" "files with parameters is valid"
+    printf '{"name":"u2","method":"POST","url":"http://x","files":["a.txt"]}\n' >"$d/u2.post.json"
+    assert_contains 'field "files" must be an object' "$(check_out "$d/u2.post.json")" "files must be an object"
+    printf '{"name":"u3","method":"POST","url":"http://x","files":{"doc":1,"b":""}}\n' >"$d/u3.post.json"
+    out=$(check_out "$d/u3.post.json")
+    assert_contains 'files "doc": the value must be a file path' "$out" "a file value must be a string"
+    assert_contains 'files "b": the value must be a file path' "$out" "and not empty"
+    printf '{"name":"u4","method":"POST","url":"http://x","files":{"doc":"a.txt"},"raw_data":{"a":1}}\n' >"$d/u4.post.json"
+    assert_contains '"files" and "raw_data" cannot be used together' "$(check_out "$d/u4.post.json")" "files and raw_data conflict"
+    printf '{"name":"u5","method":"POST","url":"http://x","files":{},"raw_data":{"a":1}}\n' >"$d/u5.post.json"
+    assert_eq "0" "$(req_request_check "$d/u5.post.json" 2>/dev/null; echo $?)" "an empty files object does not conflict"
+    printf '{"name":"n1","method":"GET","url":"http://x","query":{"f":{"a":1,"b":{"c":"x"}},"t":["x",2,true],"e":[]}}\n' >"$d/n1.get.json"
+    assert_eq "0" "$(req_request_check "$d/n1.get.json" 2>/dev/null; echo $?)" "query accepts nested objects and lists of scalars"
+    for v in '{"a":null}' '[null]' '[[1],{"a":[{"b":null}]}]' 'null'; do
+        printf '{"name":"n2","method":"GET","url":"http://x","query":{"f":%s}}\n' "$v" >"$d/n2.get.json"
+        assert_contains 'query "f": the value must be a string, number or boolean, or a list or object of them' "$(check_out "$d/n2.get.json")" "query value $v is refused"
+    done
+    printf '{"name":"n3","method":"GET","url":"http://x","query":["a"]}\n' >"$d/n3.get.json"
+    assert_contains 'field "query" must be an object' "$(check_out "$d/n3.get.json")" "query itself must still be an object"
+    printf '{"name":"n4","method":"GET","url":"http://x","headers":{"X":{"a":1}}}\n' >"$d/n4.get.json"
+    assert_contains 'header "X": the value must be a string, number or boolean' "$(check_out "$d/n4.get.json")" "headers stay flat"
+    req_request_fields "$d/n1.get.json"
+    assert_eq $'f[a]=1\nf[b][c]=x\nt[]=x\nt[]=2\nt[]=true' "$(printf '%s\n' "${REQ_F_QUERY[@]}")" "the details show the flattened query"
+    for v in 0 -1 '"5"' true null '[1]'; do
+        printf '{"name":"t2","method":"GET","url":"http://x","timeout":%s}\n' "$v" >"$d/t2.get.json"
+        assert_contains 'field "timeout" must be a positive number of seconds' "$(check_out "$d/t2.get.json")" "timeout $v is refused"
+    done
 
     printf '{"name":"o","method":"POST","url":"http://x","data_parameter":{"a":"1"}}\n' >"$d/o.post.json"
     assert_contains '"data_parameter" was renamed to "parameters"' "$(check_out "$d/o.post.json")" "the old name points to the new one"
