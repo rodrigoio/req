@@ -9,6 +9,7 @@ source "$ROOT/lib/store.sh"
 source "$ROOT/lib/home.sh"
 source "$ROOT/lib/config.sh"
 source "$ROOT/lib/env.sh"
+source "$ROOT/lib/log.sh"
 source "$ROOT/lib/http.sh"
 
 TMP=$(mktemp -d)
@@ -220,6 +221,34 @@ test_execute() {
     out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" 2>&1)
     assert_contains '"x_test": "t2"' "$out" "REQ_ENV chooses the environment"
     unset REQ_ENV STAGING_BASE STAGING_TOK DEFAULT_BASE
+
+    # The log: only when log=yes and a project is open; the request is written before it is sent.
+    local lid=logproj logf=$TMP/cfgdir/projects/logproj/req.log
+    mkdir -p "$TMP/cfgdir/projects/$lid"
+    local saved_cfg=${REQ_CONFIG_DIR-}
+    export REQ_CONFIG_DIR=$TMP/cfgdir
+    export DEFAULT_BASE=$base DEFAULT_TOK=s3cret
+    REQ_PROJECT_ID=$lid; REQ_CONFIG=([log]=yes)
+    NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
+    assert_eq "2" "$(wc -l <"$logf" | tr -d ' ')" "log=yes: a run writes the request and the response"
+    assert_contains "REQUEST file=sub.post.json env=default POST $base/echo | header: X-Test: s3cret" "$(<"$logf")" "with the substituted values"
+    assert_contains 'body: {"who":"s3cret"}' "$(<"$logf")" "and the body"
+    assert_contains " RESPONSE status=200 type=application/json" "$(sed -n 2p "$logf")" "on the next line, with the status and type"
+    unset DEFAULT_TOK
+    NO_COLOR=1 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
+    assert_eq "2" "$(wc -l <"$logf" | tr -d ' ')" "a request stopped by a missing key is not logged"
+    export DEFAULT_TOK=s3cret
+    REQ_CONFIG=([log]=no)
+    NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
+    assert_eq "2" "$(wc -l <"$logf" | tr -d ' ')" "log=no: nothing more is written"
+    REQ_CONFIG=([log]=yes)
+    printf '{"name":"down","method":"GET","url":"http://127.0.0.1:1/x"}\n' >"$TMP/down.get.json"
+    NO_COLOR=1 req_run_request "$TMP/down.get.json" >/dev/null 2>&1
+    assert_eq "4" "$(wc -l <"$logf" | tr -d ' ')" "a request with no answer logs the request and the failure"
+    assert_contains " ERROR no response (curl exit code 7)" "$(sed -n 4p "$logf")" "with curl's exit code"
+    REQ_PROJECT_ID=""; REQ_CONFIG=()
+    unset DEFAULT_BASE DEFAULT_TOK
+    if [[ -n $saved_cfg ]]; then export REQ_CONFIG_DIR=$saved_cfg; else unset REQ_CONFIG_DIR; fi
 
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"
