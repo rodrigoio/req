@@ -6,6 +6,7 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
+- **Próxima sessão:** não há tarefa pendente no plano; revisar as questões Q1 a Q11 (seção "Questões para a revisão final", com a pauta) e fazer um novo planejamento a partir das respostas.
 - Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **nenhuma tarefa pendente no plano** (T9.1 e T9.2, limites do log e de redirects, feitas (a Fase 8 está concluída, T8.1 a T8.6; as pendências "Adicionais" TA.2 a TA.14 dependem de validação com usuários e as questões Q1 a Q11 aguardam a revisão final; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
 - Suíte: `make check` com 1382 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
@@ -164,13 +165,19 @@ Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; ca
 - Q2 (T6.3) O log da resposta não traz os headers da resposta. Decidir se devem entrar (a T6.5 os captura para o verbose).
 - Q3 (T6.4) O verbose é só a variável `REQ_VERBOSE` (ou `:v` na T6.6); não há chave `verbose` na config nem opção `-v` no `req run`. Decidir se deve haver.
 - Q4 (T6.5) No verbose, a resposta mostra só a linha de status e os headers com `<<`; o corpo continua na exibição normal (formatado), sem `<<`. Decidir se cada linha do corpo também deve levar `<<`.
-- Q5 (T6.6) `:log` e `:v` valem só na sessão e não alteram a configuração (o `:log` sobrepõe a chave `log` até sair). Decidir se `:log`/`:v` devem poder gravar a chave, e se `:v` deve ter uma chave `verbose` (ligada à Q3).
+- Q5 (T6.6) **Respondida em 2026-11-14: manter a decisão por ora; o usuário fará mais validações antes de decidir.** `:log` e `:v` valem só na sessão e não alteram a configuração (o `:log` sobrepõe a chave `log` até sair). Decidir se `:log`/`:v` devem poder gravar a chave, e se `:v` deve ter uma chave `verbose` (ligada à Q3).
 - Q6 (T7.1/T7.2) Validado até o bash 4.4 (RHEL 8); as funções usam `declare -g` e outras construções do bash 4.2, mas não há teste em bash 4.0 a 4.3 (por exemplo o CentOS 7, já sem suporte). Decidir se o mínimo declarado deve passar a "bash 4.4+" ou se vale buscar uma imagem com bash 4.2.
 - Q7 (T8.1 a T8.3) Os campos extras por request (`timeout`, `follow_redirects`, `insecure`) só existem no arquivo JSON: não aparecem na tela de detalhes, nem os assistentes (`:n`, `:e`) os pedem, e o `REQ_CONNECT_TIMEOUT` segue só por variável. Decidir se entram na tela de detalhes e no assistente, e se `timeout`/`insecure` também devem existir como chave da configuração.
 - Q8 (T8.2) O limite de redirecionamentos agora é a chave `max_redirects` (T9.2, decidido), mas o curl ainda troca o método (POST vira GET) em 301, 302 e 303. Decidir se o método deve ser mantido (`--post301`/`--post302`/`--post303`).
 - Q9 (T8.3) Com `insecure` ligado nada avisa que o certificado não foi verificado (nem na tela de execução, nem no log). Decidir se deve haver um aviso.
 - Q10 (T8.5) O envio de arquivos foi definido por padrão (a tarefa não tinha detalhes): campo `files`, sempre `multipart/form-data`, sem tipo MIME nem nome de arquivo configuráveis (`;type=`, `;filename=`), vários arquivos só com campos de nomes diferentes, e o conteúdo do arquivo não vai para o log. Decidir se isso basta e se um corpo binário cru (`--data-binary @arquivo`) também é necessário.
 - Q11 (T8.6) O aninhamento de `query` usa a notação de colchetes (`filtro[a]=1`, `tags[]=x`), a mais comum em frameworks web, e codifica os colchetes na url. Decidir se outra convenção é necessária (listas repetindo o nome sem `[]`, ou notação com ponto) e se `parameters` (formulário) também deve aceitar valores aninhados, que a T8.7 removeu.
+
+**Pauta da próxima sessão (a revisar uma a uma, em um novo planejamento):**
+1. Q2, Q3, Q4, Q6, Q7, Q9, Q10 e Q11: sem resposta ainda.
+2. Q1 e Q8: decididas em parte; restam o tamanho de cada linha do log e um comando para limpá-lo (Q1) e a troca de método em redirects (Q8).
+3. Q5: validar com uso real antes de decidir.
+4. Também em aberto: TR.14 (request acima da resposta ao executar, adiada pelo usuário), TA.2 a TA.14 (esperam validação com usuários; a TA.9 está parcial, falta o editor externo; a TA.14 é o `${chave}` literal) e a decisão sobre o que fazer com a pilha de branches `log-request-001` a `max-redirects-015` (os merges na `main` são feitos por outro processo, via pull request).
 
 ### Fase 7 — Portabilidade, qualidade e entrega
 - [x] T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`. Feita com `tests/container.sh` (`make container IMAGE=...`), como usuário comum: debian 12 (bash 5.2) passa com 1238 asserts, 0 falhas e 0 testes pulados.
