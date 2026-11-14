@@ -6,9 +6,10 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T6.2** (Fase 6; a T6.1 está feita; a Fase 5 está concluída, com a T5.7 descartada).
+- **Próxima sessão:** não há tarefa pendente no plano; revisar as questões Q1 a Q11 (seção "Questões para a revisão final", com a pauta) e fazer um novo planejamento a partir das respostas.
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **nenhuma tarefa pendente no plano** (T9.1 e T9.2, limites do log e de redirects, feitas (a Fase 8 está concluída, T8.1 a T8.6; as pendências "Adicionais" TA.2 a TA.14 dependem de validação com usuários e as questões Q1 a Q11 aguardam a revisão final; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1153 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1382 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -16,6 +17,7 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 - **Shell:** bash 4+. **Dependências:** apenas `curl` e `jq`.
 - **Código:** organizado em funções, sem scripts procedurais soltos (boas práticas do manifest).
 - **Ambientes:** troca interativa via `:env <nome>`.
+- **Branches (decidido):** uma branch por tarefa, com um ou dois termos em slug-case mais um número sequencial de três dígitos que não recomeça (`log-request-001`, `log-response-002`, ...). A branch de cada tarefa nasce da branch da tarefa anterior (a primeira, da `main`); os merges na `main` são feitos por outro processo, via pull request. Detalhes em `DEVELOPMENT.md`.
 - **Configuração local por padrão (decidido):** assume-se que o usuário trabalha e configura um projeto local; por isso toda configuração é do projeto (`projects/<id>/config`) e `:config chave=valor` grava ali. A global (`~/.req/config`) é a exceção e exige `-g`; a do projeto vence a global.
 - **Precedência:** variável de ambiente vence o arquivo do ambiente, que vence as variáveis do projeto (ver "Controle central de projetos").
 - **Placeholder ausente:** `${chave}` sem valor gera erro amigável que indica ao usuário como proceder (arquivo e variável esperados, ex.: definir `DEV_URL` ou adicionar `url=...` no arquivo do ambiente `dev` do projeto); a requisição não é enviada.
@@ -150,20 +152,40 @@ Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde fi
 
 ### Fase 6 — Logs e verbose
 - [x] T6.1 Configuração do projeto (`projects/<id>/config`) sobre a global (`~/.req/config`, criada na TR2.5), reaproveitando os helpers `chave=valor` e a tabela de chaves: precedência (a do projeto vence). Decidido com o usuário: por padrão assume-se que se trabalha e configura um projeto local, então `:config chave=valor` grava no projeto e `:config -g chave=valor` na global (sem projeto aberto, o padrão avisa e sugere `-g`). A única chave de log, por ora, é `log=yes|no` (padrão `no`); formato e nome do arquivo ficam fora.
-- T6.2 Log da requisição enviada, com timestamp, em arquivo.
-- T6.3 Log da resposta recebida, no mesmo arquivo.
-- T6.4 Verbose: dados enviados (`parameters` ou `raw_data`) com `>>` no terminal.
-- T6.5 Verbose: resposta (incluindo headers) com `<<` no terminal.
-- T6.6 `:log` e `:v` alternam logs e verbose na sessão; entram na ajuda `:h`.
-- T6.7 Verificação da fase e documentação.
+- [x] T6.2 Log da requisição enviada, com timestamp, em arquivo. Decidido com o usuário: `projects/<id>/req.log`, uma linha de texto por evento (`lib/log.sh`), só com `log=yes` e projeto aberto; a linha traz arquivo, ambiente, método, url, headers, campos do formulário e corpo, com os valores reais.
+- [x] T6.3 Log da resposta recebida, no mesmo arquivo: linha `RESPONSE` (status, tipo, tempo total e o corpo inteiro) ou `ERROR` quando não houve resposta. Sem os headers da resposta por ora (a T6.5 passa a capturá-los; ver as questões da revisão final).
+- [x] T6.4 Verbose: dados enviados (`parameters` ou `raw_data`) com `>>` no terminal. O verbose é a variável `REQ_VERBOSE` (0 ou 1; o ambiente do processo pode defini-la), que a T6.6 alterna com `:v`; cada campo do formulário ou linha do corpo ganha um `>>` esmaecido, logo depois de `MÉTODO url`.
+- [x] T6.5 Verbose: resposta (incluindo headers) com `<<` no terminal: a linha de status e cada header, logo depois do envio e antes da exibição normal (que mostra o corpo formatado). Os headers vêm de `curl -D -` (`req_split_headers`).
+- [x] T6.6 `:log` e `:v` alternam logs e verbose na sessão (argumento opcional `yes|no`, também `on|off`; `:verbose` é apelido de `:v`); entram na ajuda `:h`. A escolha vale até sair (`REQ_LOG_SESSION`, `REQ_VERBOSE`) e não altera a configuração; o `:log` exige um projeto aberto.
+- [x] T6.7 Verificação da fase (binário real: sem arquivo com `log=no`; com `log=yes` e `REQ_VERBOSE=1` saem o `req.log` com `REQUEST` e `RESPONSE`, as linhas `>>` e `<<`; `:v` e `:log` pelo menu em um pty) e documentação (README: seções "Verbose" e "Log"; `DEVELOPMENT.md`: `log.sh` e o verbose em `http.sh`).
+
+### Questões para a revisão final (anotadas durante a execução contínua)
+Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; cada item diz o que foi feito e o que decidir.
+- ~~Q1~~ Decidida: o `req.log` guarda as últimas `log_request_limit` linhas (padrão 500, configurável; `0` sem limite; chave inteira nova na tabela de configurações). Segue em aberto só o tamanho de cada linha (o corpo inteiro) e um comando para limpar o log.
+- Q2 (T6.3) O log da resposta não traz os headers da resposta. Decidir se devem entrar (a T6.5 os captura para o verbose).
+- Q3 (T6.4) O verbose é só a variável `REQ_VERBOSE` (ou `:v` na T6.6); não há chave `verbose` na config nem opção `-v` no `req run`. Decidir se deve haver.
+- Q4 (T6.5) No verbose, a resposta mostra só a linha de status e os headers com `<<`; o corpo continua na exibição normal (formatado), sem `<<`. Decidir se cada linha do corpo também deve levar `<<`.
+- Q5 (T6.6) **Respondida em 2026-11-14: manter a decisão por ora; o usuário fará mais validações antes de decidir.** `:log` e `:v` valem só na sessão e não alteram a configuração (o `:log` sobrepõe a chave `log` até sair). Decidir se `:log`/`:v` devem poder gravar a chave, e se `:v` deve ter uma chave `verbose` (ligada à Q3).
+- Q6 (T7.1/T7.2) Validado até o bash 4.4 (RHEL 8); as funções usam `declare -g` e outras construções do bash 4.2, mas não há teste em bash 4.0 a 4.3 (por exemplo o CentOS 7, já sem suporte). Decidir se o mínimo declarado deve passar a "bash 4.4+" ou se vale buscar uma imagem com bash 4.2.
+- Q7 (T8.1 a T8.3) Os campos extras por request (`timeout`, `follow_redirects`, `insecure`) só existem no arquivo JSON: não aparecem na tela de detalhes, nem os assistentes (`:n`, `:e`) os pedem, e o `REQ_CONNECT_TIMEOUT` segue só por variável. Decidir se entram na tela de detalhes e no assistente, e se `timeout`/`insecure` também devem existir como chave da configuração.
+- Q8 (T8.2) O limite de redirecionamentos agora é a chave `max_redirects` (T9.2, decidido), mas o curl ainda troca o método (POST vira GET) em 301, 302 e 303. Decidir se o método deve ser mantido (`--post301`/`--post302`/`--post303`).
+- Q9 (T8.3) Com `insecure` ligado nada avisa que o certificado não foi verificado (nem na tela de execução, nem no log). Decidir se deve haver um aviso.
+- Q10 (T8.5) O envio de arquivos foi definido por padrão (a tarefa não tinha detalhes): campo `files`, sempre `multipart/form-data`, sem tipo MIME nem nome de arquivo configuráveis (`;type=`, `;filename=`), vários arquivos só com campos de nomes diferentes, e o conteúdo do arquivo não vai para o log. Decidir se isso basta e se um corpo binário cru (`--data-binary @arquivo`) também é necessário.
+- Q11 (T8.6) O aninhamento de `query` usa a notação de colchetes (`filtro[a]=1`, `tags[]=x`), a mais comum em frameworks web, e codifica os colchetes na url. Decidir se outra convenção é necessária (listas repetindo o nome sem `[]`, ou notação com ponto) e se `parameters` (formulário) também deve aceitar valores aninhados, que a T8.7 removeu.
+
+**Pauta da próxima sessão (a revisar uma a uma, em um novo planejamento):**
+1. Q2, Q3, Q4, Q6, Q7, Q9, Q10 e Q11: sem resposta ainda.
+2. Q1 e Q8: decididas em parte; restam o tamanho de cada linha do log e um comando para limpá-lo (Q1) e a troca de método em redirects (Q8).
+3. Q5: validar com uso real antes de decidir.
+4. Também em aberto: TR.14 (request acima da resposta ao executar, adiada pelo usuário), TA.2 a TA.14 (esperam validação com usuários; a TA.9 está parcial, falta o editor externo; a TA.14 é o `${chave}` literal) e a decisão sobre o que fazer com a pilha de branches `log-request-001` a `max-redirects-015` (os merges na `main` são feitos por outro processo, via pull request).
 
 ### Fase 7 — Portabilidade, qualidade e entrega
-- T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`.
-- T7.2 Validação em containers centos e rhel, com os mesmos pontos.
+- [x] T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`. Feita com `tests/container.sh` (`make container IMAGE=...`), como usuário comum: debian 12 (bash 5.2) passa com 1238 asserts, 0 falhas e 0 testes pulados.
+- [x] T7.2 Validação em containers centos e rhel, com os mesmos pontos: CentOS Stream 9 e UBI 9 (bash 5.1) e UBI 8 (RHEL 8: bash 4.4, curl 7.61, Python 3.6) passam. Achados: faltava `diffutils` (`cmp`) na imagem mínima, e o `mock_server.py` usava `ThreadingHTTPServer` (Python 3.7+), o que pulava os testes de execução em silêncio; corrigido, e o script passa a falhar com testes pulados.
 - [x] T7.3 `shellcheck`: corrigir os avisos (feito: `make lint` limpo em `bin/`, `lib/` e `tests/`).
-- T7.4 Documentação de uso.
-- T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do `.req` (`workspace`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
-- T7.6 Teste ponta a ponta do fluxo completo.
+- [x] T7.4 Documentação de uso (README): uso, código de saída do `req run`, seção "The central directory" e correção de trechos desatualizados ("nada é gravado em disco", a chave `log` na tabela de configurações).
+- [x] T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do `.req` (`workspace`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
+- [x] T7.6 Teste ponta a ponta do fluxo completo: `tests/test_e2e.sh` roda o `bin/req` real num pseudo-terminal (`tests/pty_run.py`, que também cobre a TA.9) com o mock server: `init`, criar a request pelo menu, variáveis e ambientes, `:env`, variável de processo, chave faltante, `:log`, `:v`, `:config log=yes` e `req run`.
 
 ### Adicionais — pendências e ajustes pós-validação (antes da Fase 8)
 Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das validações com usuários: confirmar a necessidade antes de implementar. O que uma validação confirma sai daqui e vira tarefa de uma seção de revisão (ver "Revisão 1"). Origem de cada ponto em `DEVELOPMENT.md`, seção "Open items to validate with users".
@@ -175,7 +197,7 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 - ~~TA.6~~ Decidida pela Revisão 3 (R11): a raiz é o `workspace` e lista requests e diretórios; `:n` na raiz cria a request (TR3.4).
 - TA.7 Redimensionamento do terminal: o menu não trata `SIGWINCH`; verificar o redesenho e o apagamento ao redimensionar. Inclui telas mais altas que o terminal (ajuda, detalhes com `raw_data` longo).
 - TA.8 Código de saída de `req run` para respostas 4xx e 5xx (hoje 0; só falha em erro de transporte). Decisão pendente.
-- TA.9 Teste em pseudo-terminal dentro da suíte (init, navegação, `:n`, `:q` e a chamada do editor externo), hoje só feito à mão; requer `python3` e é pulado sem ele.
+- TA.9 Teste em pseudo-terminal dentro da suíte (init, navegação, `:n`, `:q` e a chamada do editor externo), hoje só feito à mão; requer `python3` e é pulado sem ele. **Parcialmente feita pela T7.6** (`tests/pty_run.py`: init, `:n`, navegação, `:env`, `:v`, `:log`, `:config`, `:q`); falta a chamada do editor externo (`:e`).
 - TA.10 `REQ_ESC_TIMEOUT` (50 ms) em conexões lentas, como SSH: validar e documentar o ajuste.
 - TA.11 Validar em terminais reais sem UTF-8 e com `NO_COLOR`; os fallbacks existem, mas só foram testados em teste automatizado.
 - TA.12 Descrição com várias linhas na tela de detalhes (hoje as quebras viram espaço).
@@ -183,13 +205,17 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 - TA.14 Como escrever um `${chave}` literal (sem substituir) em uma request: hoje não há escape, então um texto como `${x}` sem valor definido é sempre um erro (T5.3). Opções: `$${x}`, uma barra antes, ou deixar sem escape. Decidir antes de a T5.4 ser usada com um `raw_data` que contenha esse trecho.
 
 ### Fase 8 — Extras (a detalhar ao final do projeto)
-- T8.1 `timeout` por request.
-- T8.2 `follow_redirects` por request.
-- T8.3 `insecure` por request.
+- [x] T8.1 `timeout` por request: campo opcional `timeout` (número positivo, em segundos) que vale no lugar de `REQ_TIMEOUT` (padrão 60); validado em `REQ_SCHEMA_JQ`, usado em `--max-time`. Só por arquivo: não aparece na tela de detalhes nem nos assistentes (ver Q7).
+- [x] T8.2 `follow_redirects` por request: campo booleano opcional (padrão `false`), validado em `REQ_SCHEMA_JQ`; liga `-L --max-redirs 10`, e o `req_split_headers` descarta os blocos 3xx dos saltos (vale o último). O `mock_server.py` ganhou `/redirect` e `/loop`.
+- [x] T8.3 `insecure` por request: campo booleano opcional (padrão `false`), validado em `REQ_SCHEMA_JQ`, liga `-k`. O `mock_server.py` serve https quando recebe certificado e chave (o teste gera um autoassinado com `openssl`, instalado também pelo `tests/container.sh`).
 - ~~T8.4~~ Substituída pela TR.4: `raw_data` entra no lugar de `data_string`, com a regra de precedência sobre `parameters`.
-- T8.5 Envio de arquivos.
-- T8.6 Valores aninhados em `query`.
+- [x] T8.5 Envio de arquivos: campo opcional `files` (`{"campo": "caminho"}`) que envia `multipart/form-data` (`-F campo=@"caminho"`), com os `parameters` como campos de texto (`--form-string`); caminho relativo parte da pasta da request (`REQ_REQUEST_DIR`); `${chave}` vale no campo; arquivo ilegível para a execução; `files` junto com `raw_data` é recusado na validação. Entra no verbose (`>> campo=@caminho`) e no log (`| file: campo=caminho`).
+- [x] T8.6 Valores aninhados em `query`: objeto vira `chave[sub]=valor` e lista vira `chave[]=valor` (colchetes codificados na url; vazios omitidos; `null` recusado). Definição jq compartilhada (`REQ_JQ_LEAVES`) entre validação, tela de detalhes e montagem da url.
 - ~~T8.7~~ Removida: JSON aninhado vai em `raw_data`; `parameters` fica plano (campos de formulário).
+
+### Fase 9 — Ajustes decididos na revisão final
+- [x] T9.1 Limite de linhas do `req.log`: chave `log_request_limit` (inteiro, padrão 500, `0` sem limite), no tipo novo `int` da tabela de configurações; `req_log_trim` corta as linhas mais antigas depois de cada escrita.
+- [x] T9.2 Limite de redirects na configuração (global e do projeto), com valor padrão, no lugar dos 10 fixos de `follow_redirects` (Q8): chave inteira `max_redirects` (padrão 10), usada em `--max-redirs`. Segue em aberto só a troca de método (POST vira GET) em 301/302/303.
 
 ### Revisão 2 — achados da validação de uso (R8 a R10; ao final do plano)
 Continuação do arquivo local `reviews` (R1 a R7 estão na Revisão 1). As TR2.1 a TR2.4 vêm antes da Fase 5.

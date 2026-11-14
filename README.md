@@ -2,7 +2,7 @@
 
 The interactive request tool for your terminal. A bash + curl utility to register, browse and fire HTTP requests, with persistence in plain JSON files.
 
-> Work in progress. The roadmap lives in [TASKS.md](TASKS.md); architecture, conventions and open questions are in [DEVELOPMENT.md](DEVELOPMENT.md).
+> The roadmap lives in [TASKS.md](TASKS.md); architecture, conventions and open questions are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Requirements
 
@@ -41,9 +41,9 @@ req run path/to/login.post.json   # run one request and show the response and ti
 req --version
 ```
 
-The response is shown in the terminal (indented JSON; text and HTML as received) and nothing is written to disk. Optional variables: `REQ_TIMEOUT` (default 60s) and `REQ_CONNECT_TIMEOUT` (default 10s).
+The response is shown in the terminal (indented JSON; text and HTML as received). Nothing is written to disk unless you turn the log on (see "Log"). `req run` exits with 0 whenever an HTTP response arrives, whatever its status code, and with 1 when the request is invalid or nothing came back (the exit code for 4xx and 5xx answers is an open question, see TA.8 in [TASKS.md](TASKS.md)). Optional variables: `REQ_TIMEOUT` (default 60s) and `REQ_CONNECT_TIMEOUT` (default 10s).
 
-Central state: the first time `req` opens a project (or `req init` creates one) it is registered in `~/.req/projects/<name>/`, where its state will live; `~/.req/current` points to the project in use. If `~/.req` cannot be written, `req` warns once and works without it. `REQ_CONFIG_DIR` changes that directory.
+Central state: the first time `req` opens a project (or `req init` creates one) it is registered in `~/.req/projects/<id>/`, where its state lives; `~/.req/current` points to the project in use. If `~/.req` cannot be written, `req` warns once and works without it. `REQ_CONFIG_DIR` changes that directory. See "The central directory" below for every file in it.
 
 ### Interactive menu
 
@@ -73,6 +73,8 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 | `:cp [name]` | copy the directory (with everything inside, symbolic links copied as links) or the request under the cursor, or the one open on the details screen. It asks for the new name (default `<name>-copy`) and does not open the edit menu |
 | `:rm` | remove the selected request (or the one open on the details screen), after a `[y/N]` confirmation; Enter keeps it. It also works on an invalid request. On a directory it removes the directory and everything inside it, after a red warning with the full path and the number of files and subdirectories and the same `[y/N]` question. Only directories inside the workspace are ever deleted, and never a symbolic link |
 | `:env [name]` | without an argument, lists the environments of the project and the one in use; with a name, switches the session to it (see "Environments and variables") |
+| `:log [yes\|no]` | switch the log of requests and responses for this session (see "Log") |
+| `:v [yes\|no]` | switch the verbose mode for this session (alias `:verbose`; see "Verbose") |
 | `:config [-g] [key=value]` | without an argument, shows the settings: every known key with its effective value, its default and `project` when the project sets it. With `key=value` (for example `:config time_stats=no`) it checks the key and the value and writes them to the project's file; with `-g` (`:config -g time_stats=no`) it writes the global `~/.req/config` instead. An unknown key or a wrong value is explained and nothing is written |
 | `:e` | edit the selected request (or the one open on the details screen) through a field menu; changing the name or the method renames the file. Option `8) raw data` opens the body in your editor (`$VISUAL`, `$EDITOR`, `vim`, `vi`, like git); without one it asks for a single line (`-` clears). JSON objects and lists are stored as native JSON; other text is stored as a string, and you are offered to edit it again first unless the request has a non-JSON `Content-Type` |
 | `:d` | duplicate the selected request under a new name and open the edit menu on the copy |
@@ -87,7 +89,10 @@ In the prompts, Enter accepts the default shown in brackets and an empty name ca
 make test    # run the tests
 make lint    # shellcheck (if installed) + syntax check
 make check   # lint + tests
+make container IMAGE=debian:12-slim   # the tests in a container (needs docker)
 ```
+
+`make container` copies the repository into the image, installs `curl`, `jq`, `python3`, `vi` and `make`, and runs the suite as a normal user. It was run on `debian:12-slim` (bash 5.2), `quay.io/centos/centos:stream9` and `registry.access.redhat.com/ubi9/ubi` (bash 5.1) and `registry.access.redhat.com/ubi8/ubi` (RHEL 8: bash 4.4, curl 7.61, Python 3.6), all with every test passing.
 
 ## Layout
 
@@ -100,10 +105,11 @@ lib/http.sh    curl command building, execution, display and timing profile
 lib/nav.sh     interactive menu: list, details and keys
 lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :env :config :h :q) and its help table
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
+lib/log.sh     the project's log of the requests sent (`req.log`)
 lib/config.sh  settings (global `~/.req/config` and the project's `config`) and their table of keys
 lib/env.sh     environments and variables (loading `vars` and `env/<env>`)
 lib/home.sh    the central directory in ~/.req: `key=value` files, projects and the current-project pointer
-tests/         plain bash tests (no dependencies; see Requirements)
+tests/         plain bash tests (no dependencies; see Requirements) and `container.sh`
 Makefile       test, lint, install and uninstall
 ```
 
@@ -125,8 +131,12 @@ Each request is a file `<slug>.<method>.json` (methods: GET, POST, PUT, PATCH, D
 }
 ```
 
-- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters` and `raw_data`.
-- `headers`, `query` and `parameters` are objects with simple values (string, number or boolean).
+- Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters`, `raw_data`, `timeout`, `follow_redirects`, `insecure` and `files`.
+- `timeout` is the longest the whole request may take, in seconds (a positive number, such as `2.5`). Without it `REQ_TIMEOUT` applies, and then 60. A request that runs out of time fails with curl's exit code 28.
+- `follow_redirects` (`true` or `false`, default `false`) follows `3xx` answers, up to `max_redirects` redirects (a setting, 10 by default), and shows the final response (its status, headers and body). Without it a redirect is shown as it is. As curl does, a `301`, `302` or `303` answer to a `POST` is followed with a `GET`; past that limit, or in an endless redirect, the request fails with curl's exit code 47.
+- `insecure` (`true` or `false`, default `false`) skips the check of the server's TLS certificate (curl `-k`), for a test server with a self-signed one. Without it such a certificate fails with curl's exit code 60. Use it only on servers you trust.
+- `files` sends files: an object of `"field": "path"` (`{"avatar": "photo.png"}`). The request becomes a `multipart/form-data` form (POST, PUT and PATCH), and the `parameters` go in it as text fields (a value starting with `@` is sent as text, never read as a file). A relative path starts at the folder of the request file; `${key}` works in it. A file that does not exist or cannot be read stops the request before anything is sent. `files` and `raw_data` cannot be used together.
+- `headers`, `query` and `parameters` are objects with simple values (string, number or boolean). `query` also accepts nested values: an object adds the key in brackets and a list adds `[]`, so `{"filter": {"status": "open"}, "tag": ["a", "b"]}` becomes `filter[status]=open&tag[]=a&tag[]=b` (the brackets are url-encoded; empty objects and lists are left out). `null` is not allowed.
 - `query` is appended to the url, url-encoded.
 - `raw_data` is the raw body: an object or list (JSON) or a string (any other text).
 - Body (sent only with POST, PUT and PATCH; GET and DELETE never send one):
@@ -159,8 +169,48 @@ Settings are `key=value` lines in two files: `~/.req/projects/<id>/config` (or u
 | `time_stats` | `yes` | show the timing stages (DNS, TCP, TLS, Wait, Download) after a request runs, in the menu and in `req run` |
 | `time_stat_total` | `yes` | show the total time line of that profile |
 | `restore_cursor` | `yes` | reopen the menu in the directory and on the item where it was left; `no` always opens at the workspace root |
+| `log` | `no` | write the requests and responses to the project's `req.log` (see "Log") |
+| `max_redirects` | `10` | the most redirects a request with `follow_redirects` follows; one more fails (curl exit code 47) |
+| `log_request_limit` | `500` | lines kept in `req.log`: when it grows past this, the oldest lines are dropped (`0`: no limit) |
 
 The position is saved per project in `~/.req/projects/<id>/cursor` when you leave (`:q`, end of input, Ctrl-C). If the directory or the item is gone when you come back, `req` falls back to the nearest existing directory or to the first item.
+
+## The central directory
+
+Everything `req` keeps outside your repository lives in `~/.req` (or `REQ_CONFIG_DIR`), one folder per project, all of it plain text:
+
+```
+~/.req/
+  config                  global settings (key=value)
+  current                 id of the project in use
+  projects/<id>/
+    project               name= and path= of the project folder
+    config                the project's settings (win over the global ones)
+    vars                  variables shared by every environment
+    env/<env>             variables of one environment (dev, prod, ...)
+    cursor                dir= and item= where the menu was left
+    req.log               the log of requests and responses (only with log=yes)
+```
+
+`<id>` is a slug made from the folder's name (`my-api`, then `my-api-2` for another folder with the same name). Every file is `key=value`, one per line, with blank lines and `#` comments allowed. `req` creates `project` and `cursor` itself; you create `config`, `vars` and `env/<env>` (or `:config` does it) when you need them.
+
+## Verbose
+
+With `REQ_VERBOSE=1` in the environment, or after `:v` in the menu (`:v yes` and `:v no` set it explicitly; it lasts until `req` quits), `req` also shows the data it sends: right under the `METHOD url` line, every form field of `parameters` (`a=1`) or every line of `raw_data` gets a dim `>>` in front. A request without data shows nothing extra. Values are the real ones, after `${key}` is replaced. The status line and the headers of the response are shown with `<<` too, just before the usual response display (which prints the body as before), and a blank line separates the two.
+
+## Log
+
+With `log=yes` (`:config log=yes` for the project, `:config -g log=yes` for every project; the default is `no`) each request that runs is appended to `~/.req/projects/<id>/req.log`, just before it is sent. A line per request, in plain text, with line breaks inside a value written as `\n`:
+
+```
+2026-11-13T22:30:00-0300 REQUEST file=add.post.json env=dev POST https://api.example.com/users | header: X-Token: abc123 | body: {"name":"ana"}
+```
+
+The values are the real ones, after `${key}` is replaced (nothing is masked). `:log` switches the log for the current session the same way (`:log yes`, `:log no`) without touching the setting; it needs an open project. A request that stops before it is sent (invalid file, missing key) is not logged. The log keeps its last `log_request_limit` lines (500 by default; the oldest go first; `0` turns the limit off); each request and each response is one line, however long its body. If the log cannot be written, `req` warns and sends the request anyway. There is no log without an open project. The response follows on the next line, with the status, the Content-Type, the total time and the whole body (there is no size limit), or, when nothing came back, an `ERROR no response (curl exit code N)` line:
+
+```
+2026-11-13T22:30:01-0300 RESPONSE status=201 type=application/json total=0.150s | body: {"id":7}
+```
 
 ## Environments and variables
 

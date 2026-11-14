@@ -11,6 +11,8 @@
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
 #   :env [name]   show the project's environments, or switch the session to one
+#   :log [yes|no] switch the log of requests and responses for this session
+#   :v [yes|no]   switch the verbose mode (>> and <<) for this session
 #   :config [-g] [k=v] show the settings, or set one for the project or, with -g, globally (~/.req/config)
 #   :h            help: every key and command (alias :help)
 # Esc leaves command mode; Backspace on an empty line does too.
@@ -39,6 +41,8 @@ REQ_HELP_ROWS=(
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
     ":env [name]|show the environments of the project, or switch to one (REQ_ENV)"
+    ":log [yes|no]|switch the log of requests and responses in this session (setting: log)"
+    ":v [yes|no]|switch the verbose mode (>> sent, << received) in this session (REQ_VERBOSE)"
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
     ":h|this help (alias :help)"
     ":q|quit (alias :quit)"
@@ -90,6 +94,8 @@ req_cmd_run() {
         d|dup)        req_cmd_dup ;;
         env)          req_cmd_env "$arg" ;;
         config)       req_cmd_config "$arg" ;;
+        log)          req_cmd_log "$arg" ;;
+        v|verbose)    req_cmd_verbose "$arg" ;;
         h|help)       REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=help ;;
         *)            REQ_STATUS="unknown command :$cmd (:h lists the commands)" ;;
     esac
@@ -284,6 +290,51 @@ req_cmd_config() {
     else
         REQ_STATUS="cannot write $file"
     fi
+    return 0
+}
+
+# req_cmd_switch <yes|no|""> <current: yes|no> - prints the new value: the argument
+# (also on|off), or the opposite of the current one. Fails for any other argument.
+req_cmd_switch() {
+    case $1 in
+        yes|on)  printf yes ;;
+        no|off)  printf no ;;
+        '')      [[ $2 == yes ]] && printf no || printf yes ;;
+        *)       return 1 ;;
+    esac
+}
+
+# shellcheck disable=SC2034  # REQ_LOG_SESSION is read by req_log_enabled
+# req_cmd_log [yes|no] - :log. Switches the log of requests and responses for this
+# session (the "log" setting is not changed); it needs an open project to keep the log in.
+req_cmd_log() {
+    local now=no new
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        REQ_STATUS="no project is open, so there is no log to switch"
+        return 0
+    fi
+    req_log_enabled && now=yes
+    if ! new=$(req_cmd_switch "$1" "$now"); then
+        REQ_STATUS="usage: :log [yes|no]"
+        return 0
+    fi
+    REQ_LOG_SESSION=$new
+    if [[ $new == yes ]]; then REQ_STATUS="log on for this session: $(req_log_file)"
+    else REQ_STATUS="log off for this session"; fi
+    return 0
+}
+
+# shellcheck disable=SC2034  # REQ_VERBOSE is read by the verbose functions in http.sh
+# req_cmd_verbose [yes|no] - :v. Switches the verbose mode for this session.
+req_cmd_verbose() {
+    local now=no new
+    req_verbose_on && now=yes
+    if ! new=$(req_cmd_switch "$1" "$now"); then
+        REQ_STATUS="usage: :v [yes|no]"
+        return 0
+    fi
+    if [[ $new == yes ]]; then REQ_VERBOSE=1; REQ_STATUS="verbose on for this session (>> sent, << received)"
+    else REQ_VERBOSE=0; REQ_STATUS="verbose off for this session"; fi
     return 0
 }
 

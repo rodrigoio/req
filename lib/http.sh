@@ -8,7 +8,10 @@ REQ_RESP_BODY=""        # body of the last response
 REQ_RESP_STATUS=""      # HTTP status code of the last response
 REQ_RESP_CTYPE=""       # Content-Type of the last response
 REQ_RESP_TIMES=()       # dns connect tls pretransfer ttfb total (seconds, cumulative)
+REQ_RESP_STATUSLINE=""  # status line of the last response ("HTTP/1.1 200 OK")
+REQ_RESP_HEADERS=()     # its headers, one "Name: value" per item
 REQ_BAR_WIDTH=30
+REQ_VERBOSE=${REQ_VERBOSE:-0}   # 1: show what is sent (>>) and received (<<); :v toggles it
 
 # Metadata appended by curl at the end of the output; the Content-Type goes last
 # because it can contain any character except a line break.
@@ -20,37 +23,46 @@ REQ_CURL_FORMAT=$'\n%{http_code}|%{time_namelookup}|%{time_connect}|%{time_appco
 # body ("raw", plus "rawjson" when it was an object or list) and wins over parameters,
 # which otherwise come out as key=value form pairs.
 # shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
-REQ_PREPARE_JQ='
+REQ_PREPARE_JQ=$REQ_JQ_LEAVES'
 ((.method // "") | ascii_upcase) as $m
 | (.headers // {}) as $h
 | (.parameters // {}) as $d
 | (.raw_data // "") as $r
+| (.timeout // "") as $t
+| (.follow_redirects // false) as $f
+| (.insecure // false) as $k
+| (.files // {}) as $fl
 | ($m == "POST" or $m == "PUT" or $m == "PATCH") as $body
 | (["method", $m],
    ["url", ((.url // "") as $u
-            | ((.query // {}) | to_entries
-               | map("\(.key | @uri)=\(.value | tostring | @uri)") | join("&")) as $q
+            | ([(.query // {}) | to_entries[] | .key as $k | .value | leaves($k)]
+               | map("\(.[0] | @uri)=\(.[1] | @uri)") | join("&")) as $q
             | if $q == "" then $u
               elif ($u | contains("?")) then $u + "&" + $q
               else $u + "?" + $q end)],
    ($h | to_entries[] | ["header", "\(.key): \(.value)"]),
    ["hasctype", ($h | keys | any(ascii_downcase == "content-type") | tostring)],
+   (if $t != "" then ["timeout", ($t | tostring)] else empty end),
+   ["follow", ($f | tostring)],
+   ["insecure", ($k | tostring)],
    (if $body and $r != "" then
         ["raw", (if ($r | type) == "string" then $r else ($r | tojson) end)],
         ["rawjson", (($r | type) != "string" | tostring)]
-    elif $body and ($d | length) > 0 then
-        ($d | to_entries[] | ["form", "\(.key)=\(.value | tostring)"])
+    elif $body and (($d | length) > 0 or ($fl | length) > 0) then
+        ($d | to_entries[] | ["form", "\(.key)=\(.value | tostring)"]),
+        ($fl | to_entries[] | ["file", "\(.key)=\(.value)"])
     else empty end))
 | .[] | (., "\u0000")'
 
 REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=()
+REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false; REQ_P_INSECURE=false; REQ_P_FILES=()
+REQ_REQUEST_DIR=""      # folder of the request file; relative paths in "files" start here
 
 # req_prepare_request <json> - fills REQ_P_* from the request. Fails without a url.
 req_prepare_request() {
     local tag val
     REQ_P_METHOD=""; REQ_P_URL=""; REQ_P_HEADERS=(); REQ_P_HASCTYPE=false
-    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=()
+    REQ_P_RAW=""; REQ_P_RAWSET=0; REQ_P_RAWJSON=false; REQ_P_FORM=(); REQ_P_TIMEOUT=""; REQ_P_FOLLOW=false; REQ_P_INSECURE=false; REQ_P_FILES=()
     while IFS= read -r -d '' tag && IFS= read -r -d '' val; do
         case $tag in
             method)   REQ_P_METHOD=$val ;;
@@ -60,6 +72,10 @@ req_prepare_request() {
             raw)      REQ_P_RAW=$val; REQ_P_RAWSET=1 ;;
             rawjson)  REQ_P_RAWJSON=$val ;;
             form)     REQ_P_FORM+=("$val") ;;
+            timeout)  REQ_P_TIMEOUT=$val ;;
+            follow)   REQ_P_FOLLOW=$val ;;
+            insecure) REQ_P_INSECURE=$val ;;
+            file)     REQ_P_FILES+=("$val") ;;
         esac
     done < <(jq -j "$REQ_PREPARE_JQ" <<<"$1")
     if [[ -z $REQ_P_URL ]]; then
@@ -74,7 +90,8 @@ req_build_url() {
     printf '%s' "$REQ_P_URL"
 }
 
-# req_build_curl_args <json> - fills REQ_P_*, REQ_CURL_ARGS and REQ_BODY.
+# req_build_curl_args <json> - fills REQ_P_*, REQ_CURL_ARGS and REQ_BODY. The maximum
+# time of the whole request is the "timeout" field (seconds), else REQ_TIMEOUT, else 60.
 # Body (POST, PUT and PATCH only): a non-empty raw_data is sent as it is, through
 # stdin; an object or list gets "Content-Type: application/json" when the request
 # has no Content-Type, and free text gets none (curl'"'"'s default one is removed).
@@ -87,8 +104,10 @@ req_build_curl_args() {
     REQ_BODY=""
     REQ_CURL_ARGS=(-sS -g
         --connect-timeout "${REQ_CONNECT_TIMEOUT:-10}"
-        --max-time "${REQ_TIMEOUT:-60}"
+        --max-time "${REQ_P_TIMEOUT:-${REQ_TIMEOUT:-60}}"
         -X "$REQ_P_METHOD")
+    [[ $REQ_P_FOLLOW == true ]] && REQ_CURL_ARGS+=(-L --max-redirs "$(req_config_get max_redirects)")
+    [[ $REQ_P_INSECURE == true ]] && REQ_CURL_ARGS+=(-k)
 
     for line in "${REQ_P_HEADERS[@]}"; do
         REQ_CURL_ARGS+=(-H "$line")
@@ -104,6 +123,8 @@ req_build_curl_args() {
                 REQ_CURL_ARGS+=(-H "Content-Type:")
             fi
         fi
+    elif (( ${#REQ_P_FILES[@]} > 0 )); then
+        req_files_args || return 1
     else
         for line in "${REQ_P_FORM[@]}"; do
             REQ_CURL_ARGS+=(--data-urlencode "$line")
@@ -112,15 +133,58 @@ req_build_curl_args() {
     REQ_CURL_ARGS+=("$REQ_P_URL")
 }
 
-# req_curl_exec - runs REQ_CURL_ARGS/REQ_BODY and fills REQ_RESP_*.
+# req_split_headers <text> - the text is what curl wrote with "-D -": the header block
+# (CRLF lines, ended by a blank line) and then the body. Fills REQ_RESP_STATUSLINE and
+# REQ_RESP_HEADERS, and puts the body in REQ_RESP_BODY. An interim "1xx" block (such as
+# "100 Continue") is skipped, and so are the "3xx" blocks of the redirects followed
+# (REQ_P_FOLLOW). Text that does not start with "HTTP/" is all body.
+req_split_headers() {
+    local rest=$1 block line crlf=$'\r\n'
+    REQ_RESP_STATUSLINE=""; REQ_RESP_HEADERS=()
+    while [[ $rest == HTTP/* && $rest == *"$crlf$crlf"* ]]; do
+        block=${rest%%"$crlf$crlf"*}; rest=${rest#*"$crlf$crlf"}
+        REQ_RESP_STATUSLINE=${block%%"$crlf"*}; REQ_RESP_HEADERS=()
+        [[ $block == *"$crlf"* ]] && while IFS= read -r line; do
+            [[ -z $line ]] || REQ_RESP_HEADERS+=("${line%$'\r'}")
+        done <<<"${block#*"$crlf"}"
+        [[ $REQ_RESP_STATUSLINE =~ ^HTTP/[0-9.]+\ 1[0-9][0-9] ]] && continue
+        # with follow_redirects, curl dumps the headers of every hop: the last one counts
+        [[ $REQ_P_FOLLOW == true && $REQ_RESP_STATUSLINE =~ ^HTTP/[0-9.]+\ 3[0-9][0-9] ]] || break
+    done
+    REQ_RESP_BODY=$rest
+}
+
+# req_files_args - the multipart form of a request with "files": every parameter as a
+# text field (--form-string, so a value starting with "@" or "<" is never read as a file)
+# and every file as "-F field=@path", quoted so a ";" or "," in the path is not read as an
+# option of curl. A relative path starts at REQ_REQUEST_DIR. A file that cannot be read
+# stops the request.
+req_files_args() {
+    local item name path
+    for item in "${REQ_P_FORM[@]}"; do
+        REQ_CURL_ARGS+=(--form-string "$item")
+    done
+    for item in "${REQ_P_FILES[@]}"; do
+        name=${item%%=*}; path=${item#*=}
+        [[ $path == /* || -z $REQ_REQUEST_DIR ]] || path=$REQ_REQUEST_DIR/$path
+        if [[ ! -f $path || ! -r $path ]]; then
+            req_err "file \"$path\" (field \"$name\") does not exist or cannot be read"
+            return 1
+        fi
+        path=${path//\\/\\\\}; path=${path//\"/\\\"}
+        REQ_CURL_ARGS+=(-F "$name=@\"$path\"")
+    done
+}
+
+# req_curl_exec - runs REQ_CURL_ARGS/REQ_BODY and fills REQ_RESP_*, headers included.
 # Returns curl's status (0 = an HTTP response was received, any status code).
 req_curl_exec() {
     local out meta status
-    out=$(printf '%s' "$REQ_BODY" | curl "${REQ_CURL_ARGS[@]}" -w "$REQ_CURL_FORMAT")
+    out=$(printf '%s' "$REQ_BODY" | curl "${REQ_CURL_ARGS[@]}" -D - -w "$REQ_CURL_FORMAT")
     status=$?
 
     meta=${out##*$'\n'}
-    REQ_RESP_BODY=${out%$'\n'*}
+    req_split_headers "${out%$'\n'*}"
     IFS='|' read -r REQ_RESP_STATUS "REQ_RESP_TIMES[0]" "REQ_RESP_TIMES[1]" "REQ_RESP_TIMES[2]" \
         "REQ_RESP_TIMES[3]" "REQ_RESP_TIMES[4]" "REQ_RESP_TIMES[5]" REQ_RESP_CTYPE <<<"$meta"
     return "$status"
@@ -200,28 +264,72 @@ req_print_body() {
     printf '%s\n' "$body"
 }
 
+# req_verbose_on - succeeds when the verbose mode is on.
+req_verbose_on() {
+    [[ $REQ_VERBOSE == 1 ]]
+}
+
+# req_verbose_request - with the verbose mode on, shows the data sent (set by
+# req_build_curl_args), one ">>" line per form field or per line of raw_data. Prints
+# nothing without data (a GET, or no parameters and no raw_data).
+req_verbose_request() {
+    local line
+    req_verbose_on || return 0
+    {
+        if (( REQ_P_RAWSET )); then
+            printf '%s\n' "$REQ_BODY"
+        else
+            for line in "${REQ_P_FORM[@]}"; do printf '%s\n' "$line"; done
+            for line in "${REQ_P_FILES[@]}"; do printf '%s\n' "${line%%=*}=@${line#*=}"; done
+        fi
+    } | while IFS= read -r line || [[ -n $line ]]; do
+        req_color dim; printf '>>'; req_color reset; printf ' %s\n' "${line%$'\r'}"
+    done
+}
+
+# req_verbose_response - with the verbose mode on, shows the status line and the headers
+# of the response (REQ_RESP_STATUSLINE, REQ_RESP_HEADERS), one "<<" line each.
+req_verbose_response() {
+    local line
+    req_verbose_on || return 0
+    for line in "$REQ_RESP_STATUSLINE" "${REQ_RESP_HEADERS[@]}"; do
+        [[ -n $line ]] || continue
+        req_color dim; printf '<<'; req_color reset; printf ' %s\n' "$line"
+    done
+    printf '\n'
+}
+
 # req_run_request <file> - validates, runs and shows: response, timing profile
 # and a line of "=" that separates the result from the menu redrawn after it. Before
 # sending, every ${key} in the url, headers, query, parameters and raw_data is replaced
 # by its value in the environment REQ_ENV (default "default"); a key without a value
-# stops the request with an error that says how to define it.
+# stops the request with an error that says how to define it. With the "log" setting on,
+# the request is written to the project's log just before it is sent and the response (or the
+# failure) right after it arrives (log.sh).
 req_run_request() {
     local file=$1 json status env=${REQ_ENV:-default}
     req_request_check "$file" || return 1
     json=$(<"$file")
     req_vars_load "$env" || return 1
     req_subst_json "$json" "$env" || return 1
+    REQ_REQUEST_DIR=$(dirname "$(req_abs_path "$file")")
     req_build_curl_args "$REQ_SUBST_OUT" || return 1
+    req_log_request "$file" "$env"
 
     req_method_color "$REQ_P_METHOD"; printf '%s' "$REQ_P_METHOD"; req_color reset
     printf ' %s\n' "$REQ_P_URL"
+    req_verbose_request
 
     req_curl_exec; status=$?
     if (( status != 0 )); then
+        req_log_failure "$status"
         req_err "request failed (curl exit code $status)"
         req_rule '='
         return 1
     fi
+
+    req_log_response
+    req_verbose_response
 
     printf 'HTTP '; req_paint_status "$REQ_RESP_STATUS"
     [[ -n $REQ_RESP_CTYPE ]] && printf '  %s' "$REQ_RESP_CTYPE"

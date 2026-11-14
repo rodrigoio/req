@@ -20,6 +20,8 @@ source "$ROOT/lib/config.sh"
 # shellcheck source=/dev/null
 source "$ROOT/lib/env.sh"
 # shellcheck source=/dev/null
+source "$ROOT/lib/log.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/http.sh"
 # shellcheck source=/dev/null
 source "$ROOT/lib/nav.sh"
@@ -68,7 +70,7 @@ make_project() {
     req_request_write "$p/api" remove DELETE http://x/users \
         '{"parameters":{"id":1}}' >/dev/null
     req_request_write "$p/api/v2" ping DELETE http://x/ping >/dev/null
-    printf '{"name":"broken","method":"GET","url":"http://x","timeout":5}\n' >"$p/api/broken.get.json"
+    printf '{"name":"broken","method":"GET","url":"http://x","retries":5}\n' >"$p/api/broken.get.json"
     PROJ=$p
 }
 
@@ -271,7 +273,7 @@ test_detail_invalid() {
     req_nav_handle enter; screen detail; out=$OUT
     assert_eq "0" "$REQ_DETAIL_VALID" "an invalid request is flagged"
     assert_contains "Invalid request" "$out" "shows the problem"
-    assert_contains 'unknown field "timeout"' "$out" "shows the reason"
+    assert_contains 'unknown field "retries"' "$out" "shows the reason"
     assert_eq "$PROJ/api/broken.get.json" "${REQ_SCREEN_LINES[1]}" "the absolute path is on its own line, ready to copy"
     assert_eq "0" "$REQ_SCREEN_EXTRA" "a path that fits adds no extra rows"
     assert_eq "" "$(req_nav_handle enter 2>&1)" "Enter does not run an invalid request"
@@ -637,7 +639,7 @@ test_command_config() {
     assert_eq "no" "$(req_config_get time_stats)" "and is in effect"
     type_keys : c o n f i g enter
     REQ_NAV_DIRTY=1; req_nav_build_config; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
-    assert_contains "time_stats       no    default yes" "$out" "the screen shows the new value next to the default"
+    assert_contains "time_stats         no    default yes" "$out" "the screen shows the new value next to the default"
     req_nav_handle x
 
     REQ_CMD_BUF="config -g time_stats = yes"; type_keys :; REQ_CMD_BUF="config -g time_stats = yes"; req_nav_handle enter
@@ -678,9 +680,9 @@ test_command_config() {
     REQ_NAV_DIRTY=1; req_nav_build_config; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
     assert_contains "$lf" "$out" "the screen names the project file"
     assert_contains "-g" "$out" "and the way to change the global one"
-    assert_contains "log              yes   default no    project" "$out" "it marks a value that comes from the project"
-    assert_contains "time_stats       yes   default yes   project" "$out" "even when it equals the default"
-    [[ $out != *"restore_cursor      yes   default yes   project"* ]]; assert_eq "0" "$?" "a global or default value is not marked"
+    assert_contains "log                yes   default no    project" "$out" "it marks a value that comes from the project"
+    assert_contains "time_stats         yes   default yes   project" "$out" "even when it equals the default"
+    [[ $out != *"restore_cursor     yes   default yes   project"* ]]; assert_eq "0" "$?" "a global or default value is not marked"
     req_nav_handle x
     type_keys : c o n f i g ' ' - g enter
     assert_contains "usage: :config [-g]" "$REQ_STATUS" "-g alone shows the usage"
@@ -729,6 +731,60 @@ test_command_env() {
     assert_contains "not available" "$REQ_STATUS" "and the reason is given"
     assert_contains ":env" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists :env"
     unset REQ_ENV
+}
+
+test_command_log_verbose() {
+    echo "nav: :log and :v"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local out lf
+    REQ_PROJECT_ID=""; REQ_LOG_SESSION=""; REQ_CONFIG=(); REQ_VERBOSE=0
+
+    type_keys : l o g enter
+    assert_contains "no project is open" "$REQ_STATUS" ":log without a project says why"
+    assert_eq "" "$REQ_LOG_SESSION" "and changes nothing"
+    req_project_activate "$PROJ" || return
+    lf=$(req_log_file)
+    type_keys : l o g enter
+    assert_eq "yes" "$REQ_LOG_SESSION" ":log turns the log on when the setting is off"
+    assert_contains "log on for this session: $lf" "$REQ_STATUS" "and names the file"
+    req_log_enabled; assert_eq "0" "$?" "the log is in effect"
+    type_keys : l o g enter
+    assert_eq "no" "$REQ_LOG_SESSION" "the next :log turns it off"
+    assert_contains "log off for this session" "$REQ_STATUS" "and says so"
+    req_log_enabled; assert_eq "1" "$?" "the log is off"
+    type_keys : l o g ' ' y e s enter
+    assert_eq "yes" "$REQ_LOG_SESSION" ":log yes sets it on"
+    type_keys : l o g ' ' y e s enter
+    assert_eq "yes" "$REQ_LOG_SESSION" "even when it already is"
+    type_keys : l o g ' ' o f f enter
+    assert_eq "no" "$REQ_LOG_SESSION" "off is accepted as no"
+    type_keys : l o g ' ' m a y b e enter
+    assert_contains "usage: :log [yes|no]" "$REQ_STATUS" "another argument shows the usage"
+    assert_eq "no" "$REQ_LOG_SESSION" "without a change"
+    REQ_CONFIG=([log]=yes); REQ_LOG_SESSION=""
+    type_keys : l o g enter
+    assert_eq "no" "$REQ_LOG_SESSION" "with log=yes in the setting the toggle turns it off"
+    req_config_load 2>/dev/null; req_log_enabled; assert_eq "1" "$?" "and a reload of the settings keeps the session's choice"
+    assert_eq "" "$(req_kv_get "$(req_config_file)" log)" "the setting itself is never written"
+
+    type_keys : v enter
+    assert_eq "1" "$REQ_VERBOSE" ":v turns the verbose mode on"
+    assert_contains "verbose on for this session" "$REQ_STATUS" "and says so"
+    type_keys : v enter
+    assert_eq "0" "$REQ_VERBOSE" "the next :v turns it off"
+    type_keys : v ' ' n o enter
+    assert_eq "0" "$REQ_VERBOSE" ":v no keeps it off"
+    type_keys : v ' ' o n enter
+    assert_eq "1" "$REQ_VERBOSE" ":v on turns it on"
+    type_keys : v e r b o s e enter
+    assert_eq "0" "$REQ_VERBOSE" ":verbose is an alias"
+    type_keys : v ' ' x enter
+    assert_contains "usage: :v [yes|no]" "$REQ_STATUS" "a wrong argument shows the usage"
+    out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
+    assert_contains ":log" "$out" "the help lists :log"
+    assert_contains ":v [yes|no]" "$out" "and :v"
+    REQ_PROJECT_ID=""; REQ_LOG_SESSION=""; REQ_CONFIG=(); REQ_VERBOSE=0
 }
 
 test_command_remove() {
@@ -1120,6 +1176,7 @@ test_command_rename_dir
 test_command_copy
 test_command_config
 test_command_env
+test_command_log_verbose
 test_command_remove
 test_command_remove_dir
 test_command_flow
