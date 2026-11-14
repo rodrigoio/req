@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T6.2** (Fase 6; a T6.1 está feita; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T6.3** (Fase 6; a T6.1 e a T6.2 estão feitas; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1153 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1175 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -16,6 +16,7 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 - **Shell:** bash 4+. **Dependências:** apenas `curl` e `jq`.
 - **Código:** organizado em funções, sem scripts procedurais soltos (boas práticas do manifest).
 - **Ambientes:** troca interativa via `:env <nome>`.
+- **Branches (decidido):** uma branch por tarefa, com um ou dois termos em slug-case mais um número sequencial de três dígitos que não recomeça (`log-request-001`, `log-response-002`, ...). A branch de cada tarefa nasce da branch da tarefa anterior (a primeira, da `main`); os merges na `main` são feitos por outro processo, via pull request. Detalhes em `DEVELOPMENT.md`.
 - **Configuração local por padrão (decidido):** assume-se que o usuário trabalha e configura um projeto local; por isso toda configuração é do projeto (`projects/<id>/config`) e `:config chave=valor` grava ali. A global (`~/.req/config`) é a exceção e exige `-g`; a do projeto vence a global.
 - **Precedência:** variável de ambiente vence o arquivo do ambiente, que vence as variáveis do projeto (ver "Controle central de projetos").
 - **Placeholder ausente:** `${chave}` sem valor gera erro amigável que indica ao usuário como proceder (arquivo e variável esperados, ex.: definir `DEV_URL` ou adicionar `url=...` no arquivo do ambiente `dev` do projeto); a requisição não é enviada.
@@ -150,7 +151,7 @@ Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde fi
 
 ### Fase 6 — Logs e verbose
 - [x] T6.1 Configuração do projeto (`projects/<id>/config`) sobre a global (`~/.req/config`, criada na TR2.5), reaproveitando os helpers `chave=valor` e a tabela de chaves: precedência (a do projeto vence). Decidido com o usuário: por padrão assume-se que se trabalha e configura um projeto local, então `:config chave=valor` grava no projeto e `:config -g chave=valor` na global (sem projeto aberto, o padrão avisa e sugere `-g`). A única chave de log, por ora, é `log=yes|no` (padrão `no`); formato e nome do arquivo ficam fora.
-- T6.2 Log da requisição enviada, com timestamp, em arquivo.
+- [x] T6.2 Log da requisição enviada, com timestamp, em arquivo. Decidido com o usuário: `projects/<id>/req.log`, uma linha de texto por evento (`lib/log.sh`), só com `log=yes` e projeto aberto; a linha traz arquivo, ambiente, método, url, headers, campos do formulário e corpo, com os valores reais.
 - T6.3 Log da resposta recebida, no mesmo arquivo.
 - T6.4 Verbose: dados enviados (`parameters` ou `raw_data`) com `>>` no terminal.
 - T6.5 Verbose: resposta (incluindo headers) com `<<` no terminal.

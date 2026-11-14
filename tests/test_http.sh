@@ -9,6 +9,7 @@ source "$ROOT/lib/store.sh"
 source "$ROOT/lib/home.sh"
 source "$ROOT/lib/config.sh"
 source "$ROOT/lib/env.sh"
+source "$ROOT/lib/log.sh"
 source "$ROOT/lib/http.sh"
 
 TMP=$(mktemp -d)
@@ -220,6 +221,28 @@ test_execute() {
     out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" 2>&1)
     assert_contains '"x_test": "t2"' "$out" "REQ_ENV chooses the environment"
     unset REQ_ENV STAGING_BASE STAGING_TOK DEFAULT_BASE
+
+    # The log: only when log=yes and a project is open; the request is written before it is sent.
+    local lid=logproj logf=$TMP/cfgdir/projects/logproj/req.log
+    mkdir -p "$TMP/cfgdir/projects/$lid"
+    local saved_cfg=${REQ_CONFIG_DIR-}
+    export REQ_CONFIG_DIR=$TMP/cfgdir
+    export DEFAULT_BASE=$base DEFAULT_TOK=s3cret
+    REQ_PROJECT_ID=$lid; REQ_CONFIG=([log]=yes)
+    NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
+    assert_eq "1" "$(wc -l <"$logf" | tr -d ' ')" "log=yes: a run writes one line"
+    assert_contains "REQUEST file=sub.post.json env=default POST $base/echo | header: X-Test: s3cret" "$(<"$logf")" "with the substituted values"
+    assert_contains 'body: {"who":"s3cret"}' "$(<"$logf")" "and the body"
+    unset DEFAULT_TOK
+    NO_COLOR=1 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
+    assert_eq "1" "$(wc -l <"$logf" | tr -d ' ')" "a request stopped by a missing key is not logged"
+    export DEFAULT_TOK=s3cret
+    REQ_CONFIG=([log]=no)
+    NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
+    assert_eq "1" "$(wc -l <"$logf" | tr -d ' ')" "log=no: nothing more is written"
+    REQ_PROJECT_ID=""; REQ_CONFIG=()
+    unset DEFAULT_BASE DEFAULT_TOK
+    if [[ -n $saved_cfg ]]; then export REQ_CONFIG_DIR=$saved_cfg; else unset REQ_CONFIG_DIR; fi
 
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"
