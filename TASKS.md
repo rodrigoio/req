@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T6.2** (Fase 6; a T6.1 está feita; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T7.4** (Fase 7; T7.1 e T7.2 feitas; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1153 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1238 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -16,6 +16,7 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 - **Shell:** bash 4+. **Dependências:** apenas `curl` e `jq`.
 - **Código:** organizado em funções, sem scripts procedurais soltos (boas práticas do manifest).
 - **Ambientes:** troca interativa via `:env <nome>`.
+- **Branches (decidido):** uma branch por tarefa, com um ou dois termos em slug-case mais um número sequencial de três dígitos que não recomeça (`log-request-001`, `log-response-002`, ...). A branch de cada tarefa nasce da branch da tarefa anterior (a primeira, da `main`); os merges na `main` são feitos por outro processo, via pull request. Detalhes em `DEVELOPMENT.md`.
 - **Configuração local por padrão (decidido):** assume-se que o usuário trabalha e configura um projeto local; por isso toda configuração é do projeto (`projects/<id>/config`) e `:config chave=valor` grava ali. A global (`~/.req/config`) é a exceção e exige `-g`; a do projeto vence a global.
 - **Precedência:** variável de ambiente vence o arquivo do ambiente, que vence as variáveis do projeto (ver "Controle central de projetos").
 - **Placeholder ausente:** `${chave}` sem valor gera erro amigável que indica ao usuário como proceder (arquivo e variável esperados, ex.: definir `DEV_URL` ou adicionar `url=...` no arquivo do ambiente `dev` do projeto); a requisição não é enviada.
@@ -150,16 +151,25 @@ Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde fi
 
 ### Fase 6 — Logs e verbose
 - [x] T6.1 Configuração do projeto (`projects/<id>/config`) sobre a global (`~/.req/config`, criada na TR2.5), reaproveitando os helpers `chave=valor` e a tabela de chaves: precedência (a do projeto vence). Decidido com o usuário: por padrão assume-se que se trabalha e configura um projeto local, então `:config chave=valor` grava no projeto e `:config -g chave=valor` na global (sem projeto aberto, o padrão avisa e sugere `-g`). A única chave de log, por ora, é `log=yes|no` (padrão `no`); formato e nome do arquivo ficam fora.
-- T6.2 Log da requisição enviada, com timestamp, em arquivo.
-- T6.3 Log da resposta recebida, no mesmo arquivo.
-- T6.4 Verbose: dados enviados (`parameters` ou `raw_data`) com `>>` no terminal.
-- T6.5 Verbose: resposta (incluindo headers) com `<<` no terminal.
-- T6.6 `:log` e `:v` alternam logs e verbose na sessão; entram na ajuda `:h`.
-- T6.7 Verificação da fase e documentação.
+- [x] T6.2 Log da requisição enviada, com timestamp, em arquivo. Decidido com o usuário: `projects/<id>/req.log`, uma linha de texto por evento (`lib/log.sh`), só com `log=yes` e projeto aberto; a linha traz arquivo, ambiente, método, url, headers, campos do formulário e corpo, com os valores reais.
+- [x] T6.3 Log da resposta recebida, no mesmo arquivo: linha `RESPONSE` (status, tipo, tempo total e o corpo inteiro) ou `ERROR` quando não houve resposta. Sem os headers da resposta por ora (a T6.5 passa a capturá-los; ver as questões da revisão final).
+- [x] T6.4 Verbose: dados enviados (`parameters` ou `raw_data`) com `>>` no terminal. O verbose é a variável `REQ_VERBOSE` (0 ou 1; o ambiente do processo pode defini-la), que a T6.6 alterna com `:v`; cada campo do formulário ou linha do corpo ganha um `>>` esmaecido, logo depois de `MÉTODO url`.
+- [x] T6.5 Verbose: resposta (incluindo headers) com `<<` no terminal: a linha de status e cada header, logo depois do envio e antes da exibição normal (que mostra o corpo formatado). Os headers vêm de `curl -D -` (`req_split_headers`).
+- [x] T6.6 `:log` e `:v` alternam logs e verbose na sessão (argumento opcional `yes|no`, também `on|off`; `:verbose` é apelido de `:v`); entram na ajuda `:h`. A escolha vale até sair (`REQ_LOG_SESSION`, `REQ_VERBOSE`) e não altera a configuração; o `:log` exige um projeto aberto.
+- [x] T6.7 Verificação da fase (binário real: sem arquivo com `log=no`; com `log=yes` e `REQ_VERBOSE=1` saem o `req.log` com `REQUEST` e `RESPONSE`, as linhas `>>` e `<<`; `:v` e `:log` pelo menu em um pty) e documentação (README: seções "Verbose" e "Log"; `DEVELOPMENT.md`: `log.sh` e o verbose em `http.sh`).
+
+### Questões para a revisão final (anotadas durante a execução contínua)
+Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; cada item diz o que foi feito e o que decidir.
+- Q1 (T6.2/T6.3) O log guarda o corpo da request e da resposta inteiros, sem limite de tamanho e sem rotação do `req.log`. Decidir se deve haver limite por linha, rotação ou um comando para limpar.
+- Q2 (T6.3) O log da resposta não traz os headers da resposta. Decidir se devem entrar (a T6.5 os captura para o verbose).
+- Q3 (T6.4) O verbose é só a variável `REQ_VERBOSE` (ou `:v` na T6.6); não há chave `verbose` na config nem opção `-v` no `req run`. Decidir se deve haver.
+- Q4 (T6.5) No verbose, a resposta mostra só a linha de status e os headers com `<<`; o corpo continua na exibição normal (formatado), sem `<<`. Decidir se cada linha do corpo também deve levar `<<`.
+- Q5 (T6.6) `:log` e `:v` valem só na sessão e não alteram a configuração (o `:log` sobrepõe a chave `log` até sair). Decidir se `:log`/`:v` devem poder gravar a chave, e se `:v` deve ter uma chave `verbose` (ligada à Q3).
+- Q6 (T7.1/T7.2) Validado até o bash 4.4 (RHEL 8); as funções usam `declare -g` e outras construções do bash 4.2, mas não há teste em bash 4.0 a 4.3 (por exemplo o CentOS 7, já sem suporte). Decidir se o mínimo declarado deve passar a "bash 4.4+" ou se vale buscar uma imagem com bash 4.2.
 
 ### Fase 7 — Portabilidade, qualidade e entrega
-- T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`.
-- T7.2 Validação em containers centos e rhel, com os mesmos pontos.
+- [x] T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`. Feita com `tests/container.sh` (`make container IMAGE=...`), como usuário comum: debian 12 (bash 5.2) passa com 1238 asserts, 0 falhas e 0 testes pulados.
+- [x] T7.2 Validação em containers centos e rhel, com os mesmos pontos: CentOS Stream 9 e UBI 9 (bash 5.1) e UBI 8 (RHEL 8: bash 4.4, curl 7.61, Python 3.6) passam. Achados: faltava `diffutils` (`cmp`) na imagem mínima, e o `mock_server.py` usava `ThreadingHTTPServer` (Python 3.7+), o que pulava os testes de execução em silêncio; corrigido, e o script passa a falhar com testes pulados.
 - [x] T7.3 `shellcheck`: corrigir os avisos (feito: `make lint` limpo em `bin/`, `lib/` e `tests/`).
 - T7.4 Documentação de uso.
 - T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do `.req` (`workspace`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
