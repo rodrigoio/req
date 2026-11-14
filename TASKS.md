@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T9.2** (limite de redirects na configuração; a T9.1, limite do log, está feita; antes disso, **nenhuma tarefa pendente no plano** (a Fase 8 está concluída, T8.1 a T8.6; as pendências "Adicionais" TA.2 a TA.14 dependem de validação com usuários e as questões Q1 a Q11 aguardam a revisão final; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **nenhuma tarefa pendente no plano** (T9.1 e T9.2, limites do log e de redirects, feitas (a Fase 8 está concluída, T8.1 a T8.6; as pendências "Adicionais" TA.2 a TA.14 dependem de validação com usuários e as questões Q1 a Q11 aguardam a revisão final; a Fase 7 está concluída, T7.1 a T7.6; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1376 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1382 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -167,7 +167,7 @@ Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; ca
 - Q5 (T6.6) `:log` e `:v` valem só na sessão e não alteram a configuração (o `:log` sobrepõe a chave `log` até sair). Decidir se `:log`/`:v` devem poder gravar a chave, e se `:v` deve ter uma chave `verbose` (ligada à Q3).
 - Q6 (T7.1/T7.2) Validado até o bash 4.4 (RHEL 8); as funções usam `declare -g` e outras construções do bash 4.2, mas não há teste em bash 4.0 a 4.3 (por exemplo o CentOS 7, já sem suporte). Decidir se o mínimo declarado deve passar a "bash 4.4+" ou se vale buscar uma imagem com bash 4.2.
 - Q7 (T8.1 a T8.3) Os campos extras por request (`timeout`, `follow_redirects`, `insecure`) só existem no arquivo JSON: não aparecem na tela de detalhes, nem os assistentes (`:n`, `:e`) os pedem, e o `REQ_CONNECT_TIMEOUT` segue só por variável. Decidir se entram na tela de detalhes e no assistente, e se `timeout`/`insecure` também devem existir como chave da configuração.
-- Q8 (T8.2) O limite de 10 redirecionamentos é fixo, e o curl troca o método (POST vira GET) em 301, 302 e 303. Decidir se o limite deve ser configurável e se o método deve ser mantido (`--post301`/`--post302`/`--post303`).
+- Q8 (T8.2) O limite de redirecionamentos agora é a chave `max_redirects` (T9.2, decidido), mas o curl ainda troca o método (POST vira GET) em 301, 302 e 303. Decidir se o método deve ser mantido (`--post301`/`--post302`/`--post303`).
 - Q9 (T8.3) Com `insecure` ligado nada avisa que o certificado não foi verificado (nem na tela de execução, nem no log). Decidir se deve haver um aviso.
 - Q10 (T8.5) O envio de arquivos foi definido por padrão (a tarefa não tinha detalhes): campo `files`, sempre `multipart/form-data`, sem tipo MIME nem nome de arquivo configuráveis (`;type=`, `;filename=`), vários arquivos só com campos de nomes diferentes, e o conteúdo do arquivo não vai para o log. Decidir se isso basta e se um corpo binário cru (`--data-binary @arquivo`) também é necessário.
 - Q11 (T8.6) O aninhamento de `query` usa a notação de colchetes (`filtro[a]=1`, `tags[]=x`), a mais comum em frameworks web, e codifica os colchetes na url. Decidir se outra convenção é necessária (listas repetindo o nome sem `[]`, ou notação com ponto) e se `parameters` (formulário) também deve aceitar valores aninhados, que a T8.7 removeu.
@@ -208,7 +208,7 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 
 ### Fase 9 — Ajustes decididos na revisão final
 - [x] T9.1 Limite de linhas do `req.log`: chave `log_request_limit` (inteiro, padrão 500, `0` sem limite), no tipo novo `int` da tabela de configurações; `req_log_trim` corta as linhas mais antigas depois de cada escrita.
-- T9.2 Limite de redirects na configuração (global e do projeto), com valor padrão, no lugar dos 10 fixos de `follow_redirects` (Q8).
+- [x] T9.2 Limite de redirects na configuração (global e do projeto), com valor padrão, no lugar dos 10 fixos de `follow_redirects` (Q8): chave inteira `max_redirects` (padrão 10), usada em `--max-redirs`. Segue em aberto só a troca de método (POST vira GET) em 301/302/303.
 
 ### Revisão 2 — achados da validação de uso (R8 a R10; ao final do plano)
 Continuação do arquivo local `reviews` (R1 a R7 estão na Revisão 1). As TR2.1 a TR2.4 vêm antes da Fase 5.

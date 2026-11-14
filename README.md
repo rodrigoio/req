@@ -133,7 +133,7 @@ Each request is a file `<slug>.<method>.json` (methods: GET, POST, PUT, PATCH, D
 
 - Required: `name`, `method` and `url`. Optional: `description`, `headers`, `query`, `parameters`, `raw_data`, `timeout`, `follow_redirects`, `insecure` and `files`.
 - `timeout` is the longest the whole request may take, in seconds (a positive number, such as `2.5`). Without it `REQ_TIMEOUT` applies, and then 60. A request that runs out of time fails with curl's exit code 28.
-- `follow_redirects` (`true` or `false`, default `false`) follows `3xx` answers, up to 10 redirects, and shows the final response (its status, headers and body). Without it a redirect is shown as it is. As curl does, a `301`, `302` or `303` answer to a `POST` is followed with a `GET`; an endless redirect fails with curl's exit code 47.
+- `follow_redirects` (`true` or `false`, default `false`) follows `3xx` answers, up to `max_redirects` redirects (a setting, 10 by default), and shows the final response (its status, headers and body). Without it a redirect is shown as it is. As curl does, a `301`, `302` or `303` answer to a `POST` is followed with a `GET`; past that limit, or in an endless redirect, the request fails with curl's exit code 47.
 - `insecure` (`true` or `false`, default `false`) skips the check of the server's TLS certificate (curl `-k`), for a test server with a self-signed one. Without it such a certificate fails with curl's exit code 60. Use it only on servers you trust.
 - `files` sends files: an object of `"field": "path"` (`{"avatar": "photo.png"}`). The request becomes a `multipart/form-data` form (POST, PUT and PATCH), and the `parameters` go in it as text fields (a value starting with `@` is sent as text, never read as a file). A relative path starts at the folder of the request file; `${key}` works in it. A file that does not exist or cannot be read stops the request before anything is sent. `files` and `raw_data` cannot be used together.
 - `headers`, `query` and `parameters` are objects with simple values (string, number or boolean). `query` also accepts nested values: an object adds the key in brackets and a list adds `[]`, so `{"filter": {"status": "open"}, "tag": ["a", "b"]}` becomes `filter[status]=open&tag[]=a&tag[]=b` (the brackets are url-encoded; empty objects and lists are left out). `null` is not allowed.
@@ -170,6 +170,7 @@ Settings are `key=value` lines in two files: `~/.req/projects/<id>/config` (or u
 | `time_stat_total` | `yes` | show the total time line of that profile |
 | `restore_cursor` | `yes` | reopen the menu in the directory and on the item where it was left; `no` always opens at the workspace root |
 | `log` | `no` | write the requests and responses to the project's `req.log` (see "Log") |
+| `max_redirects` | `10` | the most redirects a request with `follow_redirects` follows; one more fails (curl exit code 47) |
 | `log_request_limit` | `500` | lines kept in `req.log`: when it grows past this, the oldest lines are dropped (`0`: no limit) |
 
 The position is saved per project in `~/.req/projects/<id>/cursor` when you leave (`:q`, end of input, Ctrl-C). If the directory or the item is gone when you come back, `req` falls back to the nearest existing directory or to the first item.

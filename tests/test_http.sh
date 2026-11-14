@@ -69,7 +69,12 @@ test_args() {
     has_arg -L; assert_eq "1" "$?" "nor with follow_redirects false"
     req_build_curl_args '{"method":"get","url":"http://x","follow_redirects":true}'
     has_arg -L && has_arg --max-redirs; assert_eq "0" "$?" "follow_redirects true adds -L and a limit"
-    assert_eq "10" "$(arg_after --max-redirs)" "of 10 redirects"
+    assert_eq "10" "$(arg_after --max-redirs)" "of 10 redirects by default"
+    REQ_CONFIG=([max_redirects]=3); req_build_curl_args '{"method":"get","url":"http://x","follow_redirects":true}'
+    assert_eq "3" "$(arg_after --max-redirs)" "the max_redirects setting changes the limit"
+    REQ_CONFIG=([max_redirects]=0); req_build_curl_args '{"method":"get","url":"http://x","follow_redirects":true}'
+    assert_eq "0" "$(arg_after --max-redirs)" "0 is passed on as well"
+    REQ_CONFIG=()
 
     req_build_curl_args '{"method":"get","url":"https://x"}'
     has_arg -k; assert_eq "1" "$?" "the certificate is checked by default"
@@ -384,6 +389,11 @@ test_execute() {
     assert_contains "HTTP 200" "$out" "with follow_redirects the final response is shown"
     assert_contains "hello text" "$out" "with its body"
     [[ $out != *moved* ]]; assert_eq "0" "$?" "and not the body of the redirect"
+    REQ_CONFIG=([max_redirects]=0)
+    printf '{"name":"moved","method":"GET","url":"%s/redirect","follow_redirects":true}\n' "$base" >"$TMP/moved.get.json"
+    out=$(NO_COLOR=1 req_run_request "$TMP/moved.get.json" 2>&1); assert_eq "1" "$?" "max_redirects=0: even one redirect is too many"
+    assert_contains "curl exit code 47" "$out" "with curl's exit code"
+    REQ_CONFIG=()
     printf '{"name":"loop","method":"GET","url":"%s/loop","follow_redirects":true}\n' "$base" >"$TMP/loop.get.json"
     out=$(NO_COLOR=1 req_run_request "$TMP/loop.get.json" 2>&1); assert_eq "1" "$?" "an endless redirect stops"
     assert_contains "curl exit code 47" "$out" "at the limit, with curl's exit code"
