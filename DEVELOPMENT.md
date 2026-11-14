@@ -34,9 +34,11 @@ folder itself may be reached through a link: only the workspace part is checked.
 | Review 3, R11 (`.req` with `workspace`, dynamic root; TR3.1 to TR3.7) | TR3.1 to TR3.7 done |
 | Review 2, R8 to R10 (central project control in `~/.req`, `:config`, cursor; TR2.1 to TR2.10) | done |
 | 5 Environments and variables | T5.1 replaced by TR2.4 (loading `vars` and `env/<env>`); T5.2 to T5.6 done; T5.7 dropped (no masking); T5.8 done |
-| 6 Logs and verbose, 7 Portability and delivery, 8 Extras | pending |
+| 6 Logs and verbose (T6.1 to T6.7) | done |
+| 7 Portability and delivery (T7.1 to T7.6) | done |
+| 8 Extras | pending |
 
-Next task: **T6.2** (Phase 6; T6.1 is done: project settings over the global ones, `log=yes|no` only; Phase 5 is done, T5.7 was dropped). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 6".
+Next task: **T8.1** (Phase 8; Phase 7 is done: T7.1 and T7.2 through `tests/container.sh`, T7.4 and T7.5 in the README, T7.6 in `tests/test_e2e.sh`; Phase 6 is done, T6.7 verified with the real binary: log off by default, log and verbose with `REQ_VERBOSE=1`, `:v` and `:log` in a pty; T6.6 is done (`req_cmd_log` and `req_cmd_verbose` in `lib/cmd.sh`, with `req_cmd_switch` for the optional yes/no/on/off argument; `REQ_LOG_SESSION` in `lib/log.sh` wins over the `log` setting in `req_log_enabled`); T6.5 is done (`req_curl_exec` now runs curl with `-D -` and `req_split_headers` fills `REQ_RESP_STATUSLINE`, `REQ_RESP_HEADERS` and the body, skipping a `1xx` block; `req_verbose_response` prints them with `<<`); T6.4 is done (`REQ_VERBOSE`, `req_verbose_on`, `req_verbose_request` in `lib/http.sh`, called by `req_run_request` right after the `METHOD url` line); T6.3 is done (`req_log_response` after `req_curl_exec`, `req_log_failure <code>` when curl fails); T6.2 is done (`lib/log.sh`: `req_log_request` is called by `req_run_request` right before the curl call; `req_log_write <event> <text>` is the one writer, to reuse for T6.3); T6.1 is done: project settings over the global ones, `log=yes|no` only; Phase 5 is done, T5.7 was dropped). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 6".
 
 Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - One task = one behavior, about 100 to 200 lines including tests, one commit.
@@ -45,7 +47,15 @@ Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
 - Everything in the repository is in English (code, messages, comments, tests,
   README). The conversation is in Portuguese, and so is TASKS.md.
 - The `manifest` file is the user's and is git-ignored; never commit it.
-- Nothing is committed by the assistant unless asked; the user commits.
+- Branches (`guideline.md`, rule 7): every task gets its own branch, named with one or
+  two words in slug-case plus a three-digit sequence number that never restarts and grows
+  by one per task: `log-request-001`, then `log-response-002`, `verbose-data-003`, and so on
+  (`git branch --list '*-[0-9][0-9][0-9]'` shows the last number). The first branch was
+  created from `main` at `4c82e70` (T6.1 and earlier were committed on `main`); each next
+  task's branch is created from the previous task's branch, not from `main`.
+- The assistant commits on the task's branch (one-line message, no attribution lines) after
+  the tests pass, and never pushes. Merging into `main` is done by another process through
+  pull requests; the assistant does not merge, rebase onto `main` or delete branches.
 
 ## Architecture
 
@@ -62,6 +72,7 @@ else is functions in `lib/`, all prefixed `req_`.
 | `nav.sh` | the interactive menu: state, screen building, keys, main loop, init prompt |
 | `cmd.sh` | command mode (`:n :nd :ed :cp :rm :e :d :config :h :q`) on top of `nav.sh` |
 | `wizard.sh` | the prompts behind `:n`, `:e`, `:d` and `:nd` |
+| `log.sh` | the project's log (`projects/<id>/req.log`): `req_log_enabled` (`log=yes` and a project), `req_log_write <event> <text>` appends `<ISO timestamp> <EVENT> <text>` on one line (line breaks become `\n`; an unwritable file is one warning), `req_log_request <file> <env>` writes the request prepared by `req_build_curl_args` (file, env, method, url, ` | header: ...`, ` | form: ...`, ` | body: ...`), `req_log_response` the `REQ_RESP_*` of `req_curl_exec` (status, type, total time, ` | body: ...`) and `req_log_failure <code>` an `ERROR` line |
 | `config.sh` | the settings: one table of known keys (`REQ_CONFIG_KEYS`, `_TYPE`, `_DEFAULT`, `_DESC`; `log` is only stored until T6.2 uses it), `req_config_load` fills `REQ_CONFIG` from the global `~/.req/config` and then, when `REQ_PROJECT_ID` is set, layers `projects/<id>/config` (`req_config_local_file`) over it with `req_config_load_local`, which also fills `REQ_CONFIG_LOCAL` with the keys the project set (`req_config_load_file <file> [overlay]` is the reader; unknown keys, bad values and bad lines are warnings with path and line, never errors), `req_config_get` falls back to the default. The project is activated after the first load, so `req_nav_start` and `req run` call `req_config_load_local`. `:config key=value` writes the project's file (the default: whoever uses `req` works on one project), `:config -g key=value` the global one |
 | `env.sh` | variable loading (`req_vars_load <env> [id]` fills `REQ_VARS` from `projects/<id>/vars` and `env/<env>`, the environment winning; the old `secrets.json` only gets a warning) and key resolution (`req_resolve_key <env> <key>`: process variable `<ENV>_<KEY>` (`req_env_var_name`, hyphens become underscores), then `REQ_VARS`; a set but empty process variable counts) and substitution (`req_subst <text> <env> [id]` puts the text with every `${key}` replaced in `REQ_SUBST_OUT`, with no subshell so trailing line breaks survive, or fails listing every missing key once with the variable and files that define it; there is no escape for a literal `${key}` yet, see TA.14) and `req_subst_json <request json> <env> [id]`, the same for a request: it only touches the string values of `url`, `headers`, `query`, `parameters` and `raw_data` (walking native JSON too) with jq, resolves every key first so the error lists them all, and keeps the result valid JSON. `req_run_request` calls `req_vars_load` and `req_subst_json` (environment `REQ_ENV`, default `default`) before building the curl command; `req run` looks up the project of the current folder without registering it; `req_env_list [id]` lists the files of `projects/<id>/env/` with a slug name and `req_env_exists <env> [id]` is true for those and for `default`, which `:env <name>` (`req_cmd_env` in `cmd.sh`) uses to validate before setting `REQ_ENV`; the choice lasts only for the session |
 
@@ -183,7 +194,11 @@ line (`req_warn` in `core.sh`) and returns 1; `req init` and the menu carry on w
 
 `make test` (or `tests/run.sh`) runs every `tests/test_*.sh` in its own bash; `make check`
 adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
-`assert_contains`, `test_summary`). 1117 asserts at the time of writing.
+`assert_contains`, `test_summary`). 1264 asserts at the time of writing.
+
+`tests/test_e2e.sh` (T7.6) drives the real `bin/req` in a pseudo-terminal through `tests/pty_run.py <chunk>... -- <command>` (each chunk is typed, then the driver waits for the output to go quiet for 0.5 s; Enter is `\r`; escape sequences are stripped; Python 3.6 compatible), because `bin/req` refuses a stdin that is not a terminal. It needs python3 and, like the other execution tests, skips without it.
+
+`tests/container.sh <image>` (`make container IMAGE=<image>`, T7.1 and T7.2) runs the suite in a container as a normal user (root ignores file permissions, so the unwritable-folder tests are skipped for it), with 1 GB of memory, and fails on any failure or any skipped test (a skip means python3 or another tool is missing). Validated on debian 12, CentOS Stream 9, UBI 9 and UBI 8 (the oldest: bash 4.4, curl 7.61, Python 3.6; `tests/mock_server.py` must keep working with Python 3.6, so no `ThreadingHTTPServer`). The container needs `diffutils` for `cmp`.
 
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed

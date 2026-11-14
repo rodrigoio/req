@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Local HTTP server for the tests: echoes what it received. Prints the port."""
+"""Local HTTP server for the tests: echoes what it received. Prints the port.
+Works with Python 3.6 and later."""
 import json
 import sys
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import ThreadingMixIn
 from urllib.parse import urlsplit, parse_qs
+
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    """http.server.ThreadingHTTPServer only exists from Python 3.7; RHEL 8 has 3.6."""
+    daemon_threads = True
 
 
 class Handler(BaseHTTPRequestHandler):
