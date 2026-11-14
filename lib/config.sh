@@ -9,19 +9,22 @@
 # never blocks the menu: an unknown key, a value of the wrong type or a malformed line
 # is reported as a warning with the absolute path and the line number, and ignored.
 
-# Known keys, in the order they are listed. Types: bool (yes or no).
-REQ_CONFIG_KEYS=(time_stats time_stat_total restore_cursor log)
+# Known keys, in the order they are listed. Types: bool (yes or no), int (a whole number,
+# 0 or more).
+REQ_CONFIG_KEYS=(time_stats time_stat_total restore_cursor log log_request_limit)
 declare -gA REQ_CONFIG_TYPE=(
     [time_stats]=bool
     [time_stat_total]=bool
     [restore_cursor]=bool
     [log]=bool
+    [log_request_limit]=int
 )
 declare -gA REQ_CONFIG_DEFAULT=(
     [time_stats]=yes
     [time_stat_total]=yes
     [restore_cursor]=yes
     [log]=no
+    [log_request_limit]=500
 )
 # shellcheck disable=SC2034  # read by :config (TR2.6)
 declare -gA REQ_CONFIG_DESC=(
@@ -29,6 +32,7 @@ declare -gA REQ_CONFIG_DESC=(
     [time_stat_total]="show the total time line after a request runs"
     [restore_cursor]="reopen the menu where it was left"
     [log]="write the requests and responses to the project's log"
+    [log_request_limit]="lines kept in the log, the oldest go first (0: no limit)"
 )
 
 declare -gA REQ_CONFIG=()       # values of the loaded files (key -> value)
@@ -56,6 +60,7 @@ req_config_valid() {
     req_config_known "$1" || return 1
     case ${REQ_CONFIG_TYPE[$1]} in
         bool) [[ $2 == yes || $2 == no ]] ;;
+        int)  [[ $2 =~ ^[0-9]{1,9}$ ]] ;;
         *)    return 1 ;;
     esac
 }
@@ -64,6 +69,7 @@ req_config_valid() {
 req_config_expect() {
     case ${REQ_CONFIG_TYPE[$1]-} in
         bool) printf 'yes or no' ;;
+        int)  printf 'a whole number (0 or more)' ;;
     esac
 }
 
