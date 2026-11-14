@@ -18,7 +18,7 @@ cfg() { printf '%s\n' "$1" >"$REQ_CONFIG_DIR/config"; }
 
 test_table() {
     echo "config: the table of keys"
-    local k
+    local k v
     assert_eq "$TMP/cfg/config" "$(req_config_file)" "the file is config in the central directory"
     for k in "${REQ_CONFIG_KEYS[@]}"; do
         [[ -n ${REQ_CONFIG_TYPE[$k]-} && -n ${REQ_CONFIG_DEFAULT[$k]-} && -n ${REQ_CONFIG_DESC[$k]-} ]]
@@ -33,6 +33,14 @@ test_table() {
     req_config_valid time_stats Yes; assert_eq "1" "$?" "the case matters"
     req_config_valid nope yes; assert_eq "1" "$?" "an unknown key is never valid"
     assert_eq "yes or no" "$(req_config_expect time_stats)" "a bool says what it accepts"
+    for v in 0 1 500 123456789; do
+        req_config_valid log_request_limit "$v"; assert_eq "0" "$?" "an int accepts $v"
+    done
+    for v in "" -1 1.5 abc 1e3 " 5" yes 1234567890; do
+        req_config_valid log_request_limit "$v"; assert_eq "1" "$?" "an int refuses \"$v\""
+    done
+    assert_eq "500" "$(req_config_get log_request_limit)" "log_request_limit is 500 by default"
+    assert_eq "a whole number (0 or more)" "$(req_config_expect log_request_limit)" "an int says what it accepts"
 }
 
 test_load() {
@@ -60,7 +68,7 @@ test_problems() {
     cfg $'color=blue\ntime_stats=maybe\nnot a setting\nrestore_cursor=no'
     out=$(req_config_load 2>&1); assert_eq "1" "$?" "problems give status 1"
     assert_contains "$f:1: unknown setting \"color\"" "$out" "an unknown key is reported with path and line"
-    assert_contains "known: time_stats time_stat_total restore_cursor log" "$out" "and the known keys are listed"
+    assert_contains "known: time_stats time_stat_total restore_cursor log log_request_limit" "$out" "and the known keys are listed"
     assert_contains "$f:2: time_stats must be yes or no, not \"maybe\"" "$out" "a wrong value says what is accepted"
     assert_contains "$f:3: expected key=value" "$out" "a malformed line is reported"
     req_config_load 2>/dev/null
@@ -68,6 +76,18 @@ test_problems() {
     assert_eq "yes" "$(req_config_get time_stats)" "an invalid value leaves the default"
     assert_eq "1" "${#REQ_CONFIG[@]}" "nothing else is loaded"
     assert_contains "color=blue" "$(<"$f")" "the file is never rewritten"
+}
+
+test_int_file() {
+    echo "config: an int setting in a file"
+    local out f=$REQ_CONFIG_DIR/config
+    cfg 'log_request_limit=20'
+    req_config_load; assert_eq "20" "$(req_config_get log_request_limit)" "the value is read"
+    cfg 'log_request_limit=many'
+    out=$(req_config_load 2>&1); assert_contains "$f:1: log_request_limit must be a whole number (0 or more), not \"many\"" "$out" "a wrong value is explained"
+    req_config_load 2>/dev/null; assert_eq "500" "$(req_config_get log_request_limit)" "and the default stays"
+    cfg 'log_request_limit=0'
+    req_config_load; assert_eq "0" "$(req_config_get log_request_limit)" "0 is valid (no limit)"
 }
 
 test_local() {
@@ -106,5 +126,6 @@ test_local() {
 test_table
 test_load
 test_problems
+test_int_file
 test_local
 test_summary
