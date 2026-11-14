@@ -9,6 +9,7 @@ source "$ROOT/lib/store.sh"
 source "$ROOT/lib/home.sh"
 source "$ROOT/lib/config.sh"
 source "$ROOT/lib/env.sh"
+source "$ROOT/lib/log.sh"
 source "$ROOT/lib/http.sh"
 
 TMP=$(mktemp -d)
@@ -21,6 +22,15 @@ trap cleanup EXIT
 has_arg() {
     local a
     for a in "${REQ_CURL_ARGS[@]}"; do [[ $a == "$1" ]] && return 0; done
+    return 1
+}
+
+# arg_after <arg> - the curl argument that follows <arg>.
+arg_after() {
+    local i
+    for i in "${!REQ_CURL_ARGS[@]}"; do
+        [[ ${REQ_CURL_ARGS[$i]} == "$1" ]] && { printf '%s' "${REQ_CURL_ARGS[$(( i + 1 ))]}"; return 0; }
+    done
     return 1
 }
 
@@ -39,6 +49,43 @@ test_args() {
     has_arg -X && has_arg GET && has_arg "X-A: 1" && has_arg "Accept: text/html" && has_arg http://x
     assert_eq "0" "$?" "method, headers and url"
     assert_eq "" "$REQ_BODY" "GET has no body"
+
+    req_build_curl_args '{"method":"get","url":"http://x"}'
+    assert_eq "60" "$(arg_after --max-time)" "the default maximum time is 60 s"
+    REQ_TIMEOUT=20 req_build_curl_args '{"method":"get","url":"http://x"}'
+    assert_eq "20" "$(arg_after --max-time)" "REQ_TIMEOUT changes it"
+    REQ_TIMEOUT=20 req_build_curl_args '{"method":"get","url":"http://x","timeout":2.5}'
+    assert_eq "2.5" "$(arg_after --max-time)" "the request's timeout wins over REQ_TIMEOUT"
+
+    req_build_curl_args '{"method":"get","url":"http://x"}'
+    has_arg -L; assert_eq "1" "$?" "redirects are not followed by default"
+    req_build_curl_args '{"method":"get","url":"http://x","follow_redirects":false}'
+    has_arg -L; assert_eq "1" "$?" "nor with follow_redirects false"
+    req_build_curl_args '{"method":"get","url":"http://x","follow_redirects":true}'
+    has_arg -L && has_arg --max-redirs; assert_eq "0" "$?" "follow_redirects true adds -L and a limit"
+    assert_eq "10" "$(arg_after --max-redirs)" "of 10 redirects"
+
+    req_build_curl_args '{"method":"get","url":"https://x"}'
+    has_arg -k; assert_eq "1" "$?" "the certificate is checked by default"
+    req_build_curl_args '{"method":"get","url":"https://x","insecure":true}'
+    has_arg -k; assert_eq "0" "$?" "insecure true adds -k"
+    req_build_curl_args '{"method":"get","url":"https://x","insecure":false}'
+    has_arg -k; assert_eq "1" "$?" "insecure false does not"
+
+    printf 'content' >"$TMP/up one;b.txt"
+    REQ_REQUEST_DIR=$TMP req_build_curl_args '{"method":"post","url":"http://x","parameters":{"note":"@x","n":2},"files":{"doc":"up one;b.txt"}}'
+    has_arg --form-string && has_arg "note=@x" && has_arg "n=2"; assert_eq "0" "$?" "with files the parameters are text fields (--form-string)"
+    has_arg -F && has_arg "doc=@\"$TMP/up one;b.txt\""; assert_eq "0" "$?" "each file is -F field=@\"path\", relative to the request's folder"
+    has_arg --data-urlencode || has_arg --data-binary; assert_eq "1" "$?" "and there is no urlencoded body"
+    assert_eq "" "$REQ_BODY" "nor stdin"
+    REQ_REQUEST_DIR="" req_build_curl_args "{\"method\":\"put\",\"url\":\"http://x\",\"files\":{\"doc\":\"$TMP/up one;b.txt\"}}"
+    has_arg "doc=@\"$TMP/up one;b.txt\""; assert_eq "0" "$?" "an absolute path is used as it is"
+    REQ_REQUEST_DIR=$TMP req_build_curl_args '{"method":"post","url":"http://x","files":{"doc":"nope.txt"}}' 2>/dev/null
+    assert_eq "1" "$?" "a file that does not exist stops the request"
+    assert_contains 'file "'"$TMP"'/nope.txt" (field "doc") does not exist' "$(REQ_REQUEST_DIR=$TMP req_build_curl_args '{"method":"post","url":"http://x","files":{"doc":"nope.txt"}}' 2>&1)" "naming the path and the field"
+    REQ_REQUEST_DIR=$TMP req_build_curl_args '{"method":"get","url":"http://x","files":{"doc":"nope.txt"}}'
+    assert_eq "0" "$?" "a GET ignores files, like parameters"
+    REQ_REQUEST_DIR=""
 
     local m
     for m in GET DELETE; do
@@ -124,6 +171,41 @@ test_print() {
     REQ_CONFIG=()
     out=$(LC_ALL=C req_print_profile)
     assert_contains "Total" "$out" "by default everything is shown"
+}
+
+test_headers() {
+    echo "http: response headers"
+    local crlf=$'\r\n'
+    req_split_headers "HTTP/1.1 200 OK${crlf}Content-Type: text/plain${crlf}X-A: 1: 2${crlf}${crlf}hello"
+    assert_eq "HTTP/1.1 200 OK" "$REQ_RESP_STATUSLINE" "the status line"
+    assert_eq $'Content-Type: text/plain\nX-A: 1: 2' "$(printf '%s\n' "${REQ_RESP_HEADERS[@]}")" "the headers, without the carriage returns"
+    assert_eq "hello" "$REQ_RESP_BODY" "the rest is the body"
+    req_split_headers "HTTP/2 204${crlf}x-b: y${crlf}${crlf}"
+    assert_eq "HTTP/2 204" "$REQ_RESP_STATUSLINE" "HTTP/2 works too"
+    assert_eq "" "$REQ_RESP_BODY" "no body stays empty"
+    req_split_headers "HTTP/1.1 100 Continue${crlf}${crlf}HTTP/1.1 201 Created${crlf}Location: /x${crlf}${crlf}{\"a\":1}"
+    assert_eq "HTTP/1.1 201 Created" "$REQ_RESP_STATUSLINE" "an interim 100 block is skipped"
+    assert_eq "Location: /x" "${REQ_RESP_HEADERS[*]}" "and its headers dropped"
+    assert_eq '{"a":1}' "$REQ_RESP_BODY" "leaving the body"
+    req_split_headers "HTTP/1.1 200 OK${crlf}${crlf}HTTP/1.1 is a body"
+    assert_eq "HTTP/1.1 is a body" "$REQ_RESP_BODY" "a body that looks like a status line is kept"
+    assert_eq "0" "${#REQ_RESP_HEADERS[@]}" "a response without headers has none"
+    req_split_headers "just text"
+    assert_eq "" "$REQ_RESP_STATUSLINE" "text without a header block has no status line"
+    assert_eq "just text" "$REQ_RESP_BODY" "and is all body"
+    REQ_P_FOLLOW=true
+    req_split_headers "HTTP/1.1 301 Moved${crlf}Location: /b${crlf}${crlf}HTTP/1.1 200 OK${crlf}X-Final: 1${crlf}${crlf}end"
+    assert_eq "HTTP/1.1 200 OK" "$REQ_RESP_STATUSLINE" "with follow_redirects the last hop's status line counts"
+    assert_eq "X-Final: 1" "${REQ_RESP_HEADERS[*]}" "and its headers"
+    assert_eq "end" "$REQ_RESP_BODY" "and its body"
+    REQ_P_FOLLOW=false
+    req_split_headers "HTTP/1.1 301 Moved${crlf}Location: /b${crlf}${crlf}HTTP/1.1 200 OK${crlf}${crlf}end"
+    assert_eq "HTTP/1.1 301 Moved" "$REQ_RESP_STATUSLINE" "without it the 301 is the response"
+    REQ_VERBOSE=1; REQ_RESP_STATUSLINE="HTTP/1.1 200 OK"; REQ_RESP_HEADERS=("A: 1" "B: 2")
+    assert_eq $'<< HTTP/1.1 200 OK\n<< A: 1\n<< B: 2' "$(NO_COLOR=1 req_verbose_response)" "verbose on: the status line and each header get <<"
+    assert_eq "4" "$(req_verbose_response | wc -l | tr -d ' ')" "followed by one blank line"
+    REQ_VERBOSE=0
+    assert_eq "" "$(req_verbose_response)" "verbose off: nothing"
 }
 
 start_server() {
@@ -221,6 +303,121 @@ test_execute() {
     assert_contains '"x_test": "t2"' "$out" "REQ_ENV chooses the environment"
     unset REQ_ENV STAGING_BASE STAGING_TOK DEFAULT_BASE
 
+    # The log: only when log=yes and a project is open; the request is written before it is sent.
+    local lid=logproj logf=$TMP/cfgdir/projects/logproj/req.log
+    mkdir -p "$TMP/cfgdir/projects/$lid"
+    local saved_cfg=${REQ_CONFIG_DIR-}
+    export REQ_CONFIG_DIR=$TMP/cfgdir
+    export DEFAULT_BASE=$base DEFAULT_TOK=s3cret
+    REQ_PROJECT_ID=$lid; REQ_CONFIG=([log]=yes)
+    NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
+    assert_eq "2" "$(wc -l <"$logf" | tr -d ' ')" "log=yes: a run writes the request and the response"
+    assert_contains "REQUEST file=sub.post.json env=default POST $base/echo | header: X-Test: s3cret" "$(<"$logf")" "with the substituted values"
+    assert_contains 'body: {"who":"s3cret"}' "$(<"$logf")" "and the body"
+    assert_contains " RESPONSE status=200 type=application/json" "$(sed -n 2p "$logf")" "on the next line, with the status and type"
+    unset DEFAULT_TOK
+    NO_COLOR=1 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
+    assert_eq "2" "$(wc -l <"$logf" | tr -d ' ')" "a request stopped by a missing key is not logged"
+    export DEFAULT_TOK=s3cret
+    REQ_CONFIG=([log]=no)
+    NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
+    assert_eq "2" "$(wc -l <"$logf" | tr -d ' ')" "log=no: nothing more is written"
+    REQ_CONFIG=([log]=yes)
+    printf '{"name":"down","method":"GET","url":"http://127.0.0.1:1/x"}\n' >"$TMP/down.get.json"
+    NO_COLOR=1 req_run_request "$TMP/down.get.json" >/dev/null 2>&1
+    assert_eq "4" "$(wc -l <"$logf" | tr -d ' ')" "a request with no answer logs the request and the failure"
+    assert_contains " ERROR no response (curl exit code 7)" "$(sed -n 4p "$logf")" "with curl's exit code"
+    REQ_PROJECT_ID=""; REQ_CONFIG=()
+    unset DEFAULT_BASE DEFAULT_TOK
+    if [[ -n $saved_cfg ]]; then export REQ_CONFIG_DIR=$saved_cfg; else unset REQ_CONFIG_DIR; fi
+
+    # Verbose: the data sent, with >> (T6.4).
+    export DEFAULT_BASE=$base DEFAULT_TOK=s3cret
+    # shellcheck disable=SC2016  # the placeholders are single-quoted on purpose
+    printf '{"name":"form","method":"POST","url":"${base}/echo","parameters":{"a":"1","b":"two words"}}\n' >"$TMP/form.post.json"
+    # shellcheck disable=SC2016  # the placeholders are single-quoted on purpose
+    printf '{"name":"multi","method":"PUT","url":"${base}/echo","raw_data":"line one\\nline two"}\n' >"$TMP/multi.put.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" 2>&1)
+    [[ $out != *'>>'* ]]; assert_eq "0" "$?" "verbose off: nothing is marked with >>"
+    REQ_VERBOSE=1
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" 2>&1)
+    assert_contains '>> {"who":"s3cret"}' "$out" "verbose on: raw_data is shown with its substituted values"
+    assert_eq "POST $base/echo" "$(head -n 1 <<<"$out")" "after the method and url"
+    assert_eq '>> {"who":"s3cret"}' "$(sed -n 2p <<<"$out")" "and before the response"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/form.post.json" 2>&1)
+    assert_contains $'>> a=1\n>> b=two words' "$out" "parameters are shown one per line"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/multi.put.json" 2>&1)
+    assert_contains $'>> line one\n>> line two' "$out" "each line of a multi-line body has its own >>"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/users.get.json" 2>&1)
+    [[ $out != *'>>'* ]]; assert_eq "0" "$?" "a request without data shows none"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/form.post.json" 2>&1)
+    assert_contains "<< HTTP/" "$out" "the status line of the response gets <<"
+    assert_contains "<< Content-Type: application/json" "$out" "and so do its headers"
+    assert_contains "HTTP 200" "$out" "the usual response display follows"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/users.get.json" 2>&1)
+    assert_contains "<< HTTP/" "$out" "a request without data shows the response headers too"
+    out=$(REQ_COLORS=1 COLUMNS=20 req_run_request "$TMP/form.post.json" 2>&1 | grep -c $'\033\[2m>>')
+    assert_eq "2" "$out" "with colors every marker is dim"
+    REQ_VERBOSE=0
+    unset DEFAULT_BASE DEFAULT_TOK
+
+    # Per-request timeout (T8.1): a 1.5 s answer against a 0.5 s limit, then against a 5 s one.
+    printf '{"name":"slow","method":"GET","url":"%s/sleep/1500","timeout":0.5}\n' "$base" >"$TMP/slow.get.json"
+    out=$(NO_COLOR=1 req_run_request "$TMP/slow.get.json" 2>&1); assert_eq "1" "$?" "a request slower than its timeout fails"
+    assert_contains "curl exit code 28" "$out" "with curl's timeout exit code"
+    printf '{"name":"slow","method":"GET","url":"%s/sleep/300","timeout":5}\n' "$base" >"$TMP/slow.get.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/slow.get.json" 2>&1); assert_eq "0" "$?" "a longer timeout lets it finish"
+    assert_contains "slept" "$out" "and shows the response"
+
+    # follow_redirects (T8.2)
+    printf '{"name":"moved","method":"GET","url":"%s/redirect"}\n' "$base" >"$TMP/moved.get.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/moved.get.json" 2>&1)
+    assert_contains "HTTP 302" "$out" "a redirect is shown as it is by default"
+    printf '{"name":"moved","method":"GET","url":"%s/redirect","follow_redirects":true}\n' "$base" >"$TMP/moved.get.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/moved.get.json" 2>&1)
+    assert_contains "HTTP 200" "$out" "with follow_redirects the final response is shown"
+    assert_contains "hello text" "$out" "with its body"
+    [[ $out != *moved* ]]; assert_eq "0" "$?" "and not the body of the redirect"
+    printf '{"name":"loop","method":"GET","url":"%s/loop","follow_redirects":true}\n' "$base" >"$TMP/loop.get.json"
+    out=$(NO_COLOR=1 req_run_request "$TMP/loop.get.json" 2>&1); assert_eq "1" "$?" "an endless redirect stops"
+    assert_contains "curl exit code 47" "$out" "at the limit, with curl's exit code"
+
+    # insecure (T8.3): an https server with a self-signed certificate
+    if command -v openssl >/dev/null 2>&1; then
+        openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=127.0.0.1 \
+            -keyout "$TMP/key.pem" -out "$TMP/cert.pem" >/dev/null 2>&1
+        python3 -I "$ROOT/tests/mock_server.py" "$TMP/cert.pem" "$TMP/key.pem" >"$TMP/tlsport" 2>/dev/null &
+        local tlspid=$! tls=""
+        for _ in {1..50}; do [[ -s $TMP/tlsport ]] && { tls=$(<"$TMP/tlsport"); break; }; sleep 0.1; done
+        printf '{"name":"tls","method":"GET","url":"https://127.0.0.1:%s/text"}\n' "$tls" >"$TMP/tls.get.json"
+        out=$(NO_COLOR=1 req_run_request "$TMP/tls.get.json" 2>&1); assert_eq "1" "$?" "a self-signed certificate is refused by default"
+        assert_contains "curl exit code 60" "$out" "with curl's certificate error"
+        printf '{"name":"tls","method":"GET","url":"https://127.0.0.1:%s/text","insecure":true}\n' "$tls" >"$TMP/tls.get.json"
+        out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/tls.get.json" 2>&1); assert_eq "0" "$?" "insecure accepts it"
+        assert_contains "hello text" "$out" "and shows the response"
+        kill "$tlspid" 2>/dev/null
+    else
+        echo "  skip openssl unavailable"
+    fi
+
+    # files (T8.5): a multipart upload read by the mock server
+    printf 'hello file' >"$TMP/doc.txt"
+    printf '{"name":"up","method":"POST","url":"%s/echo","parameters":{"note":"@x"},"files":{"doc":"doc.txt"}}\n' "$base" >"$TMP/up.post.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/up.post.json" 2>&1); assert_eq "0" "$?" "a request with files runs"
+    assert_contains 'multipart/form-data' "$out" "as a multipart form"
+    assert_contains 'name=\"doc\"; filename=\"doc.txt\"' "$out" "the file field and its name arrive"
+    assert_contains 'hello file' "$out" "with the content"
+    assert_contains 'name=\"note\"' "$out" "the parameter is a field too"
+    assert_contains '@x' "$out" "and an @ value is sent as text, never read as a file"
+    REQ_VERBOSE=1
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/up.post.json" 2>&1)
+    assert_contains $'>> note=@x\n>> doc=@doc.txt' "$out" "verbose shows the fields and the files"
+    REQ_VERBOSE=0
+    printf '{"name":"up","method":"POST","url":"%s/echo","files":{"doc":"missing.txt"}}\n' "$base" >"$TMP/up.post.json"
+    out=$(NO_COLOR=1 req_run_request "$TMP/up.post.json" 2>&1); assert_eq "1" "$?" "a missing file stops the run"
+    assert_contains 'does not exist or cannot be read' "$out" "with the reason"
+    [[ $out != *HTTP* ]]; assert_eq "0" "$?" "and nothing is sent"
+
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"
     assert_contains '"url"' "$out" "tells how to set the url"
@@ -230,6 +427,7 @@ test_execute() {
 test_url
 test_args
 test_timing
+test_headers
 test_print
 test_execute
 test_summary
