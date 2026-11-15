@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T6.5** (Fase 6; a T6.1 a T6.4 estão feitas; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T6.6** (Fase 6; a T6.1 a T6.5 estão feitas; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1191 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1210 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -154,7 +154,7 @@ Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde fi
 - [x] T6.2 Log da requisição enviada, com timestamp, em arquivo. Decidido com o usuário: `projects/<id>/req.log`, uma linha de texto por evento (`lib/log.sh`), só com `log=yes` e projeto aberto; a linha traz arquivo, ambiente, método, url, headers, campos do formulário e corpo, com os valores reais.
 - [x] T6.3 Log da resposta recebida, no mesmo arquivo: linha `RESPONSE` (status, tipo, tempo total e o corpo inteiro) ou `ERROR` quando não houve resposta. Sem os headers da resposta por ora (a T6.5 passa a capturá-los; ver as questões da revisão final).
 - [x] T6.4 Verbose: dados enviados (`parameters` ou `raw_data`) com `>>` no terminal. O verbose é a variável `REQ_VERBOSE` (0 ou 1; o ambiente do processo pode defini-la), que a T6.6 alterna com `:v`; cada campo do formulário ou linha do corpo ganha um `>>` esmaecido, logo depois de `MÉTODO url`.
-- T6.5 Verbose: resposta (incluindo headers) com `<<` no terminal.
+- [x] T6.5 Verbose: resposta (incluindo headers) com `<<` no terminal: a linha de status e cada header, logo depois do envio e antes da exibição normal (que mostra o corpo formatado). Os headers vêm de `curl -D -` (`req_split_headers`).
 - T6.6 `:log` e `:v` alternam logs e verbose na sessão; entram na ajuda `:h`.
 - T6.7 Verificação da fase e documentação.
 
@@ -163,6 +163,7 @@ Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; ca
 - Q1 (T6.2/T6.3) O log guarda o corpo da request e da resposta inteiros, sem limite de tamanho e sem rotação do `req.log`. Decidir se deve haver limite por linha, rotação ou um comando para limpar.
 - Q2 (T6.3) O log da resposta não traz os headers da resposta. Decidir se devem entrar (a T6.5 os captura para o verbose).
 - Q3 (T6.4) O verbose é só a variável `REQ_VERBOSE` (ou `:v` na T6.6); não há chave `verbose` na config nem opção `-v` no `req run`. Decidir se deve haver.
+- Q4 (T6.5) No verbose, a resposta mostra só a linha de status e os headers com `<<`; o corpo continua na exibição normal (formatado), sem `<<`. Decidir se cada linha do corpo também deve levar `<<`.
 
 ### Fase 7 — Portabilidade, qualidade e entrega
 - T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`.

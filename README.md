@@ -165,7 +165,7 @@ The position is saved per project in `~/.req/projects/<id>/cursor` when you leav
 
 ## Verbose
 
-With `REQ_VERBOSE=1` in the environment, `req` also shows the data it sends: right under the `METHOD url` line, every form field of `parameters` (`a=1`) or every line of `raw_data` gets a dim `>>` in front. A request without data shows nothing extra. Values are the real ones, after `${key}` is replaced. The received response is added in a later step (T6.5), and `:v` will switch the mode inside the menu (T6.6).
+With `REQ_VERBOSE=1` in the environment, `req` also shows the data it sends: right under the `METHOD url` line, every form field of `parameters` (`a=1`) or every line of `raw_data` gets a dim `>>` in front. A request without data shows nothing extra. Values are the real ones, after `${key}` is replaced. The status line and the headers of the response are shown with `<<` too, just before the usual response display (which prints the body as before), and a blank line separates the two. `:v` will switch the mode inside the menu (T6.6).
 
 ## Log
 
