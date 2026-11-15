@@ -73,6 +73,8 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 | `:cp [name]` | copy the directory (with everything inside, symbolic links copied as links) or the request under the cursor, or the one open on the details screen. It asks for the new name (default `<name>-copy`) and does not open the edit menu |
 | `:rm` | remove the selected request (or the one open on the details screen), after a `[y/N]` confirmation; Enter keeps it. It also works on an invalid request. On a directory it removes the directory and everything inside it, after a red warning with the full path and the number of files and subdirectories and the same `[y/N]` question. Only directories inside the workspace are ever deleted, and never a symbolic link |
 | `:env [name]` | without an argument, lists the environments of the project and the one in use; with a name, switches the session to it (see "Environments and variables") |
+| `:log [yes\|no]` | switch the log of requests and responses for this session (see "Log") |
+| `:v [yes\|no]` | switch the verbose mode for this session (alias `:verbose`; see "Verbose") |
 | `:config [-g] [key=value]` | without an argument, shows the settings: every known key with its effective value, its default and `project` when the project sets it. With `key=value` (for example `:config time_stats=no`) it checks the key and the value and writes them to the project's file; with `-g` (`:config -g time_stats=no`) it writes the global `~/.req/config` instead. An unknown key or a wrong value is explained and nothing is written |
 | `:e` | edit the selected request (or the one open on the details screen) through a field menu; changing the name or the method renames the file. Option `8) raw data` opens the body in your editor (`$VISUAL`, `$EDITOR`, `vim`, `vi`, like git); without one it asks for a single line (`-` clears). JSON objects and lists are stored as native JSON; other text is stored as a string, and you are offered to edit it again first unless the request has a non-JSON `Content-Type` |
 | `:d` | duplicate the selected request under a new name and open the edit menu on the copy |
@@ -165,7 +167,7 @@ The position is saved per project in `~/.req/projects/<id>/cursor` when you leav
 
 ## Verbose
 
-With `REQ_VERBOSE=1` in the environment, `req` also shows the data it sends: right under the `METHOD url` line, every form field of `parameters` (`a=1`) or every line of `raw_data` gets a dim `>>` in front. A request without data shows nothing extra. Values are the real ones, after `${key}` is replaced. The status line and the headers of the response are shown with `<<` too, just before the usual response display (which prints the body as before), and a blank line separates the two. `:v` will switch the mode inside the menu (T6.6).
+With `REQ_VERBOSE=1` in the environment, or after `:v` in the menu (`:v yes` and `:v no` set it explicitly; it lasts until `req` quits), `req` also shows the data it sends: right under the `METHOD url` line, every form field of `parameters` (`a=1`) or every line of `raw_data` gets a dim `>>` in front. A request without data shows nothing extra. Values are the real ones, after `${key}` is replaced. The status line and the headers of the response are shown with `<<` too, just before the usual response display (which prints the body as before), and a blank line separates the two.
 
 ## Log
 
@@ -175,7 +177,7 @@ With `log=yes` (`:config log=yes` for the project, `:config -g log=yes` for ever
 2026-11-13T22:30:00-0300 REQUEST file=add.post.json env=dev POST https://api.example.com/users | header: X-Token: abc123 | body: {"name":"ana"}
 ```
 
-The values are the real ones, after `${key}` is replaced (nothing is masked). A request that stops before it is sent (invalid file, missing key) is not logged. If the log cannot be written, `req` warns and sends the request anyway. There is no log without an open project. The response follows on the next line, with the status, the Content-Type, the total time and the whole body (there is no size limit), or, when nothing came back, an `ERROR no response (curl exit code N)` line:
+The values are the real ones, after `${key}` is replaced (nothing is masked). `:log` switches the log for the current session the same way (`:log yes`, `:log no`) without touching the setting; it needs an open project. A request that stops before it is sent (invalid file, missing key) is not logged. If the log cannot be written, `req` warns and sends the request anyway. There is no log without an open project. The response follows on the next line, with the status, the Content-Type, the total time and the whole body (there is no size limit), or, when nothing came back, an `ERROR no response (curl exit code N)` line:
 
 ```
 2026-11-13T22:30:01-0300 RESPONSE status=201 type=application/json total=0.150s | body: {"id":7}

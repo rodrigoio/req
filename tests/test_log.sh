@@ -27,6 +27,10 @@ test_enabled() {
     off; req_log_enabled; assert_eq "1" "$?" "log=no: disabled"
     REQ_PROJECT_ID=""; REQ_CONFIG=([log]=yes); req_log_enabled; assert_eq "1" "$?" "no project: disabled"
     REQ_CONFIG=(); REQ_PROJECT_ID=shop; req_log_enabled; assert_eq "1" "$?" "the default is off"
+    off; REQ_LOG_SESSION=yes; req_log_enabled; assert_eq "0" "$?" "the session's yes wins over log=no"
+    on; REQ_LOG_SESSION=no; req_log_enabled; assert_eq "1" "$?" "the session's no wins over log=yes"
+    REQ_PROJECT_ID=""; REQ_LOG_SESSION=yes; req_log_enabled; assert_eq "1" "$?" "but a project is always needed"
+    REQ_LOG_SESSION=""
     off; req_log_write TEST "x"; assert_eq "0" "$?" "writing with the log off is fine"
     [[ ! -e $f ]]; assert_eq "0" "$?" "and creates nothing"
 }
