@@ -205,7 +205,8 @@ req_print_body() {
 # sending, every ${key} in the url, headers, query, parameters and raw_data is replaced
 # by its value in the environment REQ_ENV (default "default"); a key without a value
 # stops the request with an error that says how to define it. With the "log" setting on,
-# the request is written to the project's log just before it is sent (log.sh).
+# the request is written to the project's log just before it is sent and the response (or the
+# failure) right after it arrives (log.sh).
 req_run_request() {
     local file=$1 json status env=${REQ_ENV:-default}
     req_request_check "$file" || return 1
@@ -220,10 +221,13 @@ req_run_request() {
 
     req_curl_exec; status=$?
     if (( status != 0 )); then
+        req_log_failure "$status"
         req_err "request failed (curl exit code $status)"
         req_rule '='
         return 1
     fi
+
+    req_log_response
 
     printf 'HTTP '; req_paint_status "$REQ_RESP_STATUS"
     [[ -n $REQ_RESP_CTYPE ]] && printf '  %s' "$REQ_RESP_CTYPE"

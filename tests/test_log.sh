@@ -67,7 +67,27 @@ test_request() {
     [[ ! -e $f ]]; assert_eq "0" "$?" "with the log off nothing is written"
 }
 
+test_response() {
+    echo "log: the response"
+    local f out
+    on; f=$(req_log_file); rm -f "$f"
+    REQ_RESP_STATUS=201; REQ_RESP_CTYPE="application/json"; REQ_RESP_TIMES=(0.001 0.002 0 0.003 0.100 0.150)
+    REQ_RESP_BODY=$'{"id":\n7}'
+    req_log_response
+    out=$(<"$f")
+    assert_contains ' RESPONSE status=201 type=application/json total=0.150s | body: {"id":\n7}' "$out" "status, type, total time and the whole body, on one line"
+    assert_eq "1" "$(wc -l <"$f" | tr -d ' ')" "one line"
+    rm -f "$f"; REQ_RESP_CTYPE=""; REQ_RESP_BODY=""
+    req_log_response
+    assert_contains 'type=- total=0.150s | body: ' "$(<"$f")" "no Content-Type is a dash, no body is an empty one"
+    rm -f "$f"; req_log_failure 7
+    assert_contains ' ERROR no response (curl exit code 7)' "$(<"$f")" "a failure is logged with curl's exit code"
+    rm -f "$f"; off; req_log_response; req_log_failure 7
+    [[ ! -e $f ]]; assert_eq "0" "$?" "with the log off nothing is written"
+}
+
 test_enabled
 test_write
 test_request
+test_response
 test_summary

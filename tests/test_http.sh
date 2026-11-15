@@ -230,16 +230,22 @@ test_execute() {
     export DEFAULT_BASE=$base DEFAULT_TOK=s3cret
     REQ_PROJECT_ID=$lid; REQ_CONFIG=([log]=yes)
     NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
-    assert_eq "1" "$(wc -l <"$logf" | tr -d ' ')" "log=yes: a run writes one line"
+    assert_eq "2" "$(wc -l <"$logf" | tr -d ' ')" "log=yes: a run writes the request and the response"
     assert_contains "REQUEST file=sub.post.json env=default POST $base/echo | header: X-Test: s3cret" "$(<"$logf")" "with the substituted values"
     assert_contains 'body: {"who":"s3cret"}' "$(<"$logf")" "and the body"
+    assert_contains " RESPONSE status=200 type=application/json" "$(sed -n 2p "$logf")" "on the next line, with the status and type"
     unset DEFAULT_TOK
     NO_COLOR=1 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
-    assert_eq "1" "$(wc -l <"$logf" | tr -d ' ')" "a request stopped by a missing key is not logged"
+    assert_eq "2" "$(wc -l <"$logf" | tr -d ' ')" "a request stopped by a missing key is not logged"
     export DEFAULT_TOK=s3cret
     REQ_CONFIG=([log]=no)
     NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/sub.post.json" >/dev/null 2>&1
-    assert_eq "1" "$(wc -l <"$logf" | tr -d ' ')" "log=no: nothing more is written"
+    assert_eq "2" "$(wc -l <"$logf" | tr -d ' ')" "log=no: nothing more is written"
+    REQ_CONFIG=([log]=yes)
+    printf '{"name":"down","method":"GET","url":"http://127.0.0.1:1/x"}\n' >"$TMP/down.get.json"
+    NO_COLOR=1 req_run_request "$TMP/down.get.json" >/dev/null 2>&1
+    assert_eq "4" "$(wc -l <"$logf" | tr -d ' ')" "a request with no answer logs the request and the failure"
+    assert_contains " ERROR no response (curl exit code 7)" "$(sed -n 4p "$logf")" "with curl's exit code"
     REQ_PROJECT_ID=""; REQ_CONFIG=()
     unset DEFAULT_BASE DEFAULT_TOK
     if [[ -n $saved_cfg ]]; then export REQ_CONFIG_DIR=$saved_cfg; else unset REQ_CONFIG_DIR; fi
