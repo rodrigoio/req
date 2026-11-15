@@ -6,7 +6,7 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T6.7** (Fase 6; a T6.1 a T6.6 estão feitas; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T7.1** (Fase 7; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
 - Suíte: `make check` com 1238 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
@@ -156,7 +156,7 @@ Pré-requisito: TR2.1 a TR2.4 (Revisão 2, no fim do plano), que definem onde fi
 - [x] T6.4 Verbose: dados enviados (`parameters` ou `raw_data`) com `>>` no terminal. O verbose é a variável `REQ_VERBOSE` (0 ou 1; o ambiente do processo pode defini-la), que a T6.6 alterna com `:v`; cada campo do formulário ou linha do corpo ganha um `>>` esmaecido, logo depois de `MÉTODO url`.
 - [x] T6.5 Verbose: resposta (incluindo headers) com `<<` no terminal: a linha de status e cada header, logo depois do envio e antes da exibição normal (que mostra o corpo formatado). Os headers vêm de `curl -D -` (`req_split_headers`).
 - [x] T6.6 `:log` e `:v` alternam logs e verbose na sessão (argumento opcional `yes|no`, também `on|off`; `:verbose` é apelido de `:v`); entram na ajuda `:h`. A escolha vale até sair (`REQ_LOG_SESSION`, `REQ_VERBOSE`) e não altera a configuração; o `:log` exige um projeto aberto.
-- T6.7 Verificação da fase e documentação.
+- [x] T6.7 Verificação da fase (binário real: sem arquivo com `log=no`; com `log=yes` e `REQ_VERBOSE=1` saem o `req.log` com `REQUEST` e `RESPONSE`, as linhas `>>` e `<<`; `:v` e `:log` pelo menu em um pty) e documentação (README: seções "Verbose" e "Log"; `DEVELOPMENT.md`: `log.sh` e o verbose em `http.sh`).
 
 ### Questões para a revisão final (anotadas durante a execução contínua)
 Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; cada item diz o que foi feito e o que decidir.
