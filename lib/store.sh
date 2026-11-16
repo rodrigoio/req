@@ -25,7 +25,7 @@ def check_map($lbl; $item):
     if type != "object" then "field \"\($lbl)\" must be an object"
     else to_entries[] | select((.value | scalar) | not)
          | "\($item) \"\(.key)\": the value must be a string, number or boolean" end;
-["name", "method", "url", "description", "headers", "query", "parameters", "raw_data"] as $allowed
+["name", "method", "url", "description", "headers", "query", "parameters", "raw_data", "timeout"] as $allowed
 | if type != "object" then "the root must be an object"
   else
     (keys[] | select(. as $k | $allowed | index($k) | not)
@@ -53,6 +53,8 @@ def check_map($lbl; $item):
      else empty end),
     (if has("query") then (.query | check_map("query"; "query")) else empty end),
     (if has("parameters") then (.parameters | check_map("parameters"; "parameters")) else empty end),
+    (if has("timeout") and ((.timeout | type) != "number" or .timeout <= 0)
+         then "field \"timeout\" must be a positive number of seconds" else empty end),
     (if has("raw_data") and ((.raw_data | type) as $t | $t != "object" and $t != "array" and $t != "string")
          then "field \"raw_data\" must be an object, a list or a string" else empty end)
   end'

@@ -3,6 +3,7 @@
 Works with Python 3.6 and later."""
 import json
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 from urllib.parse import urlsplit, parse_qs
@@ -35,6 +36,9 @@ class Handler(BaseHTTPRequestHandler):
         if parts.path.startswith("/status/"):
             code = int(parts.path.rsplit("/", 1)[1])
             return self._reply(code, "application/json", '{"status":%d}' % code)
+        if parts.path.startswith("/sleep/"):
+            time.sleep(int(parts.path.rsplit("/", 1)[1]) / 1000.0)
+            return self._reply(200, "text/plain", "slept")
         echo = {
             "method": self.command,
             "path": parts.path,

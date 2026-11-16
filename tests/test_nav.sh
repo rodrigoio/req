@@ -70,7 +70,7 @@ make_project() {
     req_request_write "$p/api" remove DELETE http://x/users \
         '{"parameters":{"id":1}}' >/dev/null
     req_request_write "$p/api/v2" ping DELETE http://x/ping >/dev/null
-    printf '{"name":"broken","method":"GET","url":"http://x","timeout":5}\n' >"$p/api/broken.get.json"
+    printf '{"name":"broken","method":"GET","url":"http://x","retries":5}\n' >"$p/api/broken.get.json"
     PROJ=$p
 }
 
@@ -273,7 +273,7 @@ test_detail_invalid() {
     req_nav_handle enter; screen detail; out=$OUT
     assert_eq "0" "$REQ_DETAIL_VALID" "an invalid request is flagged"
     assert_contains "Invalid request" "$out" "shows the problem"
-    assert_contains 'unknown field "timeout"' "$out" "shows the reason"
+    assert_contains 'unknown field "retries"' "$out" "shows the reason"
     assert_eq "$PROJ/api/broken.get.json" "${REQ_SCREEN_LINES[1]}" "the absolute path is on its own line, ready to copy"
     assert_eq "0" "$REQ_SCREEN_EXTRA" "a path that fits adds no extra rows"
     assert_eq "" "$(req_nav_handle enter 2>&1)" "Enter does not run an invalid request"
