@@ -202,6 +202,12 @@ adds `make lint`. Plain bash, no framework (`tests/helpers.sh`: `assert_eq`,
 
 `tests/mock_server.py` must keep working with Python 3.6 (RHEL 8), so no `ThreadingHTTPServer`; tests that depend on file permissions avoid being fooled by root (the suite may run as root in some environments).
 
+- **Names in tests are explicit.** A test, and every fixture made up for it (a field, a file, a
+  value), must be named so that it reads as test material and says what it exercises. This
+  matters most for tests that exist to catch a defect or an invalid input: their names state the
+  invalid condition. Example: `invalid_retries_field` for an unknown field the validator must
+  refuse, never a bare `retries`, which reads like a real feature and breaks the test when someone
+  adds it (as `timeout` did in T8.1).
 - Helpers export `NO_COLOR=1`; tests that need colors set `REQ_COLORS=1` explicitly.
 - Interactive flows are driven through `REQ_INPUT_FD`: tests set it to 3 and feed
   answers with `3<<<$'...'` (use `3</dev/null` for end of input; `<<<""` is an empty
