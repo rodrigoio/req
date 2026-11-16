@@ -13,9 +13,11 @@ Development only (not needed to use `req`): `shellcheck`, used by `make lint` ov
 ## Installation
 
 ```sh
-make install      # symlink at ~/.local/bin/req
-make uninstall    # remove the symlink
+make install      # builds release/req.sh and links ~/.local/bin/req to it
+make uninstall    # remove the link
 ```
+
+`make install` runs `make build` and links `~/.local/bin/req` to the file it generates, `release/req.sh` (the same single file that the download below gives), not to the sources in `bin/` and `lib/`. Run it again to rebuild and update. `make uninstall` removes the link, only if it points to that file (or to `bin/req`, from an older install), and leaves the built file. To run the sources while developing, use `bin/req` directly.
 
 To install elsewhere: `make install PREFIX=/usr/local` (or `BINDIR=...`). If the directory is not in your `PATH`, `make install` warns and shows how to add it.
 
