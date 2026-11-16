@@ -19,8 +19,22 @@ REQ_PROJECT_FILE=.req
 
 # Content checks (independent of the file name): prints one problem per line.
 # shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
+# jq definition shared by the schema, the display and the request preparation: the
+# "leaves" of a (possibly nested) query value, as [name, text] pairs. An object adds
+# "[key]" to the name and a list adds "[]": {"f":{"a":1},"t":["x","y"]} gives f[a]=1,
+# t[]=x and t[]=y (empty objects and lists give nothing).
+# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
+REQ_JQ_LEAVES='
+def leaves($p):
+    if type == "object" then (to_entries[] | .key as $k | .value | leaves(if $p == "" then $k else "\($p)[\($k)]" end))
+    elif type == "array" then (.[] | leaves("\($p)[]"))
+    else [$p, tostring] end;
+'
+
+# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
 REQ_SCHEMA_JQ='
 def scalar: type == "string" or type == "number" or type == "boolean";
+def nested_ok: scalar or (type == "object" and all(.[]; nested_ok)) or (type == "array" and all(.[]; nested_ok));
 def check_map($lbl; $item):
     if type != "object" then "field \"\($lbl)\" must be an object"
     else to_entries[] | select((.value | scalar) | not)
@@ -51,7 +65,11 @@ def check_map($lbl; $item):
               else empty end
          else empty end)
      else empty end),
-    (if has("query") then (.query | check_map("query"; "query")) else empty end),
+    (if has("query") then
+        (if (.query | type) != "object" then "field \"query\" must be an object"
+         else .query | to_entries[] | select((.value | nested_ok) | not)
+              | "query \"\(.key)\": the value must be a string, number or boolean, or a list or object of them" end)
+     else empty end),
     (if has("parameters") then (.parameters | check_map("parameters"; "parameters")) else empty end),
     (if has("timeout") and ((.timeout | type) != "number" or .timeout <= 0)
          then "field \"timeout\" must be a positive number of seconds" else empty end),
@@ -114,11 +132,11 @@ REQ_CHECK_JQ='
 
 # Request fields for display, as "tag NUL value NUL" records.
 # shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
-REQ_FIELDS_JQ='
+REQ_FIELDS_JQ=$REQ_JQ_LEAVES'
 (["name", (.name // "")], ["method", (.method // "")], ["url", (.url // "")],
  ["description", (.description // "")],
  ((.headers // {})        | to_entries[] | ["h", "\(.key): \(.value)"]),
- ((.query // {})          | to_entries[] | ["q", "\(.key)=\(.value)"]),
+ ((.query // {})          | to_entries[] | .key as $k | .value | leaves($k) | ["q", "\(.[0])=\(.[1])"]),
  ((.parameters // {}) | to_entries[] | ["p", "\(.key)=\(.value)"]),
  ((.raw_data // "") as $r
   | if $r == "" then empty

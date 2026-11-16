@@ -163,6 +163,18 @@ test_invalid_manual() {
     assert_contains '"files" and "raw_data" cannot be used together' "$(check_out "$d/u4.post.json")" "files and raw_data conflict"
     printf '{"name":"u5","method":"POST","url":"http://x","files":{},"raw_data":{"a":1}}\n' >"$d/u5.post.json"
     assert_eq "0" "$(req_request_check "$d/u5.post.json" 2>/dev/null; echo $?)" "an empty files object does not conflict"
+    printf '{"name":"n1","method":"GET","url":"http://x","query":{"f":{"a":1,"b":{"c":"x"}},"t":["x",2,true],"e":[]}}\n' >"$d/n1.get.json"
+    assert_eq "0" "$(req_request_check "$d/n1.get.json" 2>/dev/null; echo $?)" "query accepts nested objects and lists of scalars"
+    for v in '{"a":null}' '[null]' '[[1],{"a":[{"b":null}]}]' 'null'; do
+        printf '{"name":"n2","method":"GET","url":"http://x","query":{"f":%s}}\n' "$v" >"$d/n2.get.json"
+        assert_contains 'query "f": the value must be a string, number or boolean, or a list or object of them' "$(check_out "$d/n2.get.json")" "query value $v is refused"
+    done
+    printf '{"name":"n3","method":"GET","url":"http://x","query":["a"]}\n' >"$d/n3.get.json"
+    assert_contains 'field "query" must be an object' "$(check_out "$d/n3.get.json")" "query itself must still be an object"
+    printf '{"name":"n4","method":"GET","url":"http://x","headers":{"X":{"a":1}}}\n' >"$d/n4.get.json"
+    assert_contains 'header "X": the value must be a string, number or boolean' "$(check_out "$d/n4.get.json")" "headers stay flat"
+    req_request_fields "$d/n1.get.json"
+    assert_eq $'f[a]=1\nf[b][c]=x\nt[]=x\nt[]=2\nt[]=true' "$(printf '%s\n' "${REQ_F_QUERY[@]}")" "the details show the flattened query"
     for v in 0 -1 '"5"' true null '[1]'; do
         printf '{"name":"t2","method":"GET","url":"http://x","timeout":%s}\n' "$v" >"$d/t2.get.json"
         assert_contains 'field "timeout" must be a positive number of seconds' "$(check_out "$d/t2.get.json")" "timeout $v is refused"
