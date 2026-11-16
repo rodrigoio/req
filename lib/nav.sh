@@ -488,7 +488,7 @@ req_nav_run() {
 # req_nav_start - interactive entry point: uses the .req of the current directory.
 # Without one, offers to initialize a project right here.
 req_nav_start() {
-    local pfile
+    local pfile status
     [[ -t 0 && -t 1 ]] || req_die "interactive mode needs a terminal (use 'req run <file>' in scripts)"
     if ! pfile=$(req_project_find .); then
         printf 'No %s file found in %s.\n' "$REQ_PROJECT_FILE" "$PWD"
@@ -500,7 +500,10 @@ req_nav_start() {
         printf 'Created %s (workspace: .)\nUse :n to create a new request.\n' "$REQ_PROJECT_FILE"
         pfile=$(req_project_find .) || return 1
     fi
+    REQ_NOTIFICATION_ACTIVE=1          # from here a warning goes to the bar at the top, not to the terminal
     req_project_activate "$(dirname "$pfile")"
     req_config_load_local || true      # the project's settings win over the global ones
-    req_nav_run "$pfile"
+    req_nav_run "$pfile"; status=$?
+    REQ_NOTIFICATION_ACTIVE=0
+    return "$status"
 }

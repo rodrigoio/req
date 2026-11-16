@@ -17,6 +17,7 @@ REQ_NOTIFICATION_LINES=()      # the bar lines of the current draw, from the top
 REQ_NOTIFICATION_IDS=()        # the persistent notifications, in registration order
 REQ_NOTIFICATION_CHECKS=()     # their check functions, in the same order
 REQ_NOTIFICATION_TEXT=""       # what a check that has something to say puts in its bar
+REQ_NOTIFICATION_ACTIVE=0      # 1 while the menu is open: req_warn then goes through the warning bar
 REQ_NOTIFICATION_WARN=""       # the warning that waits for the next draw ("" when there is none)
 REQ_NOTIFICATION_WARN_MORE=0   # how many more came after it before that draw
 REQ_NOTIFICATION_PRODUCERS=(req_notification_persistent_lines req_notification_warn_lines)

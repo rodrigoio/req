@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Show an incorrect command (an unknown command, nothing selected, a wrong usage, an invalid setting or
   environment) as an orange warning bar at the top of the screen, once, instead of a dim line under the
   menu. Confirmations stay under the menu.
+- Show the warnings raised while the menu is open (a bad line in a settings file, a log that cannot be
+  written) in that bar too, instead of printing them in the terminal. `req run` still prints them to stderr.
 
 ## [0.3.0] - 2026-11-16
 

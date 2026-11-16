@@ -10,9 +10,15 @@ req_err() {
     printf 'req: error: %s\n' "$*" >&2
 }
 
-# req_warn <message> - prints a warning to stderr without exiting.
+# req_warn <message> - prints a warning to stderr without exiting. While the menu is open
+# (REQ_NOTIFICATION_ACTIVE=1, see notification.sh) it goes to the warning bar at the top instead,
+# so a configuration problem does not fill the terminal.
 req_warn() {
-    printf 'req: warning: %s\n' "$*" >&2
+    if [[ ${REQ_NOTIFICATION_ACTIVE-0} == 1 ]]; then
+        req_notification_warn "$*"
+    else
+        printf 'req: warning: %s\n' "$*" >&2
+    fi
 }
 
 # req_trim <text> - prints the text without leading and trailing whitespace.

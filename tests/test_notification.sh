@@ -277,6 +277,29 @@ test_root_notice() {
     REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=(); REQ_NOTIFICATION_LINES=()
 }
 
+test_warn_routing() {
+    echo "notification: req_warn follows the menu"
+    local errfile
+    errfile=$(mktemp)
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+
+    REQ_NOTIFICATION_ACTIVE=0
+    req_warn "a plain warning made up for the test" 2>"$errfile"
+    assert_eq "req: warning: a plain warning made up for the test" "$(<"$errfile")" "outside the menu a warning goes to stderr"
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "and the bar is not involved"
+
+    REQ_NOTIFICATION_ACTIVE=1
+    req_warn "a warning for the bar, made up for the test" 2>"$errfile"
+    assert_eq "" "$(<"$errfile")" "while the menu is open nothing goes to stderr"
+    assert_eq "a warning for the bar, made up for the test" "$REQ_NOTIFICATION_WARN" "the bar holds it for the next draw"
+    req_warn "another one" 2>"$errfile"
+    assert_eq "1" "$REQ_NOTIFICATION_WARN_MORE" "and a second one is counted after it"
+
+    REQ_NOTIFICATION_ACTIVE=0
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    rm -f "$errfile"
+}
+
 test_color
 test_bar_with_colors
 test_bar_without_colors
@@ -284,6 +307,7 @@ test_collect
 test_persistent
 test_warning
 test_root_notice
+test_warn_routing
 test_overlay
 test_list_window
 test_summary

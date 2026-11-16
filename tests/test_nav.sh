@@ -400,6 +400,31 @@ test_root_notice() {
     REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
 }
 
+test_config_warnings_in_the_bar() {
+    echo "nav: settings problems go to the bar"
+    local dir=$TMP/cfg-bar errfile=$TMP/cfg-bar.err
+    mkdir -p "$dir"
+    printf 'this line is not a key and a value\nsetting_made_up_for_the_test=1\nlog=maybe\n' >"$dir/config"
+    local old_dir=$REQ_CONFIG_DIR
+    REQ_CONFIG_DIR=$dir
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+
+    REQ_NOTIFICATION_ACTIVE=1
+    req_config_load 2>"$errfile"
+    assert_eq "" "$(<"$errfile")" "with the menu open the terminal gets nothing"
+    assert_contains "expected key=value; line ignored" "$REQ_NOTIFICATION_WARN" "the first problem is the warning"
+    assert_contains "$dir/config:1:" "$REQ_NOTIFICATION_WARN" "with the file and the line"
+    assert_eq "2" "$REQ_NOTIFICATION_WARN_MORE" "and the others are counted: (+2 more)"
+    req_notification_collect
+    assert_contains "(+2 more)" "${REQ_NOTIFICATION_LINES[0]}" "one bar line says so"
+
+    REQ_NOTIFICATION_ACTIVE=0
+    req_config_load 2>"$errfile"
+    assert_eq "3" "$(grep -c '^req: warning:' "$errfile")" "outside the menu each one is still a line on stderr"
+    REQ_CONFIG_DIR=$old_dir
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+}
+
 test_end_to_end() {
     echo "nav: full flow (local mock)"
     command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
@@ -1263,5 +1288,6 @@ test_review2_flow
 test_start_init
 test_notification_bars
 test_root_notice
+test_config_warnings_in_the_bar
 test_end_to_end
 test_summary
