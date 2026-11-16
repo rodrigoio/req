@@ -6,9 +6,9 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 **Escopo de uso (definição do projeto):** o `req` é, inicialmente, uma solução para ser usada fora do escopo de um projeto de desenvolvimento: o diretório do projeto `req` contém apenas coisas do `req` (requests e seus diretórios). Usá-lo na raiz de um repositório de código não é um objetivo, e por isso o menu lista tudo o que não for oculto no diretório de trabalho, sem filtros nem lista de ignorados. Quando houver outros conteúdos na pasta, a variável `workspace` do `.req` (R11) aponta o subdiretório que o `req` enxerga.
 
 ## Estado atual (para retomar)
-- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T7.1** (Fase 7; a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
+- Feito: Fases 0 a 4, a T5.1, as Revisões 1 (TR.1 a TR.13 e TR.15; a TR.14 segue adiada até o usuário decidir), 2 (TR2.1 a TR2.10) e 3 (TR3.1 a TR3.7). Próxima tarefa: **T8.1** (Fase 8; a Fase 7 está concluída, exceto T7.1 e T7.2, que esperam testes direto nos ambientes reais, sem docker (T7.3 a T7.6 feitas); a Fase 6 está concluída, T6.1 a T6.7; a Fase 5 está concluída, com a T5.7 descartada).
 - Ordem combinada: a Fase 6 segue, pois a Fase 5 está concluída.
-- Suíte: `make check` com 1238 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
+- Suíte: `make check` com 1264 asserts, 0 falhas, e `shellcheck` 0.9.0 limpo em `bin/`, `lib/` e `tests/` (`make lint`).
 - Pendências ainda não confirmadas estão na seção "Adicionais" (TA.2 a TA.13), antes da Fase 8.
 - Arquitetura, convenções, armadilhas já encontradas e a lista de pontos de navegação a validar com usuários estão em `DEVELOPMENT.md` (em inglês). Achados das validações entram aqui como novas tarefas.
 
@@ -17,6 +17,7 @@ O `manifest` descreve o `req`: um utilitário interativo em bash + curl para cad
 - **Código:** organizado em funções, sem scripts procedurais soltos (boas práticas do manifest).
 - **Ambientes:** troca interativa via `:env <nome>`.
 - **Branches (decidido):** uma branch por tarefa, com um ou dois termos em slug-case mais um número sequencial de três dígitos que não recomeça (`log-request-001`, `log-response-002`, ...). A branch de cada tarefa nasce da branch da tarefa anterior (a primeira, da `main`); os merges na `main` são feitos por outro processo, via pull request. Detalhes em `DEVELOPMENT.md`.
+- **Sem docker (decidido):** nem os testes nem as operações do projeto usam docker ou outro container. Os outros ambientes (debian, centos, rhel) são testados direto neles, nunca simulados. Nada de `tests/container.sh` nem de alvo `make container`.
 - **Configuração local por padrão (decidido):** assume-se que o usuário trabalha e configura um projeto local; por isso toda configuração é do projeto (`projects/<id>/config`) e `:config chave=valor` grava ali. A global (`~/.req/config`) é a exceção e exige `-g`; a do projeto vence a global.
 - **Precedência:** variável de ambiente vence o arquivo do ambiente, que vence as variáveis do projeto (ver "Controle central de projetos").
 - **Placeholder ausente:** `${chave}` sem valor gera erro amigável que indica ao usuário como proceder (arquivo e variável esperados, ex.: definir `DEV_URL` ou adicionar `url=...` no arquivo do ambiente `dev` do projeto); a requisição não é enviada.
@@ -165,14 +166,15 @@ Dúvidas e escolhas feitas por padrão enquanto as tarefas seguiam sem parar; ca
 - Q3 (T6.4) O verbose é só a variável `REQ_VERBOSE` (ou `:v` na T6.6); não há chave `verbose` na config nem opção `-v` no `req run`. Decidir se deve haver.
 - Q4 (T6.5) No verbose, a resposta mostra só a linha de status e os headers com `<<`; o corpo continua na exibição normal (formatado), sem `<<`. Decidir se cada linha do corpo também deve levar `<<`.
 - Q5 (T6.6) `:log` e `:v` valem só na sessão e não alteram a configuração (o `:log` sobrepõe a chave `log` até sair). Decidir se `:log`/`:v` devem poder gravar a chave, e se `:v` deve ter uma chave `verbose` (ligada à Q3).
+- Q6 (T7.1/T7.2) Ainda sem validação nos ambientes reais (T7.1/T7.2); as funções usam `declare -g` e outras construções do bash 4.2, mas não há teste em bash 4.0 a 4.3 (por exemplo o CentOS 7, já sem suporte). Decidir se o mínimo declarado deve passar a "bash 4.4+" ou se o teste em um ambiente real com bash 4.2 é necessário.
 
 ### Fase 7 — Portabilidade, qualidade e entrega
-- T7.1 Validação em container debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`.
-- T7.2 Validação em containers centos e rhel, com os mesmos pontos.
+- T7.1 Validação em um ambiente debian com bash 4+ (`make check`), incluindo o editor externo (`vi`), `cp -R`, `rm -rf` e `mktemp -d`. Será feita direto no ambiente real, sem docker nem container.
+- T7.2 Validação nos ambientes centos e rhel, com os mesmos pontos, também direto neles. Achados já feitos e mantidos: o `mock_server.py` usava `ThreadingHTTPServer` (Python 3.7+, o RHEL 8 tem 3.6), o que pulava os testes de execução em silêncio; foi corrigido. Faltar `diffutils` (`cmp`) em instalações mínimas é um ponto a conferir.
 - [x] T7.3 `shellcheck`: corrigir os avisos (feito: `make lint` limpo em `bin/`, `lib/` e `tests/`).
-- T7.4 Documentação de uso.
-- T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do `.req` (`workspace`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
-- T7.6 Teste ponta a ponta do fluxo completo.
+- [x] T7.4 Documentação de uso (README): uso, código de saída do `req run`, seção "The central directory" e correção de trechos desatualizados ("nada é gravado em disco", a chave `log` na tabela de configurações).
+- [x] T7.5 Documentação do formato de arquivos (`parameters`, `raw_data`), do `.req` (`workspace`), do layout de `~/.req` (projetos, ambientes, variáveis, configuração, cursor) e dos ambientes.
+- [x] T7.6 Teste ponta a ponta do fluxo completo: `tests/test_e2e.sh` roda o `bin/req` real num pseudo-terminal (`tests/pty_run.py`, que também cobre a TA.9) com o mock server: `init`, criar a request pelo menu, variáveis e ambientes, `:env`, variável de processo, chave faltante, `:log`, `:v`, `:config log=yes` e `req run`.
 
 ### Adicionais — pendências e ajustes pós-validação (antes da Fase 8)
 Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das validações com usuários: confirmar a necessidade antes de implementar. O que uma validação confirma sai daqui e vira tarefa de uma seção de revisão (ver "Revisão 1"). Origem de cada ponto em `DEVELOPMENT.md`, seção "Open items to validate with users".
@@ -184,7 +186,7 @@ Reúne o que ficou em aberto até aqui. As tarefas de navegação dependem das v
 - ~~TA.6~~ Decidida pela Revisão 3 (R11): a raiz é o `workspace` e lista requests e diretórios; `:n` na raiz cria a request (TR3.4).
 - TA.7 Redimensionamento do terminal: o menu não trata `SIGWINCH`; verificar o redesenho e o apagamento ao redimensionar. Inclui telas mais altas que o terminal (ajuda, detalhes com `raw_data` longo).
 - TA.8 Código de saída de `req run` para respostas 4xx e 5xx (hoje 0; só falha em erro de transporte). Decisão pendente.
-- TA.9 Teste em pseudo-terminal dentro da suíte (init, navegação, `:n`, `:q` e a chamada do editor externo), hoje só feito à mão; requer `python3` e é pulado sem ele.
+- TA.9 Teste em pseudo-terminal dentro da suíte (init, navegação, `:n`, `:q` e a chamada do editor externo), hoje só feito à mão; requer `python3` e é pulado sem ele. **Parcialmente feita pela T7.6** (`tests/pty_run.py`: init, `:n`, navegação, `:env`, `:v`, `:log`, `:config`, `:q`); falta a chamada do editor externo (`:e`).
 - TA.10 `REQ_ESC_TIMEOUT` (50 ms) em conexões lentas, como SSH: validar e documentar o ajuste.
 - TA.11 Validar em terminais reais sem UTF-8 e com `NO_COLOR`; os fallbacks existem, mas só foram testados em teste automatizado.
 - TA.12 Descrição com várias linhas na tela de detalhes (hoje as quebras viram espaço).
@@ -243,4 +245,4 @@ Tarefas:
 `bin/req`, `lib/{core,ui,store,http,nav,cmd,wizard,env,home,log}.sh` (`home.sh`: `~/.req`, projetos, configuração e cursor), `tests/*`, `README.md`, `TASKS.md`.
 
 ## Verificação
-Cada fase termina com seus testes passando e uma demonstração manual: Fase 2 dispara uma request real e mostra tempos; Fase 3 navega com setas/Enter/Esc; Fase 4 cria, edita e duplica requests geradas em disco; Revisão 1 mostra a ajuda `:h`, envia um POST com JSON editado no vim e renomeia, copia e remove diretórios conferindo o `.req`; Revisão 3 inicializa um `.req` com `workspace`, lista a raiz dinamicamente e opera sobre diretórios e requests na raiz; Revisão 2 registra um projeto em `~/.req`, muda uma configuração com `:config` e reabre o `req` no mesmo lugar; Fase 5 troca de ambiente com `:env` e resolve secrets; Fase 6 gera log e verbose com `>>`/`<<`; Fase 7 roda em containers debian/centos.
+Cada fase termina com seus testes passando e uma demonstração manual: Fase 2 dispara uma request real e mostra tempos; Fase 3 navega com setas/Enter/Esc; Fase 4 cria, edita e duplica requests geradas em disco; Revisão 1 mostra a ajuda `:h`, envia um POST com JSON editado no vim e renomeia, copia e remove diretórios conferindo o `.req`; Revisão 3 inicializa um `.req` com `workspace`, lista a raiz dinamicamente e opera sobre diretórios e requests na raiz; Revisão 2 registra um projeto em `~/.req`, muda uma configuração com `:config` e reabre o `req` no mesmo lugar; Fase 5 troca de ambiente com `:env` e resolve secrets; Fase 6 gera log e verbose com `>>`/`<<`; Fase 7 roda direto nos ambientes debian, centos e rhel, sem docker.
