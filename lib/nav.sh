@@ -9,6 +9,7 @@
 # ":" enters command mode (see cmd.sh).
 
 REQ_RAW_MAX_LINES=15    # lines of raw_data shown on the details screen
+REQ_PROBLEMS_MAX_LINES=10   # problems listed on the details of an invalid request
 REQ_ESC_TIMEOUT=0.05    # wait for bytes after ESC to tell an arrow key from a bare Esc
 REQ_INPUT_FD=0          # descriptor the keys are read from
 REQ_KEY=""              # last key read: up, down, enter, esc, or the character itself
@@ -269,7 +270,8 @@ req_nav_build_list() {
 # req_nav_build_detail - builds REQ_SCREEN_LINES with the open request's details.
 # Invalid requests show their problems instead of the fields and do not run.
 req_nav_build_detail() {
-    local f=$REQ_DETAIL_FILE abs cols width c_dim c_bold c_reset problems line
+    local f=$REQ_DETAIL_FILE abs cols width c_dim c_bold c_reset problems line i
+    local -a plist=()
     cols=$(req_term_cols); width=$(( cols - 4 ))
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
@@ -277,13 +279,20 @@ req_nav_build_detail() {
     if ! problems=$(req_request_check "$f" 2>&1); then
         REQ_DETAIL_VALID=0
         abs=$(req_abs_path "$f")
-        REQ_SCREEN_LINES+=("$(req_color err)Invalid request:${c_reset}")
-        req_screen_add_long "$abs"      # whole and on its own line, ready to copy
         while IFS= read -r line; do
             line=${line#"req: error: $abs: "}
             line=${line#"req: error: "}
-            REQ_SCREEN_LINES+=("  $(req_trunc "$line" "$width")")
+            plist+=("$line")
         done <<<"$problems"
+        # pinned at the top: the first problem and how many more there are
+        REQ_SCREEN_LINES+=("$(req_notification_bar "$(req_notification_more "invalid request: ${plist[0]}" $(( ${#plist[@]} - 1 )))")")
+        REQ_SCREEN_LINES+=("$(req_color err)Invalid request:${c_reset}")
+        req_screen_add_long "$abs"      # whole and on its own line, ready to copy
+        for (( i = 0; i < ${#plist[@]} && i < REQ_PROBLEMS_MAX_LINES; i++ )); do
+            REQ_SCREEN_LINES+=("  $(req_trunc "${plist[i]}" "$width")")
+        done
+        (( ${#plist[@]} > REQ_PROBLEMS_MAX_LINES )) &&
+            REQ_SCREEN_LINES+=("  ... ($(( ${#plist[@]} - REQ_PROBLEMS_MAX_LINES )) more)")
         REQ_SCREEN_LINES+=("${c_dim}Fix the file and open it again.   Esc back${c_reset}")
         return 0
     fi

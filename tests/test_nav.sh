@@ -280,11 +280,31 @@ test_detail_invalid() {
     assert_eq "0" "$REQ_DETAIL_VALID" "an invalid request is flagged"
     assert_contains "Invalid request" "$out" "shows the problem"
     assert_contains 'unknown field "retries"' "$out" "shows the reason"
-    assert_eq "$PROJ/api/broken.get.json" "${REQ_SCREEN_LINES[1]}" "the absolute path is on its own line, ready to copy"
+    assert_eq "$PROJ/api/broken.get.json" "${REQ_SCREEN_LINES[2]}" "the absolute path is on its own line, ready to copy"
     assert_eq "0" "$REQ_SCREEN_EXTRA" "a path that fits adds no extra rows"
+    assert_contains '! invalid request: unknown field "retries"' "${REQ_SCREEN_LINES[0]}" "the first problem is pinned at the top, in a bar"
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[0]} <= 59 ))" "cut to fit the terminal"
     assert_eq "" "$(req_nav_handle enter 2>&1)" "Enter does not run an invalid request"
     assert_eq "detail" "$REQ_VIEW" "stays on the details"
     req_nav_handle esc; assert_eq "list" "$REQ_VIEW" "Esc goes back"
+}
+
+test_invalid_many_problems() {
+    echo "nav: an invalid request with many problems"
+    make_project
+    local f=$PROJ/api/lots.get.json i fields="" out
+    for i in $(seq 1 12); do fields+=",\"field_made_up_$i\":1"; done
+    printf '{"name":"lots","method":"GET","url":"http://example.com"%s}\n' "$fields" >"$f"
+    req_nav_init "$PROJ/.req"
+    REQ_DETAIL_FILE=$f
+    COLUMNS=100 screen detail; out=$OUT
+    assert_contains '! invalid request: unknown field "field_made_up_1"' "${REQ_SCREEN_LINES[0]}" "the bar starts with the first problem"
+    assert_eq " (+11 more)" "${REQ_SCREEN_LINES[0]: -11}" "and ends with the count of the others, never cut"
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[0]} <= 99 ))" "inside the terminal width"
+    assert_eq "$f" "${REQ_SCREEN_LINES[2]}" "the path stays whole"
+    assert_eq "$(( REQ_PROBLEMS_MAX_LINES ))" "$(grep -c '^  unknown field' <<<"$out")" "only the first problems are listed"
+    assert_contains "  ... (2 more)" "$out" "and the rest is counted"
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[@]} <= REQ_PROBLEMS_MAX_LINES + 5 ))" "so the screen stays short"
 }
 
 test_invalid_long_path() {
@@ -298,7 +318,7 @@ test_invalid_long_path() {
     req_nav_handle enter
     COLUMNS=20 screen detail
     path=$PROJ/api/broken.get.json; len=${#path}
-    assert_eq "$path" "${REQ_SCREEN_LINES[1]}" "the path is never truncated, even on a narrow terminal"
+    assert_eq "$path" "${REQ_SCREEN_LINES[2]}" "the path is never truncated, even on a narrow terminal"
     assert_eq "$(( (len - 1) / 20 ))" "$REQ_SCREEN_EXTRA" "the rows its wrapping takes are counted for the redraw"
     assert_eq "1" "$(( REQ_SCREEN_EXTRA > 0 ))" "and a long path does wrap here"
     # The redraw count covers lines plus wrapped rows (only tracked on a terminal).
@@ -1265,6 +1285,7 @@ test_detail_screen
 test_detail_params
 test_detail_raw_data
 test_detail_invalid
+test_invalid_many_problems
 test_invalid_long_path
 test_truncate_scroll
 test_empty_project

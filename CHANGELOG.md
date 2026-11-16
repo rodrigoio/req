@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   menu. Confirmations stay under the menu.
 - Show the warnings raised while the menu is open (a bad line in a settings file, a log that cannot be
   written) in that bar too, instead of printing them in the terminal. `req run` still prints them to stderr.
+- Pin the first problem of an invalid request at the top of its details screen and list at most 10 of its
+  problems, so a file with many problems no longer fills the terminal.
 
 ## [0.3.0] - 2026-11-16
 

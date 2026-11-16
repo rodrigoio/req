@@ -41,6 +41,15 @@ req_notification_bar() {
     printf '%s %s%*s%s' "$(req_color notification)" "$text" "$pad" '' "$(req_color reset)"
 }
 
+# req_notification_more <text> <n> - the text for a bar that is one of several: the text cut to the
+# width, never the " (+N more)" that follows it (nothing is added when n is 0).
+req_notification_more() {
+    local suffix=""
+    (( $2 > 0 )) && suffix=" (+$2 more)"
+    # what a bar leaves for the text, with or without colors, once the suffix is there
+    printf '%s%s' "$(req_trunc "$1" $(( $(req_term_cols) - 3 - ${#suffix} )))" "$suffix"
+}
+
 # req_notification_collect - fills REQ_NOTIFICATION_LINES with the bars of this draw: every
 # producer that exists is called, in order. It runs once per draw, before the screen is built,
 # so the list knows how many rows the bars take and a one-shot producer spends its message here.
@@ -117,11 +126,9 @@ req_notification_warn() {
 # after the persistent one): the held warning becomes a bar and is spent, so the next draw has
 # none. A cut to the width falls on the message, never on the "(+N more)" that follows it.
 req_notification_warn_lines() {
-    local text suffix="" room
+    local text
     [[ -n $REQ_NOTIFICATION_WARN ]] || return 0
-    (( REQ_NOTIFICATION_WARN_MORE > 0 )) && suffix=" (+$REQ_NOTIFICATION_WARN_MORE more)"
-    room=$(( $(req_term_cols) - 3 - ${#suffix} ))     # what a bar leaves for the text, with or without colors
-    text="$(req_trunc "$REQ_NOTIFICATION_WARN" "$room")$suffix"
+    text=$(req_notification_more "$REQ_NOTIFICATION_WARN" "$REQ_NOTIFICATION_WARN_MORE")
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
     REQ_NOTIFICATION_LINES+=("$(req_notification_bar "$text")")
     return 0

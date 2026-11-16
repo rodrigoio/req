@@ -300,12 +300,24 @@ test_warn_routing() {
     rm -f "$errfile"
 }
 
+test_more() {
+    echo "notification: the text of a bar that is one of several"
+    local COLUMNS=30
+    assert_eq "a short text" "$(req_notification_more "a short text" 0)" "nothing is added when there are no others"
+    assert_eq "a short text (+3 more)" "$(req_notification_more "a short text" 3)" "the count follows the text"
+    assert_eq "a long text that~ (+3 more)" "$(req_notification_more "a long text that is cut because it does not fit" 3)" "a long text is cut, never the count"
+    local cut
+    cut=$(req_notification_more "a long text that is cut because it does not fit" 3)
+    assert_eq "1" "$(( ${#cut} <= 27 ))" "and the whole fits a bar of 30 columns"
+}
+
 test_color
 test_bar_with_colors
 test_bar_without_colors
 test_collect
 test_persistent
 test_warning
+test_more
 test_root_notice
 test_warn_routing
 test_overlay
