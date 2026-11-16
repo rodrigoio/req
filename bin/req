@@ -35,6 +35,8 @@ main() {
     source "$REQ_HOME/lib/http.sh"
     # shellcheck source=lib/nav.sh
     source "$REQ_HOME/lib/nav.sh"
+    # shellcheck source=lib/notification.sh
+    source "$REQ_HOME/lib/notification.sh"
     # shellcheck source=lib/wizard.sh
     source "$REQ_HOME/lib/wizard.sh"
     # shellcheck source=lib/cmd.sh

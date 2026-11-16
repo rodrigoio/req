@@ -10,8 +10,9 @@ req_colors_enabled() {
     [[ $REQ_COLORS == 1 ]]
 }
 
-# req_color <get|post|put|patch|delete|ok|warn|err|orange|sel|reset|bold|dim> - emits the ANSI sequence.
-# `sel` is the menu selection highlight: bold bright green.
+# req_color <get|post|put|patch|delete|ok|warn|err|orange|sel|notification|reset|bold|dim> - emits the ANSI sequence.
+# `sel` is the menu selection highlight: bold bright green. `notification` is a bar at the top
+# of the menu: black letters (256-color 16, true black in any theme) on the same orange as `orange`.
 req_color() {
     req_colors_enabled || return 0
     case ${1,,} in
@@ -25,6 +26,7 @@ req_color() {
         err)    printf '\033[31m' ;;
         orange) printf '\033[38;5;208m' ;;
         sel)    printf '\033[1;92m' ;;
+        notification) printf '\033[38;5;16;48;5;208m' ;;
         bold)   printf '\033[1m' ;;
         dim)    printf '\033[2m' ;;
         reset)  printf '\033[0m' ;;
