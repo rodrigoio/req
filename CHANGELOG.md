@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Warn with a persistent bar at the top of the screen, at every screen, when `req` runs as root, since the
+  files you create or edit could end up owned by root and upset the owner and permissions of your project.
+
 ### Changed
 
 - Show an incorrect command (an unknown command, nothing selected, a wrong usage, an invalid setting or

@@ -131,6 +131,7 @@ req_nav_init() {
     REQ_CUR_DIR=""; REQ_STACK_DIR=(); REQ_STACK_SEL=()
     REQ_VIEW=list; REQ_DETAIL_FILE=""; REQ_DETAIL_VALID=0
     REQ_CMD_ACTIVE=0; REQ_CMD_BUF=""; REQ_STATUS=""; REQ_QUIT=0; REQ_NAV_DIRTY=1
+    req_notification_register root req_notification_root_check     # a persistent notice, only for root
     req_nav_load
 }
 

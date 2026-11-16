@@ -125,3 +125,19 @@ req_notification_warn_lines() {
     REQ_NOTIFICATION_LINES+=("$(req_notification_bar "$text")")
     return 0
 }
+
+# --- the root user's notice -------------------------------------------------------
+
+# req_notification_is_root - succeeds when req runs as root (the tests redefine it, so they do not
+# depend on who runs them).
+req_notification_is_root() {
+    (( EUID == 0 ))
+}
+
+# req_notification_root_check - the check of the persistent notice for the root user: files created
+# or edited in the session can end up owned by root, which upsets the owner and the permissions of
+# the project's files. Registered by req_nav_init; the text fits an 80-column bar.
+req_notification_root_check() {
+    req_notification_is_root || return 1
+    REQ_NOTIFICATION_TEXT="running as root: files you create or edit may end up owned by root, not you"
+}
