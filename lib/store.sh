@@ -1,0 +1,319 @@
+#!/usr/bin/env bash
+# store.sh - request persistence (<name>.<method>.json) and the .req project file.
+#
+# Request format:
+#   {"name": "list-users", "method": "GET", "url": "https://api/users",
+#    "description": "...", "headers": {}, "query": {}, "parameters": {}, "raw_data": ...}
+#
+# - `name` is a slug (lowercase letters, digits and hyphens) identical to the
+#   file name; it is also the label shown in the menu.
+# - `name`, `method` and `url` are required; the other fields are optional.
+# - headers, query and parameters are objects with simple values (string,
+#   number or boolean).
+# - raw_data is the raw body: an object or list (JSON) or a string (any other text).
+# Any unknown field or wrong type invalidates the request; the file is never
+# changed, the error is only reported.
+
+REQ_METHODS=(GET POST PUT PATCH DELETE)
+REQ_PROJECT_FILE=.req
+
+# Content checks (independent of the file name): prints one problem per line.
+# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
+# jq definition shared by the schema, the display and the request preparation: the
+# "leaves" of a (possibly nested) query value, as [name, text] pairs. An object adds
+# "[key]" to the name and a list adds "[]": {"f":{"a":1},"t":["x","y"]} gives f[a]=1,
+# t[]=x and t[]=y (empty objects and lists give nothing).
+# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
+REQ_JQ_LEAVES='
+def leaves($p):
+    if type == "object" then (to_entries[] | .key as $k | .value | leaves(if $p == "" then $k else "\($p)[\($k)]" end))
+    elif type == "array" then (.[] | leaves("\($p)[]"))
+    else [$p, tostring] end;
+'
+
+# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
+REQ_SCHEMA_JQ='
+def scalar: type == "string" or type == "number" or type == "boolean";
+def nested_ok: scalar or (type == "object" and all(.[]; nested_ok)) or (type == "array" and all(.[]; nested_ok));
+def check_map($lbl; $item):
+    if type != "object" then "field \"\($lbl)\" must be an object"
+    else to_entries[] | select((.value | scalar) | not)
+         | "\($item) \"\(.key)\": the value must be a string, number or boolean" end;
+["name", "method", "url", "description", "headers", "query", "parameters", "raw_data", "timeout", "follow_redirects", "insecure", "files"] as $allowed
+| if type != "object" then "the root must be an object"
+  else
+    (keys[] | select(. as $k | $allowed | index($k) | not)
+        | if . == "data_parameter" then "field \"data_parameter\" was renamed to \"parameters\""
+          elif . == "data_string" then "field \"data_string\" was renamed to \"raw_data\""
+          else "unknown field \"\(.)\" (allowed: \($allowed | join(", ")))" end),
+    (if (.name | type) != "string" then "field \"name\" is required (string)"
+     elif (.name | test("^[a-z0-9]+(-[a-z0-9]+)*$") | not)
+         then "field \"name\" must be a slug: lowercase letters, digits and hyphens (e.g. list-users)"
+     else empty end),
+    (if (.method | type) != "string" then "field \"method\" is required (string)" else empty end),
+    (if (.url | type) != "string" or .url == "" then "field \"url\" is required (string)" else empty end),
+    (if has("description") and (.description | type) != "string"
+         then "field \"description\" must be a string" else empty end),
+    (if has("headers") then
+        (.headers | check_map("headers"; "header")),
+        (if (.headers | type) == "object" then
+            .headers | to_entries[]
+            | if (.key | test("^[A-Za-z0-9!#$%&*+.^_|~-]+$") | not)
+                  then "header \"\(.key)\": invalid name"
+              elif (.value | type) == "string" and (.value | test("[\r\n]"))
+                  then "header \"\(.key)\": the value must not contain line breaks"
+              else empty end
+         else empty end)
+     else empty end),
+    (if has("query") then
+        (if (.query | type) != "object" then "field \"query\" must be an object"
+         else .query | to_entries[] | select((.value | nested_ok) | not)
+              | "query \"\(.key)\": the value must be a string, number or boolean, or a list or object of them" end)
+     else empty end),
+    (if has("parameters") then (.parameters | check_map("parameters"; "parameters")) else empty end),
+    (if has("timeout") and ((.timeout | type) != "number" or .timeout <= 0)
+         then "field \"timeout\" must be a positive number of seconds" else empty end),
+    (if has("follow_redirects") and (.follow_redirects | type) != "boolean"
+         then "field \"follow_redirects\" must be true or false" else empty end),
+    (if has("files") then
+        (.files | if type != "object" then "field \"files\" must be an object (field name -> file path)"
+                  else to_entries[] | select((.value | type) != "string" or .value == "")
+                       | "files \"\(.key)\": the value must be a file path" end),
+        (if (.files | type) == "object" and (.files | length) > 0
+             and ((.raw_data // "") | . != "" and . != {} and . != [])
+             then "\"files\" and \"raw_data\" cannot be used together (files are sent as a multipart form, with \"parameters\")"
+             else empty end)
+     else empty end),
+    (if has("insecure") and (.insecure | type) != "boolean"
+         then "field \"insecure\" must be true or false" else empty end),
+    (if has("raw_data") and ((.raw_data | type) as $t | $t != "object" and $t != "array" and $t != "string")
+         then "field \"raw_data\" must be an object, a list or a string" else empty end)
+  end'
+
+# req_valid_method <method> - succeeds for a supported method (any case).
+req_valid_method() {
+    local m
+    for m in "${REQ_METHODS[@]}"; do
+        [[ ${1^^} == "$m" ]] && return 0
+    done
+    return 1
+}
+
+# req_valid_name <name> - slug: lowercase letters, digits and hyphens (e.g. list-users).
+req_valid_name() {
+    [[ $1 =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]
+}
+
+# req_request_filename <name> <method> - prints "<name>.<lowercase method>.json".
+req_request_filename() {
+    printf '%s.%s.json' "$1" "${2,,}"
+}
+
+# req_parse_filename <file> - prints "<name>\t<METHOD>", or fails if the file
+# does not follow <slug>.<method>.json with a supported method.
+req_parse_filename() {
+    local base=${1##*/} stem method
+    [[ $base == *.*.json ]] || return 1
+    stem=${base%.json}
+    method=${stem##*.}
+    req_valid_method "$method" || return 1
+    req_valid_name "${stem%.*}" || return 1
+    printf '%s\t%s\n' "${stem%.*}" "${method^^}"
+}
+
+# Full check in a single jq call: the first two output lines are name and method
+# (empty when missing or not a string), the rest are content problems, one per line.
+REQ_CHECK_JQ='
+(if type == "object" then
+    (.name   | if type == "string" then gsub("[\r\n]"; " ") else "" end),
+    (.method | if type == "string" then gsub("[\r\n]"; " ") else "" end)
+ else "", "" end),
+('"$REQ_SCHEMA_JQ"')'
+
+# Request fields for display, as "tag NUL value NUL" records.
+# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
+REQ_FIELDS_JQ=$REQ_JQ_LEAVES'
+(["name", (.name // "")], ["method", (.method // "")], ["url", (.url // "")],
+ ["description", (.description // "")],
+ ((.headers // {})        | to_entries[] | ["h", "\(.key): \(.value)"]),
+ ((.query // {})          | to_entries[] | .key as $k | .value | leaves($k) | ["q", "\(.[0])=\(.[1])"]),
+ ((.parameters // {}) | to_entries[] | ["p", "\(.key)=\(.value)"]),
+ ((.raw_data // "") as $r
+  | if $r == "" then empty
+    elif ($r | type) == "string" then ["rawtext", $r]
+    else ["rawjson", ($r | tojson)] end))
+| .[] | (., "\u0000")'
+
+REQ_F_NAME=""; REQ_F_METHOD=""; REQ_F_URL=""; REQ_F_DESC=""
+REQ_F_HEADERS=(); REQ_F_QUERY=(); REQ_F_PARAMS=()
+REQ_F_RAW=""        # raw_data as text: indented JSON for an object or list, else the string
+REQ_F_RAW_SET=0     # 1 when the request has a non-empty raw_data
+
+# shellcheck disable=SC2034  # REQ_F_* are read by nav.sh
+# req_request_fields <file> - reads the fields of an already validated request in
+# a single jq call and fills REQ_F_NAME, REQ_F_METHOD, REQ_F_URL, REQ_F_DESC and
+# the arrays REQ_F_HEADERS ("key: value"), REQ_F_QUERY and REQ_F_PARAMS ("key=value"),
+# plus REQ_F_RAW and REQ_F_RAW_SET for raw_data.
+req_request_fields() {
+    local tag val
+    REQ_F_NAME=""; REQ_F_METHOD=""; REQ_F_URL=""; REQ_F_DESC=""
+    REQ_F_HEADERS=(); REQ_F_QUERY=(); REQ_F_PARAMS=(); REQ_F_RAW=""; REQ_F_RAW_SET=0
+    while IFS= read -r -d '' tag && IFS= read -r -d '' val; do
+        case $tag in
+            name)        REQ_F_NAME=$val ;;
+            method)      REQ_F_METHOD=${val^^} ;;
+            url)         REQ_F_URL=$val ;;
+            description) REQ_F_DESC=$val ;;
+            h)           REQ_F_HEADERS+=("$val") ;;
+            q)           REQ_F_QUERY+=("$val") ;;
+            p)           REQ_F_PARAMS+=("$val") ;;
+            rawtext)     REQ_F_RAW=$val; REQ_F_RAW_SET=1 ;;
+            rawjson)     REQ_F_RAW=$(jq . <<<"$val"); REQ_F_RAW_SET=1 ;;
+        esac
+    done < <(jq -j "$REQ_FIELDS_JQ" "$1")
+}
+
+# req_request_check <file> - validates the JSON, fields, types and consistency
+# with the file name. Prints each problem to stderr; succeeds if there are none.
+# Invalid JSON is only reported, the file is never changed.
+req_request_check() {
+    local file=$1 abs out status line parsed stem fmethod jname jmethod
+    local lines=() problems=()
+    abs=$(req_abs_path "$file")     # messages carry the absolute path, easy to copy
+    out=$(jq -r "$REQ_CHECK_JQ" "$file" 2>&1); status=$?
+    if (( status != 0 )) && [[ $out == *"parse error"* ]]; then
+        req_err "$abs: invalid JSON: $out"
+        return 1
+    elif (( status != 0 )); then
+        req_err "$abs: cannot validate: $out"
+        return 1
+    fi
+    mapfile -t lines <<<"$out"
+    jname=${lines[0]}
+    jmethod=${lines[1]}
+    problems=("${lines[@]:2}")
+
+    if [[ ${problems[0]-} != *"the root must be"* ]]; then
+        if [[ -n $jmethod ]] && ! req_valid_method "$jmethod"; then
+            problems+=("method \"$jmethod\" is not supported (use ${REQ_METHODS[*]})")
+        fi
+        if parsed=$(req_parse_filename "$file"); then
+            stem=${parsed%%$'\t'*}
+            fmethod=${parsed#*$'\t'}
+            if [[ -n $jname && $jname != "$stem" ]]; then
+                problems+=("field \"name\" (\"$jname\") differs from the file name (\"$stem\")")
+            fi
+            if [[ -n $jmethod ]] && req_valid_method "$jmethod" && [[ $fmethod != "${jmethod^^}" ]]; then
+                problems+=("method \"$jmethod\" differs from the file name ($fmethod)")
+            fi
+        else
+            problems+=("file name does not follow <slug>.<method>.json")
+        fi
+    fi
+
+    (( ${#problems[@]} == 0 )) && return 0
+    for line in "${problems[@]}"; do
+        req_err "$abs: $line"
+    done
+    return 1
+}
+
+# req_request_template <name> <method> <url> - prints a new request as JSON.
+req_request_template() {
+    jq -n --arg name "$1" --arg method "${2^^}" --arg url "$3" '{
+        name: $name, method: $method, url: $url, description: "",
+        headers: {}, query: {}, parameters: {}
+    }'
+}
+
+# req_request_write <directory> <name> <method> <url> [json]
+# Atomically writes the request as valid JSON and prints the created path.
+# [json] carries the optional fields (description, headers, query, parameters);
+# name, method and url come from the arguments and take precedence. If the
+# result fails validation, nothing is written.
+req_request_write() {
+    local dir=$1 name=$2 method=$3 url=$4 json=${5-} target tmp problems line
+    req_valid_name "$name" || {
+        req_err "invalid name: \"$name\" (use a slug: lowercase letters, digits and hyphens)"; return 1; }
+    req_valid_method "$method" || {
+        req_err "invalid method: \"$method\" (use ${REQ_METHODS[*]})"; return 1; }
+    [[ -n $url ]] || { req_err "the url is required"; return 1; }
+    [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
+
+    [[ -n $json ]] || json=$(req_request_template "$name" "$method" "$url")
+    target=$dir/$(req_request_filename "$name" "$method")
+    tmp=$(mktemp "$dir/.req.XXXXXX") || { req_err "cannot write to $dir"; return 1; }
+    if ! jq --arg name "$name" --arg method "${method^^}" --arg url "$url" \
+            '{name: $name, method: $method, url: $url} + del(.name, .method, .url)' <<<"$json" >"$tmp" 2>/dev/null; then
+        rm -f "$tmp"
+        req_err "the JSON of request \"$name\" is invalid; nothing was written"
+        return 1
+    fi
+    problems=$(jq -r "$REQ_SCHEMA_JQ" "$tmp") || {
+        rm -f "$tmp"; req_err "failed to validate request \"$name\""; return 1; }
+    if [[ -n $problems ]]; then
+        rm -f "$tmp"
+        while IFS= read -r line; do
+            req_err "request \"$name\": $line"
+        done <<<"$problems"
+        return 1
+    fi
+    mv "$tmp" "$target" && printf '%s\n' "$target"
+}
+
+# req_request_get <file> <field> - prints a field's value (raw text).
+# Missing fields become {} (headers, query, parameters) or empty (others).
+req_request_get() {
+    case $2 in
+        headers|query|parameters) jq -c --arg f "$2" '.[$f] // {}' "$1" ;;
+        *) jq -r --arg f "$2" '.[$f] // ""' "$1" ;;
+    esac
+}
+
+# req_project_find [directory] - prints the path of the .req in the directory (default: current).
+req_project_find() {
+    local file=${1:-.}/$REQ_PROJECT_FILE
+    [[ -f $file ]] || return 1
+    printf '%s\n' "$file"
+}
+
+# req_project_init [directory] - creates the .req file of a new project, and nothing
+# else: a comment and "workspace=." (the working directory, relative to the .req; "." is
+# the folder itself). Fails if the directory does not exist or already has a .req.
+req_project_init() {
+    local dir=${1:-.} file
+    file=$dir/$REQ_PROJECT_FILE
+    [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
+    [[ ! -e $file ]] || { req_err "$file already exists"; return 1; }
+    if ! printf '%s\n' \
+            '# req project: this folder was initialized with req.' \
+            '# workspace: the directory req works on, relative to this folder ("." is the folder itself).' \
+            'workspace=.' >"$file" 2>/dev/null; then
+        req_err "cannot write to $dir"
+        return 1
+    fi
+}
+
+# req_list_dir <directory> - lists the contents, subdirectories first and then
+# requests, each group in alphabetical order. One TAB-separated entry per line:
+#   d  <name>             <path>
+#   r  <name>  <METHOD>   <path>
+# Hidden items and files not matching <slug>.<method>.json are ignored.
+req_list_dir() {
+    local dir=${1%/} entry name parsed
+    [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
+    (
+        shopt -s nullglob
+        export LC_ALL=C
+        for entry in "$dir"/*/; do
+            entry=${entry%/}
+            printf 'd\t%s\t%s\n' "${entry##*/}" "$entry"
+        done | sort -t$'\t' -k2,2
+        for entry in "$dir"/*.json; do
+            [[ -f $entry ]] || continue
+            parsed=$(req_parse_filename "$entry") || continue
+            name=${parsed%%$'\t'*}
+            printf 'r\t%s\t%s\t%s\n' "$name" "${parsed#*$'\t'}" "$entry"
+        done | sort -t$'\t' -k2,2 -k3,3
+    )
+}

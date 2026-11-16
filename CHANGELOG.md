@@ -1,0 +1,30 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-11-16
+
+### Added
+
+- Register, browse and fire HTTP requests from an interactive terminal menu, with requests kept as plain
+  JSON files in your project folder.
+- Run a single request without the menu with `req run <file>`, which shows the response and a timing
+  profile (DNS, TCP, TLS, wait, download, total).
+- Start a project with `req init`, or accept the offer when `req` opens a folder that has none.
+- Create, edit, duplicate, copy, rename and remove requests and directories from the menu (`:n`, `:e`,
+  `:d`, `:cp`, `:ed`, `:nd`, `:rm`), with the body opened in your editor.
+- Use variables in requests with `${key}` placeholders, resolved from per-project environments and
+  switched with `:env`.
+- Tune behavior with project and global settings through `:config` (timing display, cursor restore,
+  redirect limit, log size).
+- Keep an optional log of requests and responses per project (`:log`), and show the data being sent
+  with the verbose mode (`:v`).
+- Show the installed version with `req --version`.
+
+[unreleased]: https://github.com/rodrigoio/req/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/rodrigoio/req/releases/tag/v0.1.0

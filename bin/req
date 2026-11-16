@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# req - The interactive request tool for your terminal.
+
+# req_resolve_home - installation root directory, following symlinks.
+req_resolve_home() {
+    local src=${BASH_SOURCE[0]} dir
+    while [[ -L $src ]]; do
+        dir=$(cd -P "$(dirname "$src")" && pwd)
+        src=$(readlink "$src")
+        [[ $src == /* ]] || src=$dir/$src
+    done
+    cd -P "$(dirname "$src")/.." && pwd
+}
+
+req_usage() {
+    cat <<'USAGE'
+usage: req                  open the interactive menu (uses the .req in the current directory)
+       req init             initialize a req project in the current directory
+       req run <file>       run a request and show the result
+       req --version | --help
+USAGE
+}
+
+main() {
+    REQ_HOME=$(req_resolve_home)
+    # shellcheck source=version.sh
+    source "$REQ_HOME/version.sh"
+    # shellcheck source=lib/core.sh
+    source "$REQ_HOME/lib/core.sh"
+    # shellcheck source=lib/ui.sh
+    source "$REQ_HOME/lib/ui.sh"
+    # shellcheck source=lib/store.sh
+    source "$REQ_HOME/lib/store.sh"
+    # shellcheck source=lib/http.sh
+    source "$REQ_HOME/lib/http.sh"
+    # shellcheck source=lib/nav.sh
+    source "$REQ_HOME/lib/nav.sh"
+    # shellcheck source=lib/wizard.sh
+    source "$REQ_HOME/lib/wizard.sh"
+    # shellcheck source=lib/cmd.sh
+    source "$REQ_HOME/lib/cmd.sh"
+    # shellcheck source=lib/env.sh
+    source "$REQ_HOME/lib/env.sh"
+    # shellcheck source=lib/home.sh
+    source "$REQ_HOME/lib/home.sh"
+    # shellcheck source=lib/config.sh
+    source "$REQ_HOME/lib/config.sh"
+    # shellcheck source=lib/log.sh
+    source "$REQ_HOME/lib/log.sh"
+
+    case ${1-} in
+        -v|--version) printf 'req %s\n' "$REQ_VERSION"; return 0 ;;
+        -h|--help)    req_usage; return 0 ;;
+    esac
+
+    req_check_bash
+    req_check_deps
+    req_setup_traps
+    req_config_load || true     # warnings only: a bad setting never stops req
+
+    case ${1-} in
+        init)
+            req_project_init . || return 1
+            req_project_activate . || true     # only a warning: the project itself exists
+            printf 'Initialized req project in %s\n  %s (workspace: .)\n' "$PWD" "$REQ_PROJECT_FILE"
+            printf 'Use :n to create a new request.\n'
+            ;;
+        run)
+            [[ -n ${2-} ]] || req_die "usage: req run <file.<method>.json>"
+            # The project of the current folder, if it is registered, gives the environment files.
+            if req_project_find . >/dev/null; then REQ_PROJECT_ID=$(req_project_find_id .) || REQ_PROJECT_ID=""; fi
+            req_config_load_local || true
+            req_run_request "$2"
+            ;;
+        '')
+            req_nav_start
+            ;;
+        *)
+            req_usage >&2
+            return 1
+            ;;
+    esac
+}
+
+main "$@"
