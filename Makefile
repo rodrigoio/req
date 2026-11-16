@@ -24,24 +24,3 @@ lint: ## Run shellcheck (if installed) and check syntax
 
 check: lint test ## Lint + tests
 
-build: ## Build release/req.sh, the whole tool in one file
-	@./build.sh
-
-install: ## Install a symlink at $(BINDIR)/req
-	@mkdir -p "$(DESTDIR)$(BINDIR)"
-	@ln -sf "$(SRC)" "$(TARGET)"
-	@echo "installed: $(TARGET) -> $(SRC)"
-	@case ":$$PATH:" in \
-		*":$(BINDIR):"*) ;; \
-		*) echo "warning: $(BINDIR) is not in your PATH; add this to your shell profile:"; \
-		   echo "  export PATH=\"$(BINDIR):\$$PATH\"" ;; \
-	esac
-
-uninstall: ## Remove the symlink, if it points to this project
-	@if [ -L "$(TARGET)" ] && [ "$$(readlink "$(TARGET)")" = "$(SRC)" ]; then \
-		rm "$(TARGET)" && echo "removed: $(TARGET)"; \
-	elif [ -e "$(TARGET)" ] || [ -L "$(TARGET)" ]; then \
-		echo "refused: $(TARGET) does not point to $(SRC)"; exit 1; \
-	else \
-		echo "nothing to remove: $(TARGET)"; \
-	fi
