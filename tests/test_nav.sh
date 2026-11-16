@@ -26,6 +26,8 @@ source "$ROOT/lib/http.sh"
 # shellcheck source=/dev/null
 source "$ROOT/lib/nav.sh"
 # shellcheck source=/dev/null
+source "$ROOT/lib/notification.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/wizard.sh"
 # shellcheck source=/dev/null
 source "$ROOT/lib/cmd.sh"
@@ -338,6 +340,33 @@ test_empty_project() {
     req_nav_init "$p/missing" 2>/dev/null; assert_eq "1" "$?" "a missing .req fails"
 }
 
+# A producer made up for the tests: one bar above every screen (the real ones come later).
+nav_test_producer_bar() { REQ_NOTIFICATION_LINES+=("$(req_notification_bar "a bar made up for the test")"); }
+# A persistent notification made up for the tests, registered the way a feature will do it.
+nav_test_check_notice() { REQ_NOTIFICATION_TEXT="a persistent notice made up for the test"; }
+
+test_notification_bars() {
+    echo "nav: notification bars"
+    local p=$TMP/bars out first="! a bar made up for the test" nl=$'\n'
+    local saved=("${REQ_NOTIFICATION_PRODUCERS[@]}")
+    mkdir -p "$p"; : >"$p/.req"
+    req_request_write "$p" ping GET "http://127.0.0.1:1/x" >/dev/null
+
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "req" "$(head -n 1 <<<"$out" | cut -c1-3)" "with no producer defined the screen starts at the header"
+
+    REQ_NOTIFICATION_PRODUCERS=(nav_test_producer_bar)
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "$first" "$(head -n 1 <<<"$out")" "a bar is the first line of the screen"
+    assert_contains "${first}${nl}req " "$out" "the list header comes right below it"
+    assert_contains "${first}${nl}GET    ping" "$out" "the details screen has the bar too"
+    assert_eq "2" "$(grep -c -F "$first" <<<"$out")" "one bar per draw: the list and the details"
+
+    out=$(keys : h enter | req_nav_run "$p/.req" 2>&1)
+    assert_contains "${first}${nl}req help" "$out" "the help screen has the bar too"
+    REQ_NOTIFICATION_PRODUCERS=("${saved[@]}")
+}
+
 test_end_to_end() {
     echo "nav: full flow (local mock)"
     command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
@@ -359,6 +388,14 @@ test_end_to_end() {
     assert_contains "============================================================" "$out" "separator after the result"
     assert_eq "2" "$(grep -c '^HTTP 200' <<<"$out")" "a second Enter on the details runs again"
     assert_eq "3" "$(grep -c '^Enter run' <<<"$out")" "details redrawn after each result"
+
+    local notice="! a persistent notice made up for the test" rule
+    rule=$(printf '=%.0s' {1..60})
+    req_notification_register nav-test nav_test_check_notice
+    out=$(keys enter enter enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "4" "$(grep -c -F "$notice" <<<"$out")" "a persistent notification is on every draw: root, directory, details and details after the run"
+    assert_contains "$notice" "${out#*"$rule"}" "and it is reprinted below the result of a request"
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
 }
 
 # type <chars...> - sends each character to the handler, as the main loop would.
@@ -1186,5 +1223,6 @@ test_cursor_saved
 test_cursor_restore
 test_review2_flow
 test_start_init
+test_notification_bars
 test_end_to_end
 test_summary

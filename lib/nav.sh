@@ -235,7 +235,8 @@ req_nav_build_list() {
     if (( n == 0 )); then
         REQ_SCREEN_LINES+=("  ${c_dim}(empty)${c_reset}")
     else
-        visible=$(( rows - 4 )); (( visible < 3 )) && visible=3
+        # the bars at the top (REQ_NOTIFICATION_LINES, notification.sh) take rows from the list
+        visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
         (( n < visible )) && visible=$n
         (( REQ_SEL < REQ_TOP )) && REQ_TOP=$REQ_SEL
         (( REQ_SEL >= REQ_TOP + visible )) && REQ_TOP=$(( REQ_SEL - visible + 1 ))
@@ -457,6 +458,7 @@ req_nav_run() {
     [[ -t 1 ]] && printf '\033[?25l'
     [[ -t 0 ]] && stty -echo 2>/dev/null
     while :; do
+        req_notification_collect        # the bars of this draw, before the list is sized
         if (( REQ_NAV_DIRTY )); then
             case $REQ_VIEW in
                 detail) req_nav_build_detail ;;
@@ -470,6 +472,7 @@ req_nav_run() {
             REQ_SCREEN_LINES=("${REQ_BASE_LINES[@]}"); REQ_SCREEN_EXTRA=$REQ_BASE_EXTRA
         fi
         req_nav_overlay
+        req_notification_overlay        # the bars go above everything else
         req_screen_draw
         req_read_key || break
         req_nav_handle "$REQ_KEY"

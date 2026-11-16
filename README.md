@@ -114,6 +114,7 @@ lib/ui.sh      ANSI colors, terminal helpers and per-method formatting
 lib/store.sh   request persistence and the .req project file
 lib/http.sh    curl command building, execution, display and timing profile
 lib/nav.sh     interactive menu: list, details and keys
+lib/notification.sh  the bars at the top of the menu (persistent notifications and the warning)
 lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :env :config :h :q) and its help table
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
 lib/log.sh     the project's log of the requests sent (`req.log`)
