@@ -101,5 +101,46 @@ test_flow() {
 # req_kv_get_line <file> <key> - the value of key=value in a file (no library needed here).
 req_kv_get_line() { sed -n "s/^$2=//p" "$1" | head -n 1; }
 
+test_notifications() {
+    echo "e2e: notification bars at the top"
+    command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
+    local work=$TMP/notes out down=$'\033[B'
+    mkdir -p "$work" && cd "$work" || return
+    $REQ init >/dev/null 2>&1
+    printf 'restore_cursor=no\n' >"$REQ_CONFIG_DIR/projects/notes/config"      # every run opens at the top
+    printf '{"name":"bad-address","method":"GET","url":"http://exa mple.com"}\n' >bad-address.get.json
+    printf '{"name":"broken-one","method":"GET","url":"http://example.com","field_made_up_for_the_test":3}\n' >broken-one.get.json
+    # shellcheck disable=SC2016  # a placeholder, literal text
+    printf '{"name":"no-key","method":"GET","url":"http://127.0.0.1:1/${key_made_up_for_the_test}"}\n' >no-key.get.json
+
+    out=$(menu "$(cmd zz)" "$(cmd q)")
+    assert_contains "! unknown command :zz (:h lists the commands)" "$out" "an incorrect command shows the warning bar"
+    assert_eq "1" "$(grep -c -F '! unknown command :zz' <<<"$out")" "once: the next keys draw the screen without it"
+    assert_eq "0" "$(grep -c -F 'unknown command' <<<"${out#*"! unknown command"}")" "and nothing is left under the menu"
+
+    out=$(menu "$down" "$ENTER" "$(cmd q)")                              # broken-one, the second item
+    assert_contains '! invalid request: unknown field "field_made_up_for_the_test"' "$out" "an invalid request pins its problem at the top"
+    assert_eq "1" "$(( $(grep -c -F '! invalid request:' <<<"$out") >= 2 ))" "and it stays while the request is open and a command is typed"
+
+    out=$(menu "$ENTER" "$(cmd q)")                                      # bad-address, the first item
+    assert_contains "! invalid address in the url: it contains whitespace" "$out" "an address that is not usable is pinned too"
+
+    out=$(menu "$down" "$down" "$ENTER" "$ENTER" "$(cmd q)")             # no-key, the third item, run
+    assert_contains '! no value for key_made_up_for_the_test in environment "default"' "$out" "a run that fails shows its error in the bar"
+    assert_not_contains "req: error:" "$out" "and not as text in the terminal"
+
+    out=$($REQ run "$work/bad-address.get.json" 2>&1)
+    assert_contains "request failed (curl exit code" "$out" "req run keeps reporting on stderr"
+    assert_not_contains "invalid address" "$out" "and has no bar"
+
+    if (( $(id -u) == 0 )); then
+        out=$(menu "$(cmd q)")
+        assert_contains "! running as root: files you create or edit may end up owned by root" "$out" "as root the persistent notice is there"
+    else
+        echo "  skip not root: the root notice is checked by hand (T10.9)"
+    fi
+}
+
 test_flow
+test_notifications
 test_summary
