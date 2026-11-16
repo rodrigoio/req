@@ -26,8 +26,24 @@ req_log_escape() {
     printf '%s' "${text//$'\n'/\\n}"
 }
 
-# req_log_write <event> <text> - appends "<timestamp> <EVENT> <text>" to the log. Does
-# nothing when the log is off.
+# req_log_trim <file> - keeps only the last log_request_limit lines of the log (the
+# oldest go first). 0 means no limit. A log that cannot be rewritten stays as it is.
+req_log_trim() {
+    local limit lines tmp
+    limit=$(req_config_get log_request_limit)
+    (( limit > 0 )) || return 0
+    lines=$(wc -l <"$1") || return 1
+    (( lines > limit )) || return 0
+    tmp=$(mktemp "$1.XXXXXX") || return 1
+    if tail -n "$limit" "$1" >"$tmp" 2>/dev/null && mv "$tmp" "$1" 2>/dev/null; then
+        return 0
+    fi
+    rm -f "$tmp"
+    return 1
+}
+
+# req_log_write <event> <text> - appends "<timestamp> <EVENT> <text>" to the log, then
+# trims it to log_request_limit lines. Does nothing when the log is off.
 req_log_write() {
     req_log_enabled || return 0
     local file
@@ -36,6 +52,8 @@ req_log_write() {
         req_warn "cannot write the log $file; continuing without it"
         return 1
     fi
+    req_log_trim "$file" || req_warn "cannot trim the log $file to log_request_limit lines"
+    return 0
 }
 
 # req_log_request <request file> <environment> - logs the request just prepared by
