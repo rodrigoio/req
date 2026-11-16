@@ -84,6 +84,34 @@ req_prepare_request() {
     fi
 }
 
+REQ_URL_PROBLEM=""      # why req_url_check refused an address
+
+# req_url_check <url> - succeeds when the url is a usable address; otherwise it fails and puts the
+# reason in REQ_URL_PROBLEM. Narrow on purpose, curl decides the rest: whitespace or control
+# characters; a "://" whose scheme is not http or https, or with no host after it. A url with no
+# "://" is accepted (curl assumes http), and a ${key} placeholder is tolerated, since it is only
+# resolved when the request runs.
+# shellcheck disable=SC2016  # the placeholder is matched literally
+req_url_check() {
+    local url=$1 scheme rest host
+    REQ_URL_PROBLEM=""
+    if [[ $url == *[[:space:]]* ]]; then REQ_URL_PROBLEM="it contains whitespace"; return 1; fi
+    if [[ $url == *[[:cntrl:]]* ]]; then REQ_URL_PROBLEM="it contains control characters"; return 1; fi
+    [[ $url == *"://"* ]] || return 0
+    scheme=${url%%://*}; rest=${url#*://}
+    if [[ $scheme != *'${'* ]]; then
+        case ${scheme,,} in
+            http|https) ;;
+            *) REQ_URL_PROBLEM="the scheme \"$scheme\" is not http or https"; return 1 ;;
+        esac
+    fi
+    host=${rest%%[/?#]*}                    # the authority, up to the path, query or fragment
+    host=${host##*@}                        # without the user and password
+    if [[ $host =~ ^(.*):[0-9]*$ ]]; then host=${BASH_REMATCH[1]}; fi     # without the port
+    if [[ -z $host ]]; then REQ_URL_PROBLEM="there is no host after \"://\""; return 1; fi
+    return 0
+}
+
 # req_build_url <json> - the url with the (url-encoded) querystring appended.
 req_build_url() {
     req_prepare_request "$1" || return 1
@@ -314,6 +342,10 @@ req_run_request() {
     req_subst_json "$json" "$env" || return 1
     REQ_REQUEST_DIR=$(dirname "$(req_abs_path "$file")")
     req_build_curl_args "$REQ_SUBST_OUT" || return 1
+    # In the menu a broken address is a warning at the top; the request is still sent, curl decides.
+    if [[ ${REQ_NOTIFICATION_ACTIVE-0} == 1 ]] && ! req_url_check "$REQ_P_URL"; then
+        req_notification_warn "invalid address: $REQ_URL_PROBLEM ($REQ_P_URL); sending it anyway"
+    fi
     req_log_request "$file" "$env"
 
     req_method_color "$REQ_P_METHOD"; printf '%s' "$REQ_P_METHOD"; req_color reset

@@ -289,6 +289,25 @@ test_detail_invalid() {
     req_nav_handle esc; assert_eq "list" "$REQ_VIEW" "Esc goes back"
 }
 
+test_detail_bad_address() {
+    echo "nav: a request with a broken address"
+    make_project
+    local f out
+    req_request_write "$PROJ/api" badaddr GET "http://exa mple.com" >/dev/null
+    f=$PROJ/api/badaddr.get.json
+    req_nav_init "$PROJ/.req"
+    REQ_DETAIL_FILE=$f
+    COLUMNS=80 screen detail; out=$OUT
+    assert_eq "1" "$REQ_DETAIL_VALID" "the request itself is valid"
+    assert_eq "! invalid address in the url: it contains whitespace" "${REQ_SCREEN_LINES[0]}" "the problem is pinned at the top"
+    assert_contains "GET    badaddr" "${REQ_SCREEN_LINES[1]}" "and the details follow it"
+
+    req_request_write "$PROJ/api" goodaddr GET 'http://example.com/${path}' >/dev/null
+    REQ_DETAIL_FILE=$PROJ/api/goodaddr.get.json
+    COLUMNS=80 screen detail
+    assert_contains "GET    goodaddr" "${REQ_SCREEN_LINES[0]}" "a good address, placeholders included, has no bar"
+}
+
 test_invalid_many_problems() {
     echo "nav: an invalid request with many problems"
     make_project
@@ -1285,6 +1304,7 @@ test_detail_screen
 test_detail_params
 test_detail_raw_data
 test_detail_invalid
+test_detail_bad_address
 test_invalid_many_problems
 test_invalid_long_path
 test_truncate_scroll

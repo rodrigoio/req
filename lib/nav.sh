@@ -299,6 +299,10 @@ req_nav_build_detail() {
 
     REQ_DETAIL_VALID=1
     req_request_fields "$f"
+    # pinned at the top while the request is open: the address is not usable (placeholders are tolerated)
+    if ! req_url_check "$REQ_F_URL"; then
+        REQ_SCREEN_LINES+=("$(req_notification_bar "invalid address in the url: $REQ_URL_PROBLEM")")
+    fi
     REQ_SCREEN_LINES+=("$(req_method_color "$REQ_F_METHOD")$(printf '%-6s' "$REQ_F_METHOD")${c_reset} ${c_bold}$(req_trunc "$REQ_F_NAME" $((cols - 9)))${c_reset}")
     REQ_SCREEN_LINES+=("  ${c_dim}url${c_reset}  $(req_trunc "$REQ_F_URL" $((width - 5)))")
     if [[ -n $REQ_F_DESC ]]; then

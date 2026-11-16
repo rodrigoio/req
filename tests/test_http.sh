@@ -11,6 +11,7 @@ source "$ROOT/lib/config.sh"
 source "$ROOT/lib/env.sh"
 source "$ROOT/lib/log.sh"
 source "$ROOT/lib/http.sh"
+source "$ROOT/lib/notification.sh"
 
 TMP=$(mktemp -d)
 export REQ_CONFIG_DIR=$TMP/cfg      # never touch the real ~/.req
@@ -447,6 +448,51 @@ test_execute() {
     out=$(req_run_request "$TMP/missing.get.json" 2>&1); assert_eq "1" "$?" "a missing file fails"
 }
 
+test_url_check() {
+    echo "http: usable and broken addresses"
+    local u i
+    local -a good=(
+        'http://example.com' 'https://example.com/a/b?x=1#f' 'HTTP://EXAMPLE.COM' 'http://user:pw@host:8080/x'
+        'http://[::1]:8080/x' 'http://localhost:8080' 'localhost:8080/x' 'example.com/x'
+        '${base}/users' '${scheme}://example.com/x' 'http://${host}/x' 'http://${host}:${port}/x'
+    )
+    for u in "${good[@]}"; do
+        req_url_check "$u"; assert_eq "0" "$?" "accepted: $u"
+    done
+
+    local -a bad=(
+        'http://exa mple.com' $'http://example.com/a\tb' $'http://exa\001mple.com' 'ftp://example.com'
+        'file:///etc/passwd' 'http://' 'http:///path' 'https://:8080/x' 'http://user@/x' ' http://example.com'
+    )
+    local -a why=(
+        'whitespace' 'whitespace' 'control characters' 'the scheme "ftp" is not http or https'
+        'the scheme "file" is not http or https' 'no host' 'no host' 'no host' 'no host' 'whitespace'
+    )
+    for i in "${!bad[@]}"; do
+        req_url_check "${bad[i]}"; assert_eq "1" "$?" "refused: ${bad[i]@Q}"
+        assert_contains "${why[i]}" "$REQ_URL_PROBLEM" "with the reason: ${why[i]}"
+    done
+    req_url_check 'http://example.com'
+    assert_eq "" "$REQ_URL_PROBLEM" "a good address leaves no reason behind"
+}
+
+test_run_bad_address() {
+    echo "http: a broken address when a request runs"
+    local f=$TMP/badaddr.get.json status
+    printf '{"name":"badaddr","method":"GET","url":"http://"}\n' >"$f"
+
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    REQ_NOTIFICATION_ACTIVE=1
+    req_run_request "$f" >/dev/null 2>&1; status=$?
+    assert_eq "1" "$status" "the request is still sent, and curl fails"
+    assert_contains "invalid address: there is no host after" "$REQ_NOTIFICATION_WARN" "in the menu the bar says why"
+    assert_contains "sending it anyway" "$REQ_NOTIFICATION_WARN" "and that it goes on"
+
+    REQ_NOTIFICATION_ACTIVE=0; REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    req_run_request "$f" >/dev/null 2>&1
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "req run, outside the menu, is unchanged"
+}
+
 test_url
 test_nested_query
 test_args
@@ -454,4 +500,6 @@ test_timing
 test_headers
 test_print
 test_execute
+test_url_check
+test_run_bad_address
 test_summary
