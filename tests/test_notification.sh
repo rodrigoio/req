@@ -181,11 +181,69 @@ test_persistent() {
     REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=(); REQ_NOTIFICATION_LINES=()
 }
 
+test_warning() {
+    echo "notification: the warning, printed once"
+    local COLUMNS=100 old=$REQ_COLORS
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=(); REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "no warning, no bar"
+
+    req_notification_warn "a warning made up for the test"
+    req_notification_collect
+    assert_eq "1" "${#REQ_NOTIFICATION_LINES[@]}" "a warning shows in a bar at the next draw"
+    assert_eq "! a warning made up for the test" "${REQ_NOTIFICATION_LINES[0]}" "with its text"
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "and only once: the draw after it has no bar"
+
+    REQ_COLORS=1
+    req_notification_warn "colored warning made up for the test"
+    req_notification_collect
+    local orange
+    orange=$(req_color notification)
+    assert_eq "$orange" "${REQ_NOTIFICATION_LINES[0]:0:${#orange}}" "it is orange with black letters"
+    REQ_COLORS=$old
+
+    req_notification_register test-first notification_test_check_first
+    req_notification_warn "warning below the persistent bar, made up for the test"
+    req_notification_collect
+    assert_eq "2" "${#REQ_NOTIFICATION_LINES[@]}" "a persistent notification and a warning at the same time"
+    assert_eq "! first persistent notice made up for the test" "${REQ_NOTIFICATION_LINES[0]}" "the persistent bar is on top"
+    assert_eq "! warning below the persistent bar, made up for the test" "${REQ_NOTIFICATION_LINES[1]}" "and the warning right below it"
+    req_notification_collect
+    assert_eq "1" "${#REQ_NOTIFICATION_LINES[@]}" "next draw: only the persistent one is left"
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
+
+    req_notification_warn "first warning"
+    req_notification_warn "second warning"
+    req_notification_warn "third warning"
+    req_notification_collect
+    assert_eq "1" "${#REQ_NOTIFICATION_LINES[@]}" "several warnings before a draw are still one line"
+    assert_eq "! first warning (+2 more)" "${REQ_NOTIFICATION_LINES[0]}" "the first one, and how many came after it"
+    req_notification_warn "next warning"
+    req_notification_collect
+    assert_eq "! next warning" "${REQ_NOTIFICATION_LINES[0]}" "the count starts again after a draw"
+
+    req_notification_warn "a warning that is much too long for the narrow terminal"
+    req_notification_warn "another"
+    COLUMNS=30 req_notification_collect
+    assert_eq "! a warning that i~ (+1 more)" "${REQ_NOTIFICATION_LINES[0]}" "a long message is cut, never the count after it"
+    assert_eq "1" "$(( ${#REQ_NOTIFICATION_LINES[0]} <= 29 ))" "and the bar fits the terminal"
+
+    req_notification_warn $'line one\nline two'
+    req_notification_collect
+    assert_eq "! line one line two" "${REQ_NOTIFICATION_LINES[0]}" "line breaks become spaces"
+    req_notification_warn ""
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "an empty message is no warning"
+    REQ_NOTIFICATION_LINES=()
+}
+
 test_color
 test_bar_with_colors
 test_bar_without_colors
 test_collect
 test_persistent
+test_warning
 test_overlay
 test_list_window
 test_summary

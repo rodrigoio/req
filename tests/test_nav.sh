@@ -365,6 +365,13 @@ test_notification_bars() {
     out=$(keys : h enter | req_nav_run "$p/.req" 2>&1)
     assert_contains "${first}${nl}req help" "$out" "the help screen has the bar too"
     REQ_NOTIFICATION_PRODUCERS=("${saved[@]}")
+
+    local warn="! a warning made up for the test"
+    req_notification_warn "a warning made up for the test"
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "$warn" "$(head -n 1 <<<"$out")" "a warning waiting when the menu opens is the first line of the first draw"
+    assert_eq "1" "$(grep -c -F "$warn" <<<"$out")" "and it is printed once: the details drawn next have none"
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
 }
 
 test_end_to_end() {
