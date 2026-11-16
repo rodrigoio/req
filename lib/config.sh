@@ -11,13 +11,14 @@
 
 # Known keys, in the order they are listed. Types: bool (yes or no), int (a whole number,
 # 0 or more).
-REQ_CONFIG_KEYS=(time_stats time_stat_total restore_cursor log log_request_limit)
+REQ_CONFIG_KEYS=(time_stats time_stat_total restore_cursor log log_request_limit max_redirects)
 declare -gA REQ_CONFIG_TYPE=(
     [time_stats]=bool
     [time_stat_total]=bool
     [restore_cursor]=bool
     [log]=bool
     [log_request_limit]=int
+    [max_redirects]=int
 )
 declare -gA REQ_CONFIG_DEFAULT=(
     [time_stats]=yes
@@ -25,6 +26,7 @@ declare -gA REQ_CONFIG_DEFAULT=(
     [restore_cursor]=yes
     [log]=no
     [log_request_limit]=500
+    [max_redirects]=10
 )
 # shellcheck disable=SC2034  # read by :config (TR2.6)
 declare -gA REQ_CONFIG_DESC=(
@@ -33,6 +35,7 @@ declare -gA REQ_CONFIG_DESC=(
     [restore_cursor]="reopen the menu where it was left"
     [log]="write the requests and responses to the project's log"
     [log_request_limit]="lines kept in the log, the oldest go first (0: no limit)"
+    [max_redirects]="most redirects followed by a request with follow_redirects"
 )
 
 declare -gA REQ_CONFIG=()       # values of the loaded files (key -> value)

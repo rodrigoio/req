@@ -106,7 +106,7 @@ req_build_curl_args() {
         --connect-timeout "${REQ_CONNECT_TIMEOUT:-10}"
         --max-time "${REQ_P_TIMEOUT:-${REQ_TIMEOUT:-60}}"
         -X "$REQ_P_METHOD")
-    [[ $REQ_P_FOLLOW == true ]] && REQ_CURL_ARGS+=(-L --max-redirs 10)
+    [[ $REQ_P_FOLLOW == true ]] && REQ_CURL_ARGS+=(-L --max-redirs "$(req_config_get max_redirects)")
     [[ $REQ_P_INSECURE == true ]] && REQ_CURL_ARGS+=(-k)
 
     for line in "${REQ_P_HEADERS[@]}"; do
