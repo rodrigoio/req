@@ -53,6 +53,21 @@ Architecture and gotchas are in `DEVELOPMENT.md`; roadmap, decisions and open qu
 - The decision (bump and new number, or no bump) goes in the task's notes, and the `REQ_VERSION` change
   is part of the same task, in its commit.
 
+### Changelog
+- `CHANGELOG.md` at the repository root follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/)
+  and says it adheres to Semantic Versioning. It is written for the people who use `req`, not as a
+  copy of `git log`.
+- Every change with an effect for users gets an entry under `## [Unreleased]` (always at the top), in
+  the same task and commit as the change. Internal refactors, tests and docs-only changes get none.
+- Entries go under the types `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`, in that
+  order, in English; empty types are omitted. One item says what changed and its effect, in a short
+  sentence that starts with the effect; related commits become one item.
+- A breaking change (MAJOR) is marked `**BREAKING:**` and says how to migrate.
+- A release renames `[Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` (ISO 8601), the same number as
+  `REQ_VERSION`, and leaves a new empty `[Unreleased]` above it. Newest version first; never delete a
+  version (a withdrawn one is marked `[YANKED]`).
+- The footer keeps the comparison links, including `[unreleased]`, built on tags `vX.Y.Z`.
+
 ### Done criteria
 - After each task run the tests (`make check`) and make sure none is frozen.
 
