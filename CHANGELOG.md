@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-16
+
+### Added
+
+- Warn with a persistent bar at the top of the screen, at every screen, when `req` runs as root, since the
+  files you create or edit could end up owned by root and upset the owner and permissions of your project.
+- Warn, in a bar at the top of the details and when the request runs in the menu, about a `url` that is not
+  a usable address (whitespace, a scheme other than http or https, no host). The request is still sent.
+
+### Changed
+
+- Link `make install` to the built `release/req.sh` (it runs `make build` first) instead of to the sources,
+  so the installed `req` is the same single file as the download. Run `make install` again to update it.
+  `make uninstall` removes the link, including one made by an older `make install`.
+- Show an incorrect command (an unknown command, nothing selected, a wrong usage, an invalid setting or
+  environment) as an orange warning bar at the top of the screen, once, instead of a dim line under the
+  menu. Confirmations stay under the menu.
+- Show the warnings raised while the menu is open (a bad line in a settings file, a log that cannot be
+  written) in that bar too, instead of printing them in the terminal. `req run` still prints them to stderr.
+- Show the failure of a request run from the menu (a variable with no value, a file that cannot be read, a
+  failure of curl) as a one-line warning at the top, instead of error text above the menu.
+- Pin the first problem of an invalid request at the top of its details screen and list at most 10 of its
+  problems, so a file with many problems no longer fills the terminal.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added
@@ -40,7 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the verbose mode (`:v`).
 - Show the installed version with `req --version`.
 
-[unreleased]: https://github.com/rodrigoio/req/compare/v0.3.0...HEAD
+[unreleased]: https://github.com/rodrigoio/req/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/rodrigoio/req/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/rodrigoio/req/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rodrigoio/req/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/rodrigoio/req/tree/v0.1.0

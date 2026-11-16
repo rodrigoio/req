@@ -26,12 +26,18 @@ source "$ROOT/lib/http.sh"
 # shellcheck source=/dev/null
 source "$ROOT/lib/nav.sh"
 # shellcheck source=/dev/null
+source "$ROOT/lib/notification.sh"
+# shellcheck source=/dev/null
 source "$ROOT/lib/wizard.sh"
 # shellcheck source=/dev/null
 source "$ROOT/lib/cmd.sh"
 
 # shellcheck disable=SC2031  # lib/store.sh sets LC_ALL in a subshell on purpose
 export LC_ALL=C COLUMNS=60 LINES=24
+# The root notice (a persistent bar) must not depend on who runs the tests: nobody is root here,
+# except in the one test that says otherwise.
+# shellcheck disable=SC2317  # called by the library, not from this file
+req_notification_is_root() { return 1; }
 TMP=$(mktemp -d)
 export REQ_CONFIG_DIR=$TMP/cfg      # never touch the real ~/.req
 SERVER_PID=""
@@ -274,11 +280,51 @@ test_detail_invalid() {
     assert_eq "0" "$REQ_DETAIL_VALID" "an invalid request is flagged"
     assert_contains "Invalid request" "$out" "shows the problem"
     assert_contains 'unknown field "retries"' "$out" "shows the reason"
-    assert_eq "$PROJ/api/broken.get.json" "${REQ_SCREEN_LINES[1]}" "the absolute path is on its own line, ready to copy"
+    assert_eq "$PROJ/api/broken.get.json" "${REQ_SCREEN_LINES[2]}" "the absolute path is on its own line, ready to copy"
     assert_eq "0" "$REQ_SCREEN_EXTRA" "a path that fits adds no extra rows"
+    assert_contains '! invalid request: unknown field "retries"' "${REQ_SCREEN_LINES[0]}" "the first problem is pinned at the top, in a bar"
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[0]} <= 59 ))" "cut to fit the terminal"
     assert_eq "" "$(req_nav_handle enter 2>&1)" "Enter does not run an invalid request"
     assert_eq "detail" "$REQ_VIEW" "stays on the details"
     req_nav_handle esc; assert_eq "list" "$REQ_VIEW" "Esc goes back"
+}
+
+test_detail_bad_address() {
+    echo "nav: a request with a broken address"
+    make_project
+    local f out
+    req_request_write "$PROJ/api" badaddr GET "http://exa mple.com" >/dev/null
+    f=$PROJ/api/badaddr.get.json
+    req_nav_init "$PROJ/.req"
+    REQ_DETAIL_FILE=$f
+    COLUMNS=80 screen detail; out=$OUT
+    assert_eq "1" "$REQ_DETAIL_VALID" "the request itself is valid"
+    assert_eq "! invalid address in the url: it contains whitespace" "${REQ_SCREEN_LINES[0]}" "the problem is pinned at the top"
+    assert_contains "GET    badaddr" "${REQ_SCREEN_LINES[1]}" "and the details follow it"
+
+    # shellcheck disable=SC2016  # a ${key} placeholder, literal text
+    req_request_write "$PROJ/api" goodaddr GET 'http://example.com/${path}' >/dev/null
+    REQ_DETAIL_FILE=$PROJ/api/goodaddr.get.json
+    COLUMNS=80 screen detail
+    assert_contains "GET    goodaddr" "${REQ_SCREEN_LINES[0]}" "a good address, placeholders included, has no bar"
+}
+
+test_invalid_many_problems() {
+    echo "nav: an invalid request with many problems"
+    make_project
+    local f=$PROJ/api/lots.get.json i fields="" out
+    for i in $(seq 1 12); do fields+=",\"field_made_up_$i\":1"; done
+    printf '{"name":"lots","method":"GET","url":"http://example.com"%s}\n' "$fields" >"$f"
+    req_nav_init "$PROJ/.req"
+    REQ_DETAIL_FILE=$f
+    COLUMNS=100 screen detail; out=$OUT
+    assert_contains '! invalid request: unknown field "field_made_up_1"' "${REQ_SCREEN_LINES[0]}" "the bar starts with the first problem"
+    assert_eq " (+11 more)" "${REQ_SCREEN_LINES[0]: -11}" "and ends with the count of the others, never cut"
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[0]} <= 99 ))" "inside the terminal width"
+    assert_eq "$f" "${REQ_SCREEN_LINES[2]}" "the path stays whole"
+    assert_eq "$(( REQ_PROBLEMS_MAX_LINES ))" "$(grep -c '^  unknown field' <<<"$out")" "only the first problems are listed"
+    assert_contains "  ... (2 more)" "$out" "and the rest is counted"
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[@]} <= REQ_PROBLEMS_MAX_LINES + 5 ))" "so the screen stays short"
 }
 
 test_invalid_long_path() {
@@ -292,7 +338,7 @@ test_invalid_long_path() {
     req_nav_handle enter
     COLUMNS=20 screen detail
     path=$PROJ/api/broken.get.json; len=${#path}
-    assert_eq "$path" "${REQ_SCREEN_LINES[1]}" "the path is never truncated, even on a narrow terminal"
+    assert_eq "$path" "${REQ_SCREEN_LINES[2]}" "the path is never truncated, even on a narrow terminal"
     assert_eq "$(( (len - 1) / 20 ))" "$REQ_SCREEN_EXTRA" "the rows its wrapping takes are counted for the redraw"
     assert_eq "1" "$(( REQ_SCREEN_EXTRA > 0 ))" "and a long path does wrap here"
     # The redraw count covers lines plus wrapped rows (only tracked on a terminal).
@@ -338,6 +384,119 @@ test_empty_project() {
     req_nav_init "$p/missing" 2>/dev/null; assert_eq "1" "$?" "a missing .req fails"
 }
 
+# A producer made up for the tests: one bar above every screen (the real ones come later).
+nav_test_producer_bar() { REQ_NOTIFICATION_LINES+=("$(req_notification_bar "a bar made up for the test")"); }
+# A persistent notification made up for the tests, registered the way a feature will do it.
+nav_test_check_notice() { REQ_NOTIFICATION_TEXT="a persistent notice made up for the test"; }
+
+test_notification_bars() {
+    echo "nav: notification bars"
+    local p=$TMP/bars out first="! a bar made up for the test" nl=$'\n'
+    local saved=("${REQ_NOTIFICATION_PRODUCERS[@]}")
+    mkdir -p "$p"; : >"$p/.req"
+    req_request_write "$p" ping GET "http://127.0.0.1:1/x" >/dev/null
+
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "req" "$(head -n 1 <<<"$out" | cut -c1-3)" "with no producer defined the screen starts at the header"
+
+    REQ_NOTIFICATION_PRODUCERS=(nav_test_producer_bar)
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "$first" "$(head -n 1 <<<"$out")" "a bar is the first line of the screen"
+    assert_contains "${first}${nl}req " "$out" "the list header comes right below it"
+    assert_contains "${first}${nl}GET    ping" "$out" "the details screen has the bar too"
+    assert_eq "2" "$(grep -c -F "$first" <<<"$out")" "one bar per draw: the list and the details"
+
+    out=$(keys : h enter | req_nav_run "$p/.req" 2>&1)
+    assert_contains "${first}${nl}req help" "$out" "the help screen has the bar too"
+    REQ_NOTIFICATION_PRODUCERS=("${saved[@]}")
+
+    local warn="! a warning made up for the test"
+    req_notification_warn "a warning made up for the test"
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "$warn" "$(head -n 1 <<<"$out")" "a warning waiting when the menu opens is the first line of the first draw"
+    assert_eq "1" "$(grep -c -F "$warn" <<<"$out")" "and it is printed once: the details drawn next have none"
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+}
+
+test_root_notice() {
+    echo "nav: the root user's notice"
+    local p=$TMP/rootnote out notice="! running as root: files you create or edit may end up owned by root, not you"
+    local original COLUMNS=100       # wide enough for the whole notice
+    original=$(declare -f req_notification_is_root)
+    mkdir -p "$p"; : >"$p/.req"
+    req_request_write "$p" ping GET "http://127.0.0.1:1/x" >/dev/null
+
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_not_contains "running as root" "$out" "another user sees no notice"
+
+    # shellcheck disable=SC2317  # called by the library, not from this file
+    req_notification_is_root() { return 0; }
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "$notice" "$(head -n 1 <<<"$out")" "root sees it as the first line of the screen"
+    assert_eq "2" "$(grep -c -F "$notice" <<<"$out")" "at every draw: the list and the details"
+    out=$(keys : h enter | req_nav_run "$p/.req" 2>&1)
+    assert_contains "${notice}"$'\n'"req help" "$out" "also on the help screen"
+    eval "$original"
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
+}
+
+test_config_warnings_in_the_bar() {
+    echo "nav: settings problems go to the bar"
+    local dir=$TMP/cfg-bar errfile=$TMP/cfg-bar.err
+    mkdir -p "$dir"
+    printf 'this line is not a key and a value\nsetting_made_up_for_the_test=1\nlog=maybe\n' >"$dir/config"
+    local old_dir=$REQ_CONFIG_DIR
+    REQ_CONFIG_DIR=$dir
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+
+    REQ_NOTIFICATION_ACTIVE=1
+    req_config_load 2>"$errfile"
+    assert_eq "" "$(<"$errfile")" "with the menu open the terminal gets nothing"
+    assert_contains "expected key=value; line ignored" "$REQ_NOTIFICATION_WARN" "the first problem is the warning"
+    assert_contains "$dir/config:1:" "$REQ_NOTIFICATION_WARN" "with the file and the line"
+    assert_eq "2" "$REQ_NOTIFICATION_WARN_MORE" "and the others are counted: (+2 more)"
+    req_notification_collect
+    assert_contains "(+2 more)" "${REQ_NOTIFICATION_LINES[0]}" "one bar line says so"
+
+    REQ_NOTIFICATION_ACTIVE=0
+    req_config_load 2>"$errfile"
+    assert_eq "3" "$(grep -c '^req: warning:' "$errfile")" "outside the menu each one is still a line on stderr"
+    REQ_CONFIG_DIR=$old_dir
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+}
+
+test_run_failures_in_the_bar() {
+    echo "nav: failures when running go to the bar"
+    local p=$TMP/runfail out rule after COLUMNS=140
+    local REQ_PROJECT_ID=""          # no project state: the cursor is neither saved nor restored between runs
+    rule=$(printf '=%.0s' {1..140})
+    mkdir -p "$p"; : >"$p/.req"
+    # nothing listens on port 1: curl fails at once, with its own message
+    req_request_write "$p" refused GET "http://127.0.0.1:1/x" >/dev/null
+    # shellcheck disable=SC2016  # a ${key} placeholder, literal text
+    req_request_write "$p" nokey GET 'http://127.0.0.1:1/${key_made_up_for_the_test}' >/dev/null
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    REQ_NOTIFICATION_ACTIVE=1
+
+    out=$(keys down enter enter | req_nav_run "$p/.req" 2>&1)        # refused is the second item
+    after=${out#*"$rule"}
+    assert_not_contains "req: error:" "$out" "the terminal is not filled with the error text"
+    assert_contains "! " "$after" "a warning bar is drawn after the result"
+    assert_contains "request failed (curl exit code 7)" "$after" "it says what failed"
+    assert_contains "Failed to connect" "$after" "with the message of curl"
+    assert_contains "$rule" "$out" "and the result block is still closed by its rule"
+
+    out=$(keys enter enter | req_nav_run "$p/.req" 2>&1)             # nokey is the first item
+    assert_not_contains "req: error:" "$out" "a missing key does not fill the terminal either"
+    assert_contains "! no value for key_made_up_for_the_test in environment \"default\"" "$out" "the bar names the key"
+    assert_contains "set the variable" "$out" "and the guidance follows, as far as it fits"
+
+    REQ_NOTIFICATION_ACTIVE=0
+    out=$(keys enter enter | req_nav_run "$p/.req" 2>&1)
+    assert_contains "req: error: no value for key_made_up_for_the_test" "$out" "outside the menu flag the errors stay on stderr"
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+}
+
 test_end_to_end() {
     echo "nav: full flow (local mock)"
     command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
@@ -359,10 +518,20 @@ test_end_to_end() {
     assert_contains "============================================================" "$out" "separator after the result"
     assert_eq "2" "$(grep -c '^HTTP 200' <<<"$out")" "a second Enter on the details runs again"
     assert_eq "3" "$(grep -c '^Enter run' <<<"$out")" "details redrawn after each result"
+
+    local notice="! a persistent notice made up for the test" rule
+    rule=$(printf '=%.0s' {1..60})
+    req_notification_register nav-test nav_test_check_notice
+    out=$(keys enter enter enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "4" "$(grep -c -F "$notice" <<<"$out")" "a persistent notification is on every draw: root, directory, details and details after the run"
+    assert_contains "$notice" "${out#*"$rule"}" "and it is reprinted below the result of a request"
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
 }
 
 # type <chars...> - sends each character to the handler, as the main loop would.
-type_keys() { local c; for c in "$@"; do req_nav_handle "$c"; done; }
+# A draw happens between two commands in the real loop, and it spends the warning of the one
+# before: so typing starts with none waiting.
+type_keys() { local c; REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0; for c in "$@"; do req_nav_handle "$c"; done; }
 
 test_command_mode() {
     echo "nav: command mode"
@@ -391,8 +560,11 @@ test_command_mode() {
     req_nav_handle esc
 
     type_keys : z z enter
-    assert_contains "unknown command :zz" "$REQ_STATUS" "an unknown command is reported"
-    req_nav_overlay; assert_eq "" "$REQ_STATUS" "the status is shown once"
+    assert_contains "unknown command :zz" "$REQ_NOTIFICATION_WARN" "an unknown command is reported"
+    req_notification_collect
+    assert_contains "unknown command :zz" "${REQ_NOTIFICATION_LINES[0]}" "it becomes a warning bar at the next draw"
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "and the warning is shown once"
     type_keys : enter
     assert_eq "0" "$REQ_CMD_ACTIVE" "an empty command just leaves command mode"
     type_keys : q enter
@@ -400,9 +572,9 @@ test_command_mode() {
     REQ_QUIT=0
 
     type_keys : e enter
-    assert_contains "select a request first" "$REQ_STATUS" ":e on a directory explains itself"
+    assert_contains "select a request first" "$REQ_NOTIFICATION_WARN" ":e on a directory explains itself"
     type_keys : d enter
-    assert_contains "select a request first" "$REQ_STATUS" ":d on a directory explains itself"
+    assert_contains "select a request first" "$REQ_NOTIFICATION_WARN" ":d on a directory explains itself"
     req_nav_handle "$(printf ':')"; assert_eq "1" "$REQ_CMD_ACTIVE" "command mode works on the root"
     req_nav_handle esc
 }
@@ -524,7 +696,7 @@ test_help() {
     assert_contains ":h help" "${REQ_SCREEN_LINES[-1]}" "details footer points to :h"
     REQ_VIEW=list
     type_keys : z enter
-    assert_contains ":h" "$REQ_STATUS" "unknown command points to :h"
+    assert_contains ":h" "$REQ_NOTIFICATION_WARN" "unknown command points to :h"
 }
 
 test_command_rename_dir() {
@@ -556,7 +728,7 @@ test_command_rename_dir() {
     # On a request there is nothing to rename.
     REQ_SEL=2
     type_keys : e d; req_nav_handle enter >/dev/null
-    assert_contains "edit a request with :e" "$REQ_STATUS" ":ed on a request points to :e"
+    assert_contains "edit a request with :e" "$REQ_NOTIFICATION_WARN" ":ed on a request points to :e"
     REQ_INPUT_FD=0
 }
 
@@ -606,7 +778,7 @@ test_command_copy() {
 
     # :c is gone; an invalid request cannot be copied; nothing selected.
     type_keys : c enter
-    assert_contains "unknown command :c" "$REQ_STATUS" ":c no longer exists"
+    assert_contains "unknown command :c" "$REQ_NOTIFICATION_WARN" ":c no longer exists"
     for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == broken ]] && REQ_SEL=$i; done
     type_keys : c p
     req_nav_handle enter 3<<<"x" >/dev/null 2>&1
@@ -646,13 +818,13 @@ test_command_config() {
     assert_eq "yes" "$(req_kv_get "$f" time_stats)" "spaces around the = are fine"
 
     REQ_STATUS=""; type_keys : c o n f i g ' ' - g ' ' c o l o r = r e d enter
-    assert_contains 'unknown setting "color"' "$REQ_STATUS" "an unknown key is explained"
-    assert_contains "time_stat_total" "$REQ_STATUS" "with the valid keys"
+    assert_contains 'unknown setting "color"' "$REQ_NOTIFICATION_WARN" "an unknown key is explained"
+    assert_contains "time_stat_total" "$REQ_NOTIFICATION_WARN" "with the valid keys"
     type_keys : c o n f i g ' ' - g ' ' t i m e _ s t a t s = m a y b e enter
-    assert_contains "time_stats must be yes or no" "$REQ_STATUS" "a wrong value says what is accepted"
+    assert_contains "time_stats must be yes or no" "$REQ_NOTIFICATION_WARN" "a wrong value says what is accepted"
     assert_eq "yes" "$(req_kv_get "$f" time_stats)" "and nothing is written"
     type_keys : c o n f i g ' ' - g ' ' t i m e _ s t a t s enter
-    assert_contains "usage: :config" "$REQ_STATUS" "a key without a value shows the usage"
+    assert_contains "usage: :config" "$REQ_NOTIFICATION_WARN" "a key without a value shows the usage"
     [[ $(<"$f") != *color* ]]; assert_eq "0" "$?" "an invalid setting never reaches the file"
 
     out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
@@ -662,8 +834,8 @@ test_command_config() {
     local lf
     REQ_PROJECT_ID=""
     type_keys : c o n f i g ' ' l o g = y e s enter
-    assert_contains "no project is open" "$REQ_STATUS" "without a project the setting is refused"
-    assert_contains ":config -g" "$REQ_STATUS" "and -g is suggested"
+    assert_contains "no project is open" "$REQ_NOTIFICATION_WARN" "without a project the setting is refused"
+    assert_contains ":config -g" "$REQ_NOTIFICATION_WARN" "and -g is suggested"
     [[ ! -e $f ]] || [[ $(<"$f") != *log* ]]; assert_eq "0" "$?" "nothing is written"
     REQ_PROJECT_ID=$(req_project_create "$PROJ"); lf=$(req_config_local_file)
     mkdir -p "$(dirname "$lf")"
@@ -685,9 +857,9 @@ test_command_config() {
     [[ $out != *"restore_cursor     yes   default yes   project"* ]]; assert_eq "0" "$?" "a global or default value is not marked"
     req_nav_handle x
     type_keys : c o n f i g ' ' - g enter
-    assert_contains "usage: :config [-g]" "$REQ_STATUS" "-g alone shows the usage"
+    assert_contains "usage: :config [-g]" "$REQ_NOTIFICATION_WARN" "-g alone shows the usage"
     type_keys : c o n f i g ' ' l o g = m a y b e enter
-    assert_contains "log must be yes or no" "$REQ_STATUS" "the value is checked for the project too"
+    assert_contains "log must be yes or no" "$REQ_NOTIFICATION_WARN" "the value is checked for the project too"
     assert_eq "yes" "$(req_kv_get "$lf" log)" "and nothing is written"
     REQ_PROJECT_ID=""; rm -f "$f" "$lf"; req_config_load
 }
@@ -718,17 +890,17 @@ test_command_env() {
 
     type_keys : e n v ' ' s t a g i n g enter
     assert_eq "dev" "$REQ_ENV" "an unknown environment changes nothing"
-    assert_contains 'unknown environment "staging" (known: dev, prod)' "$REQ_STATUS" "and is explained with the known ones"
-    assert_contains "$envdir/staging" "$REQ_STATUS" "and the file that would create it"
+    assert_contains 'unknown environment "staging" (known: dev, prod)' "$REQ_NOTIFICATION_WARN" "and is explained with the known ones"
+    assert_contains "$envdir/staging" "$REQ_NOTIFICATION_WARN" "and the file that would create it"
     type_keys : e n v ' ' B a d enter
-    assert_contains "invalid environment name" "$REQ_STATUS" "a name that is not a slug is refused"
+    assert_contains "invalid environment name" "$REQ_NOTIFICATION_WARN" "a name that is not a slug is refused"
     assert_eq "dev" "$REQ_ENV" "without a change"
     type_keys : e n v ' ' d e f a u l t enter
     assert_eq "default" "$REQ_ENV" "default can always be chosen, even without a file"
 
     REQ_PROJECT_ID=""; type_keys : e n v ' ' p r o d enter
     assert_eq "default" "$REQ_ENV" "without a saved project state only default is allowed"
-    assert_contains "not available" "$REQ_STATUS" "and the reason is given"
+    assert_contains "not available" "$REQ_NOTIFICATION_WARN" "and the reason is given"
     assert_contains ":env" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists :env"
     unset REQ_ENV
 }
@@ -741,7 +913,7 @@ test_command_log_verbose() {
     REQ_PROJECT_ID=""; REQ_LOG_SESSION=""; REQ_CONFIG=(); REQ_VERBOSE=0
 
     type_keys : l o g enter
-    assert_contains "no project is open" "$REQ_STATUS" ":log without a project says why"
+    assert_contains "no project is open" "$REQ_NOTIFICATION_WARN" ":log without a project says why"
     assert_eq "" "$REQ_LOG_SESSION" "and changes nothing"
     req_project_activate "$PROJ" || return
     lf=$(req_log_file)
@@ -760,7 +932,7 @@ test_command_log_verbose() {
     type_keys : l o g ' ' o f f enter
     assert_eq "no" "$REQ_LOG_SESSION" "off is accepted as no"
     type_keys : l o g ' ' m a y b e enter
-    assert_contains "usage: :log [yes|no]" "$REQ_STATUS" "another argument shows the usage"
+    assert_contains "usage: :log [yes|no]" "$REQ_NOTIFICATION_WARN" "another argument shows the usage"
     assert_eq "no" "$REQ_LOG_SESSION" "without a change"
     REQ_CONFIG=([log]=yes); REQ_LOG_SESSION=""
     type_keys : l o g enter
@@ -780,7 +952,7 @@ test_command_log_verbose() {
     type_keys : v e r b o s e enter
     assert_eq "0" "$REQ_VERBOSE" ":verbose is an alias"
     type_keys : v ' ' x enter
-    assert_contains "usage: :v [yes|no]" "$REQ_STATUS" "a wrong argument shows the usage"
+    assert_contains "usage: :v [yes|no]" "$REQ_NOTIFICATION_WARN" "a wrong argument shows the usage"
     out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
     assert_contains ":log" "$out" "the help lists :log"
     assert_contains ":v [yes|no]" "$out" "and :v"
@@ -835,7 +1007,7 @@ test_command_remove() {
     REQ_INPUT_FD=3
     REQ_SEL=0; req_nav_handle enter                           # auth/empty
     type_keys : r m; req_nav_handle enter >/dev/null
-    assert_contains "select a request or a directory" "$REQ_STATUS" ":rm with nothing selected explains itself"
+    assert_contains "select a request or a directory" "$REQ_NOTIFICATION_WARN" ":rm with nothing selected explains itself"
     REQ_INPUT_FD=0
 }
 
@@ -1165,6 +1337,8 @@ test_detail_screen
 test_detail_params
 test_detail_raw_data
 test_detail_invalid
+test_detail_bad_address
+test_invalid_many_problems
 test_invalid_long_path
 test_truncate_scroll
 test_empty_project
@@ -1186,5 +1360,9 @@ test_cursor_saved
 test_cursor_restore
 test_review2_flow
 test_start_init
+test_notification_bars
+test_root_notice
+test_config_warnings_in_the_bar
+test_run_failures_in_the_bar
 test_end_to_end
 test_summary
