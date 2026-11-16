@@ -1,6 +1,8 @@
 PREFIX  ?= $(HOME)/.local
 BINDIR  ?= $(PREFIX)/bin
+RELEASE ?= release/req.sh
 TARGET  := $(DESTDIR)$(BINDIR)/req
+BUILT   := $(abspath $(RELEASE))
 SRC     := $(abspath bin/req)
 
 .DEFAULT_GOAL := help
@@ -9,7 +11,7 @@ SRC     := $(abspath bin/req)
 help: ## List the available targets
 	@grep -E '^[a-z]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
 	@echo
-	@echo "Variables: PREFIX=$(PREFIX) BINDIR=$(BINDIR)"
+	@echo "Variables: PREFIX=$(PREFIX) BINDIR=$(BINDIR) RELEASE=$(RELEASE)"
 
 test: ## Run all tests
 	@tests/run.sh
@@ -25,23 +27,24 @@ lint: ## Run shellcheck (if installed) and check syntax
 check: lint test ## Lint + tests
 
 build: ## Build release/req.sh, the whole tool in one file
-	@./build.sh
+	@./build.sh "$(RELEASE)"
 
-install: ## Install a symlink at $(BINDIR)/req
+install: build ## Build, then link BINDIR/req to the built release/req.sh
 	@mkdir -p "$(DESTDIR)$(BINDIR)"
-	@ln -sf "$(SRC)" "$(TARGET)"
-	@echo "installed: $(TARGET) -> $(SRC)"
+	@ln -sfn "$(BUILT)" "$(TARGET)"
+	@echo "installed: $(TARGET) -> $(BUILT)"
 	@case ":$$PATH:" in \
 		*":$(BINDIR):"*) ;; \
 		*) echo "warning: $(BINDIR) is not in your PATH; add this to your shell profile:"; \
 		   echo "  export PATH=\"$(BINDIR):\$$PATH\"" ;; \
 	esac
 
-uninstall: ## Remove the symlink, if it points to this project
-	@if [ -L "$(TARGET)" ] && [ "$$(readlink "$(TARGET)")" = "$(SRC)" ]; then \
+uninstall: ## Remove the link, if it points to the built release/req.sh (or to bin/req, from an older install)
+	@if [ -L "$(TARGET)" ] && { [ "$$(readlink "$(TARGET)")" = "$(BUILT)" ] || [ "$$(readlink "$(TARGET)")" = "$(SRC)" ]; }; then \
 		rm "$(TARGET)" && echo "removed: $(TARGET)"; \
 	elif [ -e "$(TARGET)" ] || [ -L "$(TARGET)" ]; then \
-		echo "refused: $(TARGET) does not point to $(SRC)"; exit 1; \
+		echo "refused: $(TARGET) does not point to $(BUILT)"; exit 1; \
 	else \
 		echo "nothing to remove: $(TARGET)"; \
 	fi
+

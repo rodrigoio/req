@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Link `make install` to the built `release/req.sh` (it runs `make build` first) instead of to the sources,
+  so the installed `req` is the same single file as the download. Run `make install` again to update it.
+  `make uninstall` removes the link, including one made by an older `make install`.
 - Show an incorrect command (an unknown command, nothing selected, a wrong usage, an invalid setting or
   environment) as an orange warning bar at the top of the screen, once, instead of a dim line under the
   menu. Confirmations stay under the menu.

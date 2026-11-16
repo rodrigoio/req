@@ -13,9 +13,11 @@ Development only (not needed to use `req`): `shellcheck`, used by `make lint` ov
 ## Installation
 
 ```sh
-make install      # symlink at ~/.local/bin/req
-make uninstall    # remove the symlink
+make install      # builds release/req.sh and links ~/.local/bin/req to it
+make uninstall    # remove the link
 ```
+
+`make install` runs `make build` and links `~/.local/bin/req` to the file it generates, `release/req.sh` (the same single file that the download below gives), not to the sources in `bin/` and `lib/`. Run it again to rebuild and update. `make uninstall` removes the link, only if it points to that file (or to `bin/req`, from an older install), and leaves the built file. To run the sources while developing, use `bin/req` directly.
 
 To install elsewhere: `make install PREFIX=/usr/local` (or `BINDIR=...`). If the directory is not in your `PATH`, `make install` warns and shows how to add it.
 
@@ -72,9 +74,11 @@ The menu is redrawn in place without clearing the screen: a request's result sta
 
 The first line of the list shows the path inside the workspace, the position (`3/5`) and, when the terminal is wide enough, the project (the folder of the `.req`) and the environment in use: `req /api (3/5)  shop @ dev`. The environment is `REQ_ENV`, `default` when it is not set.
 
-Above the header, an orange bar with black letters is a **warning**: it says that a command was incorrect (an unknown command, nothing selected, a wrong usage, an invalid setting or environment) or that a run failed (a variable with no value, a file that cannot be read, a failure of `curl`: the first line of the error and what follows it, as far as it fits, instead of text in the terminal), or that something is wrong with your configuration (a bad line in a settings file, a setting or the log that cannot be written). When several come at once, the bar shows the first and `(+N more)`. `req run` is not affected: it still writes its warnings and errors to stderr. A warning is shown once and is gone at the next key. The confirmations (`created ...`, `saved ...`, the listing of `:env`) stay in the dim line under the menu. Without colors (`NO_COLOR`) the bar is plain text that starts with `! `.
+The top of the screen carries two kinds of bar: orange with black letters, or, without colors (`NO_COLOR`), plain text that starts with `! `. When both are there, the persistent one is on top.
 
-A **persistent** notification is the same kind of bar, but it is reprinted at every screen for as long as its condition holds, and it cannot be dismissed. The first one is for the root user: when `req` runs as root, a bar warns that the files you create or edit may end up owned by root, which can upset the owner and the permissions of your project's files. Run `req` as the user who owns the project instead.
+- A **warning** is shown once, above the header, and is gone at the next key. It says that a command was incorrect (an unknown command, nothing selected, a wrong usage, an invalid setting or environment); that a run failed (a variable with no value, a file that cannot be read, a failure of `curl`), with the first line of the error and what follows it as far as it fits, instead of text in the terminal; or that something is wrong with your configuration (a bad line in a settings file, a setting or the log that cannot be written) or with a `url` (see below). When several come at once, the bar shows the first and `(+N more)`. The confirmations (`created ...`, `saved ...`, the listing of `:env`) stay in the dim line under the menu. `req run` is not affected: it still writes its warnings and errors to stderr.
+- A **persistent** notification is reprinted at every screen for as long as its condition holds, and it cannot be dismissed. The first one is for the root user: when `req` runs as root, a bar warns that the files you create or edit may end up owned by root, which can upset the owner and the permissions of your project's files. Run `req` as the user who owns the project instead.
+- On the details screen, a request with problems pins its own bar for as long as it is open: an invalid request shows its first problem (and how many more there are), and a `url` that is not a usable address shows why.
 
 ### Commands
 
