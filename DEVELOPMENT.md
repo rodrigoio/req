@@ -2,7 +2,7 @@
 
 How the code is built now, to pick the project up again without the conversation history.
 User documentation is in [README.md](README.md); roadmap, decisions and open questions are in
-[TASKS.md](TASKS.md). Working rules and the style guide are in `guideline.md` (local, git-ignored).
+[TASKS.md](TASKS.md). Working rules and the style guide are in `guideline.md`.
 
 ## Current state
 
