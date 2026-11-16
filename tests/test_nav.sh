@@ -280,11 +280,51 @@ test_detail_invalid() {
     assert_eq "0" "$REQ_DETAIL_VALID" "an invalid request is flagged"
     assert_contains "Invalid request" "$out" "shows the problem"
     assert_contains 'unknown field "retries"' "$out" "shows the reason"
-    assert_eq "$PROJ/api/broken.get.json" "${REQ_SCREEN_LINES[1]}" "the absolute path is on its own line, ready to copy"
+    assert_eq "$PROJ/api/broken.get.json" "${REQ_SCREEN_LINES[2]}" "the absolute path is on its own line, ready to copy"
     assert_eq "0" "$REQ_SCREEN_EXTRA" "a path that fits adds no extra rows"
+    assert_contains '! invalid request: unknown field "retries"' "${REQ_SCREEN_LINES[0]}" "the first problem is pinned at the top, in a bar"
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[0]} <= 59 ))" "cut to fit the terminal"
     assert_eq "" "$(req_nav_handle enter 2>&1)" "Enter does not run an invalid request"
     assert_eq "detail" "$REQ_VIEW" "stays on the details"
     req_nav_handle esc; assert_eq "list" "$REQ_VIEW" "Esc goes back"
+}
+
+test_detail_bad_address() {
+    echo "nav: a request with a broken address"
+    make_project
+    local f out
+    req_request_write "$PROJ/api" badaddr GET "http://exa mple.com" >/dev/null
+    f=$PROJ/api/badaddr.get.json
+    req_nav_init "$PROJ/.req"
+    REQ_DETAIL_FILE=$f
+    COLUMNS=80 screen detail; out=$OUT
+    assert_eq "1" "$REQ_DETAIL_VALID" "the request itself is valid"
+    assert_eq "! invalid address in the url: it contains whitespace" "${REQ_SCREEN_LINES[0]}" "the problem is pinned at the top"
+    assert_contains "GET    badaddr" "${REQ_SCREEN_LINES[1]}" "and the details follow it"
+
+    # shellcheck disable=SC2016  # a ${key} placeholder, literal text
+    req_request_write "$PROJ/api" goodaddr GET 'http://example.com/${path}' >/dev/null
+    REQ_DETAIL_FILE=$PROJ/api/goodaddr.get.json
+    COLUMNS=80 screen detail
+    assert_contains "GET    goodaddr" "${REQ_SCREEN_LINES[0]}" "a good address, placeholders included, has no bar"
+}
+
+test_invalid_many_problems() {
+    echo "nav: an invalid request with many problems"
+    make_project
+    local f=$PROJ/api/lots.get.json i fields="" out
+    for i in $(seq 1 12); do fields+=",\"field_made_up_$i\":1"; done
+    printf '{"name":"lots","method":"GET","url":"http://example.com"%s}\n' "$fields" >"$f"
+    req_nav_init "$PROJ/.req"
+    REQ_DETAIL_FILE=$f
+    COLUMNS=100 screen detail; out=$OUT
+    assert_contains '! invalid request: unknown field "field_made_up_1"' "${REQ_SCREEN_LINES[0]}" "the bar starts with the first problem"
+    assert_eq " (+11 more)" "${REQ_SCREEN_LINES[0]: -11}" "and ends with the count of the others, never cut"
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[0]} <= 99 ))" "inside the terminal width"
+    assert_eq "$f" "${REQ_SCREEN_LINES[2]}" "the path stays whole"
+    assert_eq "$(( REQ_PROBLEMS_MAX_LINES ))" "$(grep -c '^  unknown field' <<<"$out")" "only the first problems are listed"
+    assert_contains "  ... (2 more)" "$out" "and the rest is counted"
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[@]} <= REQ_PROBLEMS_MAX_LINES + 5 ))" "so the screen stays short"
 }
 
 test_invalid_long_path() {
@@ -298,7 +338,7 @@ test_invalid_long_path() {
     req_nav_handle enter
     COLUMNS=20 screen detail
     path=$PROJ/api/broken.get.json; len=${#path}
-    assert_eq "$path" "${REQ_SCREEN_LINES[1]}" "the path is never truncated, even on a narrow terminal"
+    assert_eq "$path" "${REQ_SCREEN_LINES[2]}" "the path is never truncated, even on a narrow terminal"
     assert_eq "$(( (len - 1) / 20 ))" "$REQ_SCREEN_EXTRA" "the rows its wrapping takes are counted for the redraw"
     assert_eq "1" "$(( REQ_SCREEN_EXTRA > 0 ))" "and a long path does wrap here"
     # The redraw count covers lines plus wrapped rows (only tracked on a terminal).
@@ -398,6 +438,63 @@ test_root_notice() {
     assert_contains "${notice}"$'\n'"req help" "$out" "also on the help screen"
     eval "$original"
     REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
+}
+
+test_config_warnings_in_the_bar() {
+    echo "nav: settings problems go to the bar"
+    local dir=$TMP/cfg-bar errfile=$TMP/cfg-bar.err
+    mkdir -p "$dir"
+    printf 'this line is not a key and a value\nsetting_made_up_for_the_test=1\nlog=maybe\n' >"$dir/config"
+    local old_dir=$REQ_CONFIG_DIR
+    REQ_CONFIG_DIR=$dir
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+
+    REQ_NOTIFICATION_ACTIVE=1
+    req_config_load 2>"$errfile"
+    assert_eq "" "$(<"$errfile")" "with the menu open the terminal gets nothing"
+    assert_contains "expected key=value; line ignored" "$REQ_NOTIFICATION_WARN" "the first problem is the warning"
+    assert_contains "$dir/config:1:" "$REQ_NOTIFICATION_WARN" "with the file and the line"
+    assert_eq "2" "$REQ_NOTIFICATION_WARN_MORE" "and the others are counted: (+2 more)"
+    req_notification_collect
+    assert_contains "(+2 more)" "${REQ_NOTIFICATION_LINES[0]}" "one bar line says so"
+
+    REQ_NOTIFICATION_ACTIVE=0
+    req_config_load 2>"$errfile"
+    assert_eq "3" "$(grep -c '^req: warning:' "$errfile")" "outside the menu each one is still a line on stderr"
+    REQ_CONFIG_DIR=$old_dir
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+}
+
+test_run_failures_in_the_bar() {
+    echo "nav: failures when running go to the bar"
+    local p=$TMP/runfail out rule after COLUMNS=140
+    local REQ_PROJECT_ID=""          # no project state: the cursor is neither saved nor restored between runs
+    rule=$(printf '=%.0s' {1..140})
+    mkdir -p "$p"; : >"$p/.req"
+    # nothing listens on port 1: curl fails at once, with its own message
+    req_request_write "$p" refused GET "http://127.0.0.1:1/x" >/dev/null
+    # shellcheck disable=SC2016  # a ${key} placeholder, literal text
+    req_request_write "$p" nokey GET 'http://127.0.0.1:1/${key_made_up_for_the_test}' >/dev/null
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    REQ_NOTIFICATION_ACTIVE=1
+
+    out=$(keys down enter enter | req_nav_run "$p/.req" 2>&1)        # refused is the second item
+    after=${out#*"$rule"}
+    assert_not_contains "req: error:" "$out" "the terminal is not filled with the error text"
+    assert_contains "! " "$after" "a warning bar is drawn after the result"
+    assert_contains "request failed (curl exit code 7)" "$after" "it says what failed"
+    assert_contains "Failed to connect" "$after" "with the message of curl"
+    assert_contains "$rule" "$out" "and the result block is still closed by its rule"
+
+    out=$(keys enter enter | req_nav_run "$p/.req" 2>&1)             # nokey is the first item
+    assert_not_contains "req: error:" "$out" "a missing key does not fill the terminal either"
+    assert_contains "! no value for key_made_up_for_the_test in environment \"default\"" "$out" "the bar names the key"
+    assert_contains "set the variable" "$out" "and the guidance follows, as far as it fits"
+
+    REQ_NOTIFICATION_ACTIVE=0
+    out=$(keys enter enter | req_nav_run "$p/.req" 2>&1)
+    assert_contains "req: error: no value for key_made_up_for_the_test" "$out" "outside the menu flag the errors stay on stderr"
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
 }
 
 test_end_to_end() {
@@ -1240,6 +1337,8 @@ test_detail_screen
 test_detail_params
 test_detail_raw_data
 test_detail_invalid
+test_detail_bad_address
+test_invalid_many_problems
 test_invalid_long_path
 test_truncate_scroll
 test_empty_project
@@ -1263,5 +1362,7 @@ test_review2_flow
 test_start_init
 test_notification_bars
 test_root_notice
+test_config_warnings_in_the_bar
+test_run_failures_in_the_bar
 test_end_to_end
 test_summary

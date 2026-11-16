@@ -9,6 +9,7 @@
 # ":" enters command mode (see cmd.sh).
 
 REQ_RAW_MAX_LINES=15    # lines of raw_data shown on the details screen
+REQ_PROBLEMS_MAX_LINES=10   # problems listed on the details of an invalid request
 REQ_ESC_TIMEOUT=0.05    # wait for bytes after ESC to tell an arrow key from a bare Esc
 REQ_INPUT_FD=0          # descriptor the keys are read from
 REQ_KEY=""              # last key read: up, down, enter, esc, or the character itself
@@ -269,7 +270,8 @@ req_nav_build_list() {
 # req_nav_build_detail - builds REQ_SCREEN_LINES with the open request's details.
 # Invalid requests show their problems instead of the fields and do not run.
 req_nav_build_detail() {
-    local f=$REQ_DETAIL_FILE abs cols width c_dim c_bold c_reset problems line
+    local f=$REQ_DETAIL_FILE abs cols width c_dim c_bold c_reset problems line i
+    local -a plist=()
     cols=$(req_term_cols); width=$(( cols - 4 ))
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
@@ -277,19 +279,30 @@ req_nav_build_detail() {
     if ! problems=$(req_request_check "$f" 2>&1); then
         REQ_DETAIL_VALID=0
         abs=$(req_abs_path "$f")
-        REQ_SCREEN_LINES+=("$(req_color err)Invalid request:${c_reset}")
-        req_screen_add_long "$abs"      # whole and on its own line, ready to copy
         while IFS= read -r line; do
             line=${line#"req: error: $abs: "}
             line=${line#"req: error: "}
-            REQ_SCREEN_LINES+=("  $(req_trunc "$line" "$width")")
+            plist+=("$line")
         done <<<"$problems"
+        # pinned at the top: the first problem and how many more there are
+        REQ_SCREEN_LINES+=("$(req_notification_bar "$(req_notification_more "invalid request: ${plist[0]}" $(( ${#plist[@]} - 1 )))")")
+        REQ_SCREEN_LINES+=("$(req_color err)Invalid request:${c_reset}")
+        req_screen_add_long "$abs"      # whole and on its own line, ready to copy
+        for (( i = 0; i < ${#plist[@]} && i < REQ_PROBLEMS_MAX_LINES; i++ )); do
+            REQ_SCREEN_LINES+=("  $(req_trunc "${plist[i]}" "$width")")
+        done
+        (( ${#plist[@]} > REQ_PROBLEMS_MAX_LINES )) &&
+            REQ_SCREEN_LINES+=("  ... ($(( ${#plist[@]} - REQ_PROBLEMS_MAX_LINES )) more)")
         REQ_SCREEN_LINES+=("${c_dim}Fix the file and open it again.   Esc back${c_reset}")
         return 0
     fi
 
     REQ_DETAIL_VALID=1
     req_request_fields "$f"
+    # pinned at the top while the request is open: the address is not usable (placeholders are tolerated)
+    if ! req_url_check "$REQ_F_URL"; then
+        REQ_SCREEN_LINES+=("$(req_notification_bar "invalid address in the url: $REQ_URL_PROBLEM")")
+    fi
     REQ_SCREEN_LINES+=("$(req_method_color "$REQ_F_METHOD")$(printf '%-6s' "$REQ_F_METHOD")${c_reset} ${c_bold}$(req_trunc "$REQ_F_NAME" $((cols - 9)))${c_reset}")
     REQ_SCREEN_LINES+=("  ${c_dim}url${c_reset}  $(req_trunc "$REQ_F_URL" $((width - 5)))")
     if [[ -n $REQ_F_DESC ]]; then
@@ -398,10 +411,21 @@ req_nav_back() {
     REQ_SEL=$sel
 }
 
-# req_nav_execute - Enter on the details: erases the menu, runs and leaves the result on screen.
+# req_nav_execute - Enter on the details: erases the menu, runs and leaves the result on screen
+# (the failures go to the warning bar).
 req_nav_execute() {
+    local errs=""
     req_screen_erase
-    req_run_request "$REQ_DETAIL_FILE"
+    # In the menu what the run writes to stderr (a key with no value, a file that cannot be read,
+    # a failure of curl) becomes one warning at the top, instead of text in the terminal.
+    [[ ${REQ_NOTIFICATION_ACTIVE-0} == 1 ]] && errs=$(mktemp 2>/dev/null)
+    if [[ -n $errs ]]; then
+        req_run_request "$REQ_DETAIL_FILE" 2>"$errs"
+        req_notification_warn_file "$errs"
+        rm -f "$errs"
+    else
+        req_run_request "$REQ_DETAIL_FILE"
+    fi
     return 0
 }
 
@@ -488,7 +512,7 @@ req_nav_run() {
 # req_nav_start - interactive entry point: uses the .req of the current directory.
 # Without one, offers to initialize a project right here.
 req_nav_start() {
-    local pfile
+    local pfile status
     [[ -t 0 && -t 1 ]] || req_die "interactive mode needs a terminal (use 'req run <file>' in scripts)"
     if ! pfile=$(req_project_find .); then
         printf 'No %s file found in %s.\n' "$REQ_PROJECT_FILE" "$PWD"
@@ -500,7 +524,10 @@ req_nav_start() {
         printf 'Created %s (workspace: .)\nUse :n to create a new request.\n' "$REQ_PROJECT_FILE"
         pfile=$(req_project_find .) || return 1
     fi
+    REQ_NOTIFICATION_ACTIVE=1          # from here a warning goes to the bar at the top, not to the terminal
     req_project_activate "$(dirname "$pfile")"
     req_config_load_local || true      # the project's settings win over the global ones
-    req_nav_run "$pfile"
+    req_nav_run "$pfile"; status=$?
+    REQ_NOTIFICATION_ACTIVE=0
+    return "$status"
 }

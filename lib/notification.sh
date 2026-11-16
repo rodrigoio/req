@@ -17,6 +17,8 @@ REQ_NOTIFICATION_LINES=()      # the bar lines of the current draw, from the top
 REQ_NOTIFICATION_IDS=()        # the persistent notifications, in registration order
 REQ_NOTIFICATION_CHECKS=()     # their check functions, in the same order
 REQ_NOTIFICATION_TEXT=""       # what a check that has something to say puts in its bar
+# shellcheck disable=SC2034  # read by req_warn (core.sh), req_run_request (http.sh) and the menu (nav.sh)
+REQ_NOTIFICATION_ACTIVE=0      # 1 while the menu is open: req_warn then goes through the warning bar
 REQ_NOTIFICATION_WARN=""       # the warning that waits for the next draw ("" when there is none)
 REQ_NOTIFICATION_WARN_MORE=0   # how many more came after it before that draw
 REQ_NOTIFICATION_PRODUCERS=(req_notification_persistent_lines req_notification_warn_lines)
@@ -38,6 +40,15 @@ req_notification_bar() {
     pad=$(( cols - 2 - ${#text} ))
     (( pad < 0 )) && pad=0                      # a negative width would pad on the other side
     printf '%s %s%*s%s' "$(req_color notification)" "$text" "$pad" '' "$(req_color reset)"
+}
+
+# req_notification_more <text> <n> - the text for a bar that is one of several: the text cut to the
+# width, never the " (+N more)" that follows it (nothing is added when n is 0).
+req_notification_more() {
+    local suffix=""
+    (( $2 > 0 )) && suffix=" (+$2 more)"
+    # what a bar leaves for the text, with or without colors, once the suffix is there
+    printf '%s%s' "$(req_trunc "$1" $(( $(req_term_cols) - 3 - ${#suffix} )))" "$suffix"
 }
 
 # req_notification_collect - fills REQ_NOTIFICATION_LINES with the bars of this draw: every
@@ -112,15 +123,29 @@ req_notification_warn() {
     return 0
 }
 
+# req_notification_warn_file <file> - turns what a command wrote to stderr into one warning: every
+# line without its "req: error: " or "req: warning: " mark and without its indentation, the lines
+# joined with "; ", so the guidance that follows the summary is cut to what fits the bar. A file
+# with no text is no warning.
+req_notification_warn_file() {
+    local line text=""
+    [[ -s $1 ]] || return 0
+    while IFS= read -r line || [[ -n $line ]]; do
+        line=${line#req: error: }; line=${line#req: warning: }
+        line=${line#"${line%%[![:space:]]*}"}          # without the indentation
+        [[ -n $line ]] || continue
+        text+="${text:+; }$line"
+    done <"$1"
+    req_notification_warn "$text"
+}
+
 # req_notification_warn_lines - the producer of the warning (named in REQ_NOTIFICATION_PRODUCERS,
 # after the persistent one): the held warning becomes a bar and is spent, so the next draw has
 # none. A cut to the width falls on the message, never on the "(+N more)" that follows it.
 req_notification_warn_lines() {
-    local text suffix="" room
+    local text
     [[ -n $REQ_NOTIFICATION_WARN ]] || return 0
-    (( REQ_NOTIFICATION_WARN_MORE > 0 )) && suffix=" (+$REQ_NOTIFICATION_WARN_MORE more)"
-    room=$(( $(req_term_cols) - 3 - ${#suffix} ))     # what a bar leaves for the text, with or without colors
-    text="$(req_trunc "$REQ_NOTIFICATION_WARN" "$room")$suffix"
+    text=$(req_notification_more "$REQ_NOTIFICATION_WARN" "$REQ_NOTIFICATION_WARN_MORE")
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
     REQ_NOTIFICATION_LINES+=("$(req_notification_bar "$text")")
     return 0

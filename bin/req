@@ -58,6 +58,8 @@ main() {
     req_check_bash
     req_check_deps
     req_setup_traps
+    # In the interactive menu the warnings of the settings files go to the bar at the top (req_warn).
+    if [[ -z ${1-} && -t 0 && -t 1 ]]; then REQ_NOTIFICATION_ACTIVE=1; fi
     req_config_load || true     # warnings only: a bad setting never stops req
 
     case ${1-} in

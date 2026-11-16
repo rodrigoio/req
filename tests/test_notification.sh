@@ -277,13 +277,77 @@ test_root_notice() {
     REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=(); REQ_NOTIFICATION_LINES=()
 }
 
+test_warn_routing() {
+    echo "notification: req_warn follows the menu"
+    local errfile
+    errfile=$(mktemp)
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+
+    REQ_NOTIFICATION_ACTIVE=0
+    req_warn "a plain warning made up for the test" 2>"$errfile"
+    assert_eq "req: warning: a plain warning made up for the test" "$(<"$errfile")" "outside the menu a warning goes to stderr"
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "and the bar is not involved"
+
+    REQ_NOTIFICATION_ACTIVE=1
+    req_warn "a warning for the bar, made up for the test" 2>"$errfile"
+    assert_eq "" "$(<"$errfile")" "while the menu is open nothing goes to stderr"
+    assert_eq "a warning for the bar, made up for the test" "$REQ_NOTIFICATION_WARN" "the bar holds it for the next draw"
+    req_warn "another one" 2>"$errfile"
+    assert_eq "1" "$REQ_NOTIFICATION_WARN_MORE" "and a second one is counted after it"
+
+    REQ_NOTIFICATION_ACTIVE=0
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    rm -f "$errfile"
+}
+
+test_more() {
+    echo "notification: the text of a bar that is one of several"
+    local COLUMNS=30
+    assert_eq "a short text" "$(req_notification_more "a short text" 0)" "nothing is added when there are no others"
+    assert_eq "a short text (+3 more)" "$(req_notification_more "a short text" 3)" "the count follows the text"
+    assert_eq "a long text that~ (+3 more)" "$(req_notification_more "a long text that is cut because it does not fit" 3)" "a long text is cut, never the count"
+    local cut
+    cut=$(req_notification_more "a long text that is cut because it does not fit" 3)
+    assert_eq "1" "$(( ${#cut} <= 27 ))" "and the whole fits a bar of 30 columns"
+}
+
+test_warn_file() {
+    echo "notification: what a command wrote to stderr, as one warning"
+    local f
+    f=$(mktemp)
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+
+    : >"$f"
+    req_notification_warn_file "$f"
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "an empty file is no warning"
+
+    printf 'req: error: no value for X in environment "dev"\n  X: set the variable DEV_X, or add X=... to /p/dev\n' >"$f"
+    req_notification_warn_file "$f"
+    assert_eq 'no value for X in environment "dev"; X: set the variable DEV_X, or add X=... to /p/dev' "$REQ_NOTIFICATION_WARN" "the marks and the indentation go, the lines are joined"
+    REQ_NOTIFICATION_WARN=""
+
+    printf 'curl: (6) Could not resolve host: nowhere.invalid\n\nreq: error: request failed (curl exit code 6)' >"$f"
+    req_notification_warn_file "$f"
+    assert_eq "curl: (6) Could not resolve host: nowhere.invalid; request failed (curl exit code 6)" "$REQ_NOTIFICATION_WARN" "blank lines are skipped and a last line with no newline counts"
+    REQ_NOTIFICATION_WARN=""
+
+    printf 'req: warning: a warning line\n' >"$f"
+    req_notification_warn_file "$f"
+    assert_eq "a warning line" "$REQ_NOTIFICATION_WARN" "a warning mark goes too"
+    REQ_NOTIFICATION_WARN=""
+    rm -f "$f"
+}
+
 test_color
 test_bar_with_colors
 test_bar_without_colors
 test_collect
 test_persistent
 test_warning
+test_more
 test_root_notice
+test_warn_routing
+test_warn_file
 test_overlay
 test_list_window
 test_summary
