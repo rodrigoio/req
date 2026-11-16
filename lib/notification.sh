@@ -14,6 +14,9 @@
 # Only the interactive menu draws bars; `req run` never does.
 
 REQ_NOTIFICATION_LINES=()      # the bar lines of the current draw, from the top of the screen
+REQ_NOTIFICATION_IDS=()        # the persistent notifications, in registration order
+REQ_NOTIFICATION_CHECKS=()     # their check functions, in the same order
+REQ_NOTIFICATION_TEXT=""       # what a check that has something to say puts in its bar
 REQ_NOTIFICATION_PRODUCERS=(req_notification_persistent_lines req_notification_warn_lines)
 
 # req_notification_bar <text> - prints one bar line: black letters on an orange background,
@@ -51,4 +54,40 @@ req_notification_collect() {
 req_notification_overlay() {
     (( ${#REQ_NOTIFICATION_LINES[@]} > 0 )) || return 0
     REQ_SCREEN_LINES=("${REQ_NOTIFICATION_LINES[@]}" "${REQ_SCREEN_LINES[@]}")
+}
+
+# --- persistent notifications --------------------------------------------------
+
+# req_notification_register <id> <check function> - registers a persistent notification. At every
+# draw the check is called: it succeeds and sets REQ_NOTIFICATION_TEXT when it has something to
+# say, and fails when it has not. Registering an id again replaces its check (so the menu can
+# register at every start), and a feature added later only registers its own.
+req_notification_register() {
+    local id=$1 check=$2 i
+    [[ -n $id && -n $check ]] || return 1
+    for i in "${!REQ_NOTIFICATION_IDS[@]}"; do
+        if [[ ${REQ_NOTIFICATION_IDS[i]} == "$id" ]]; then
+            REQ_NOTIFICATION_CHECKS[i]=$check
+            return 0
+        fi
+    done
+    REQ_NOTIFICATION_IDS+=("$id")
+    REQ_NOTIFICATION_CHECKS+=("$check")
+}
+
+# req_notification_persistent_lines - the producer of the persistent notifications (named in
+# REQ_NOTIFICATION_PRODUCERS): runs every registered check, in order, and adds one bar line for
+# each one that is active. Nothing is spent here: the bars come back at every draw, for as long
+# as the condition holds, and there is no way to dismiss them. A check that is not defined
+# is skipped, and one that succeeds with no text says nothing.
+req_notification_persistent_lines() {
+    local check
+    for check in "${REQ_NOTIFICATION_CHECKS[@]}"; do
+        REQ_NOTIFICATION_TEXT=""
+        declare -F "$check" >/dev/null || continue
+        if "$check" && [[ -n $REQ_NOTIFICATION_TEXT ]]; then
+            REQ_NOTIFICATION_LINES+=("$(req_notification_bar "$REQ_NOTIFICATION_TEXT")")
+        fi
+    done
+    return 0
 }

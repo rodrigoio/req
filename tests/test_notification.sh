@@ -131,10 +131,61 @@ test_list_window() {
     REQ_NOTIFICATION_LINES=()
 }
 
+# Checks made up for the tests: what a feature registers to raise a persistent notification.
+notification_test_check_first() { REQ_NOTIFICATION_TEXT="first persistent notice made up for the test"; }
+notification_test_check_second() { REQ_NOTIFICATION_TEXT="second persistent notice made up for the test"; }
+notification_test_check_replacement() { REQ_NOTIFICATION_TEXT="replacement notice made up for the test"; }
+notification_test_check_silent() { return 1; }
+notification_test_check_empty() { return 0; }
+
+test_persistent() {
+    echo "notification: persistent notifications"
+    local COLUMNS=100                  # wide enough for the whole text of every bar
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "nothing registered, no bar"
+
+    req_notification_register test-first notification_test_check_first
+    req_notification_collect
+    assert_eq "1" "${#REQ_NOTIFICATION_LINES[@]}" "a registered notification that is active adds a bar"
+    assert_eq "! first persistent notice made up for the test" "${REQ_NOTIFICATION_LINES[0]}" "with its text"
+    req_notification_collect
+    assert_eq "1" "${#REQ_NOTIFICATION_LINES[@]}" "and it is there at the next draw too: nothing is spent"
+    req_notification_collect
+    assert_eq "! first persistent notice made up for the test" "${REQ_NOTIFICATION_LINES[0]}" "and at the one after"
+
+    req_notification_register test-silent notification_test_check_silent
+    req_notification_register test-empty notification_test_check_empty
+    req_notification_register test-missing notification_test_check_not_defined
+    req_notification_collect
+    assert_eq "1" "${#REQ_NOTIFICATION_LINES[@]}" "an inactive check, one with no text and one not defined say nothing"
+
+    req_notification_register test-second notification_test_check_second
+    req_notification_collect
+    assert_eq "2" "${#REQ_NOTIFICATION_LINES[@]}" "two active at once give two bars"
+    assert_eq "! first persistent notice made up for the test" "${REQ_NOTIFICATION_LINES[0]}" "in registration order: the first one on top"
+    assert_eq "! second persistent notice made up for the test" "${REQ_NOTIFICATION_LINES[1]}" "and the next below it"
+
+    req_notification_register test-first notification_test_check_replacement
+    req_notification_collect
+    assert_eq "2" "${#REQ_NOTIFICATION_LINES[@]}" "registering an id again does not add a bar"
+    assert_eq "! replacement notice made up for the test" "${REQ_NOTIFICATION_LINES[0]}" "it replaces the check, in the same place"
+    assert_eq "5" "${#REQ_NOTIFICATION_IDS[@]}" "and the registry keeps one entry per id"
+
+    req_notification_register "" notification_test_check_first
+    assert_eq "1" "$?" "an empty id is refused"
+    req_notification_register test-no-check ""
+    assert_eq "1" "$?" "so is an empty check"
+    assert_eq "5" "${#REQ_NOTIFICATION_IDS[@]}" "and neither is kept"
+
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=(); REQ_NOTIFICATION_LINES=()
+}
+
 test_color
 test_bar_with_colors
 test_bar_without_colors
 test_collect
+test_persistent
 test_overlay
 test_list_window
 test_summary
