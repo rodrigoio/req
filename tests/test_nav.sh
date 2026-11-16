@@ -34,6 +34,10 @@ source "$ROOT/lib/cmd.sh"
 
 # shellcheck disable=SC2031  # lib/store.sh sets LC_ALL in a subshell on purpose
 export LC_ALL=C COLUMNS=60 LINES=24
+# The root notice (a persistent bar) must not depend on who runs the tests: nobody is root here,
+# except in the one test that says otherwise.
+# shellcheck disable=SC2317  # called by the library, not from this file
+req_notification_is_root() { return 1; }
 TMP=$(mktemp -d)
 export REQ_CONFIG_DIR=$TMP/cfg      # never touch the real ~/.req
 SERVER_PID=""
@@ -372,6 +376,28 @@ test_notification_bars() {
     assert_eq "$warn" "$(head -n 1 <<<"$out")" "a warning waiting when the menu opens is the first line of the first draw"
     assert_eq "1" "$(grep -c -F "$warn" <<<"$out")" "and it is printed once: the details drawn next have none"
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+}
+
+test_root_notice() {
+    echo "nav: the root user's notice"
+    local p=$TMP/rootnote out notice="! running as root: files you create or edit may end up owned by root, not you"
+    local original COLUMNS=100       # wide enough for the whole notice
+    original=$(declare -f req_notification_is_root)
+    mkdir -p "$p"; : >"$p/.req"
+    req_request_write "$p" ping GET "http://127.0.0.1:1/x" >/dev/null
+
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_not_contains "running as root" "$out" "another user sees no notice"
+
+    # shellcheck disable=SC2317  # called by the library, not from this file
+    req_notification_is_root() { return 0; }
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "$notice" "$(head -n 1 <<<"$out")" "root sees it as the first line of the screen"
+    assert_eq "2" "$(grep -c -F "$notice" <<<"$out")" "at every draw: the list and the details"
+    out=$(keys : h enter | req_nav_run "$p/.req" 2>&1)
+    assert_contains "${notice}"$'\n'"req help" "$out" "also on the help screen"
+    eval "$original"
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
 }
 
 test_end_to_end() {
@@ -1236,5 +1262,6 @@ test_cursor_restore
 test_review2_flow
 test_start_init
 test_notification_bars
+test_root_notice
 test_end_to_end
 test_summary

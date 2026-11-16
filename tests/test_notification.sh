@@ -238,12 +238,52 @@ test_warning() {
     REQ_NOTIFICATION_LINES=()
 }
 
+test_root_notice() {
+    echo "notification: the root user's notice"
+    local COLUMNS=80 original
+    original=$(declare -f req_notification_is_root)
+    req_notification_is_root; local real=$?
+    assert_eq "$(( $(id -u) == 0 ? 0 : 1 ))" "$real" "the real check follows the user id"
+
+    # shellcheck disable=SC2317  # called by the library, not from this file
+    req_notification_is_root() { return 1; }
+    REQ_NOTIFICATION_TEXT=""
+    req_notification_root_check
+    assert_eq "1" "$?" "not root: nothing to say"
+    assert_eq "" "$REQ_NOTIFICATION_TEXT" "and no text"
+
+    # shellcheck disable=SC2317  # called by the library, not from this file
+    req_notification_is_root() { return 0; }
+    req_notification_root_check
+    assert_eq "0" "$?" "root: there is something to say"
+    assert_contains "running as root" "$REQ_NOTIFICATION_TEXT" "it says req runs as root"
+    assert_contains "owned by root" "$REQ_NOTIFICATION_TEXT" "and that the files may end up owned by root"
+    assert_eq "1" "$(( ${#REQ_NOTIFICATION_TEXT} <= 77 ))" "the text fits an 80-column bar"
+
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
+    req_notification_register root req_notification_root_check
+    req_notification_collect
+    assert_eq "1" "${#REQ_NOTIFICATION_LINES[@]}" "registered, it is a persistent bar for root"
+    assert_contains "running as root" "${REQ_NOTIFICATION_LINES[0]}" "with the notice"
+    req_notification_collect
+    assert_eq "1" "${#REQ_NOTIFICATION_LINES[@]}" "and it comes back at every draw"
+
+    # shellcheck disable=SC2317  # called by the library, not from this file
+    req_notification_is_root() { return 1; }
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "for another user it is no bar at all"
+
+    eval "$original"
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=(); REQ_NOTIFICATION_LINES=()
+}
+
 test_color
 test_bar_with_colors
 test_bar_without_colors
 test_collect
 test_persistent
 test_warning
+test_root_notice
 test_overlay
 test_list_window
 test_summary

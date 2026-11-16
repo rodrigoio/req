@@ -74,6 +74,8 @@ The first line of the list shows the path inside the workspace, the position (`3
 
 Above the header, an orange bar with black letters is a **warning**: it says that a command was incorrect (an unknown command, nothing selected, a wrong usage, an invalid setting or environment) or that something failed (a setting that cannot be written). A warning is shown once and is gone at the next key. The confirmations (`created ...`, `saved ...`, the listing of `:env`) stay in the dim line under the menu. Without colors (`NO_COLOR`) the bar is plain text that starts with `! `.
 
+A **persistent** notification is the same kind of bar, but it is reprinted at every screen for as long as its condition holds, and it cannot be dismissed. The first one is for the root user: when `req` runs as root, a bar warns that the files you create or edit may end up owned by root, which can upset the owner and the permissions of your project's files. Run `req` as the user who owns the project instead.
+
 ### Commands
 
 Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) cancels.
