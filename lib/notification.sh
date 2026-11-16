@@ -17,6 +17,8 @@ REQ_NOTIFICATION_LINES=()      # the bar lines of the current draw, from the top
 REQ_NOTIFICATION_IDS=()        # the persistent notifications, in registration order
 REQ_NOTIFICATION_CHECKS=()     # their check functions, in the same order
 REQ_NOTIFICATION_TEXT=""       # what a check that has something to say puts in its bar
+REQ_NOTIFICATION_WARN=""       # the warning that waits for the next draw ("" when there is none)
+REQ_NOTIFICATION_WARN_MORE=0   # how many more came after it before that draw
 REQ_NOTIFICATION_PRODUCERS=(req_notification_persistent_lines req_notification_warn_lines)
 
 # req_notification_bar <text> - prints one bar line: black letters on an orange background,
@@ -89,5 +91,37 @@ req_notification_persistent_lines() {
             REQ_NOTIFICATION_LINES+=("$(req_notification_bar "$REQ_NOTIFICATION_TEXT")")
         fi
     done
+    return 0
+}
+
+# --- the warning, printed once ---------------------------------------------------
+
+# req_notification_warn <message> - holds a warning for the next draw, where it is shown once in a
+# bar below the persistent ones (an incorrect command, a notice of warning severity). When several
+# come before the same draw, the first one is shown with "(+N more)". The message is one line:
+# line breaks become spaces.
+req_notification_warn() {
+    local msg=$*
+    msg=${msg//$'\n'/ }
+    [[ -n $msg ]] || return 0
+    if [[ -z $REQ_NOTIFICATION_WARN ]]; then
+        REQ_NOTIFICATION_WARN=$msg
+    else
+        REQ_NOTIFICATION_WARN_MORE=$(( REQ_NOTIFICATION_WARN_MORE + 1 ))
+    fi
+    return 0
+}
+
+# req_notification_warn_lines - the producer of the warning (named in REQ_NOTIFICATION_PRODUCERS,
+# after the persistent one): the held warning becomes a bar and is spent, so the next draw has
+# none. A cut to the width falls on the message, never on the "(+N more)" that follows it.
+req_notification_warn_lines() {
+    local text suffix="" room
+    [[ -n $REQ_NOTIFICATION_WARN ]] || return 0
+    (( REQ_NOTIFICATION_WARN_MORE > 0 )) && suffix=" (+$REQ_NOTIFICATION_WARN_MORE more)"
+    room=$(( $(req_term_cols) - 3 - ${#suffix} ))     # what a bar leaves for the text, with or without colors
+    text="$(req_trunc "$REQ_NOTIFICATION_WARN" "$room")$suffix"
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    REQ_NOTIFICATION_LINES+=("$(req_notification_bar "$text")")
     return 0
 }
