@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # home.sh - the user's central directory (~/.req): projects, configuration, cursor.
 #
-# Layout (one directory per project; see TASKS.md, "Controle central de projetos"):
+# Layout (one directory per project; see TASKS.md, "Central project control"):
 #   ~/.req/current                 project=<id>: the project in use
 #   ~/.req/config                  global configuration
 #   ~/.req/projects/<id>/project   name=<folder name> and path=<absolute path of the project>

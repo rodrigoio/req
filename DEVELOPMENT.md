@@ -2,7 +2,7 @@
 
 Handoff document: everything needed to pick the project up again without the
 conversation history. User-facing documentation is in [README.md](README.md); the
-roadmap and task status are in [TASKS.md](TASKS.md) (written in Portuguese).
+roadmap and task status are in [TASKS.md](TASKS.md).
 
 ## Scope of use
 
@@ -38,14 +38,15 @@ folder itself may be reached through a link: only the workspace part is checked.
 | 7 Portability and delivery (T7.1 to T7.6) | T7.3 to T7.6 done; T7.1 and T7.2 wait for tests run directly in the real environments (no docker) |
 | 8 Extras (T8.1 to T8.6) | done |
 
-Next: **a review session** of the questions Q1 to Q11 in TASKS.md (see "Pauta da próxima sessão") and a new plan from the answers; no task is pending. Last tasks: (T9.2 is done: `max_redirects` int setting, default 10, passed to `--max-redirs`; T9.1 is done: `int` type in `lib/config.sh`, `log_request_limit`, `req_log_trim` in `lib/log.sh`). Earlier: **none left in the plan** (Phase 8 is done; what remains is the open items TA.2 to TA.14 in TASKS.md, which wait for validation with users, and the review questions Q1 to Q11 in TASKS.md). T8.6 is done (`REQ_JQ_LEAVES` in `lib/store.sh` flattens nested `query` values for the schema check, the details screen and the url); T8.5 is done (`files` in `REQ_SCHEMA_JQ` and in `REQ_SUBST_FIELDS`; jq tag `file` -> `REQ_P_FILES`; `req_files_args` builds `--form-string` and `-F name=@\"path\"` and fails for an unreadable file; `req_run_request` sets `REQ_REQUEST_DIR` so relative paths start at the request's folder; verbose and log show the files); T8.3 is done (`insecure` in `REQ_SCHEMA_JQ`, tag `insecure` -> `REQ_P_INSECURE` -> `-k`; `tests/mock_server.py <cert> <key>` serves https, the test needs `openssl`, which `tests/container.sh` installs); T8.2 is done (`follow_redirects` in `REQ_SCHEMA_JQ`, tag `follow` -> `REQ_P_FOLLOW` -> `-L --max-redirs 10`; `req_split_headers` skips 3xx blocks only while `REQ_P_FOLLOW` is true; the mock has `/redirect` and `/loop`); T8.1 is done (`timeout` in `REQ_SCHEMA_JQ`, `REQ_PREPARE_JQ` tag `timeout` -> `REQ_P_TIMEOUT` -> `--max-time`; `tests/mock_server.py` got `/sleep/<ms>`); Phase 7 is done except T7.1 and T7.2, which wait for tests run directly in the real environments (no docker): T7.4 and T7.5 in the README, T7.6 in `tests/test_e2e.sh`; Phase 6 is done, T6.7 verified with the real binary: log off by default, log and verbose with `REQ_VERBOSE=1`, `:v` and `:log` in a pty; T6.6 is done (`req_cmd_log` and `req_cmd_verbose` in `lib/cmd.sh`, with `req_cmd_switch` for the optional yes/no/on/off argument; `REQ_LOG_SESSION` in `lib/log.sh` wins over the `log` setting in `req_log_enabled`); T6.5 is done (`req_curl_exec` now runs curl with `-D -` and `req_split_headers` fills `REQ_RESP_STATUSLINE`, `REQ_RESP_HEADERS` and the body, skipping a `1xx` block; `req_verbose_response` prints them with `<<`); T6.4 is done (`REQ_VERBOSE`, `req_verbose_on`, `req_verbose_request` in `lib/http.sh`, called by `req_run_request` right after the `METHOD url` line); T6.3 is done (`req_log_response` after `req_curl_exec`, `req_log_failure <code>` when curl fails); T6.2 is done (`lib/log.sh`: `req_log_request` is called by `req_run_request` right before the curl call; `req_log_write <event> <text>` is the one writer, to reuse for T6.3); T6.1 is done: project settings over the global ones, `log=yes|no` only; Phase 5 is done, T5.7 was dropped). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Fase 6".
+Next: **a review session** of the questions Q1 to Q11 in TASKS.md (see "Agenda for the next session") and a new plan from the answers; no task is pending. Last tasks: (T9.2 is done: `max_redirects` int setting, default 10, passed to `--max-redirs`; T9.1 is done: `int` type in `lib/config.sh`, `log_request_limit`, `req_log_trim` in `lib/log.sh`). Earlier: **none left in the plan** (Phase 8 is done; what remains is the open items TA.2 to TA.14 in TASKS.md, which wait for validation with users, and the review questions Q1 to Q11 in TASKS.md). T8.6 is done (`REQ_JQ_LEAVES` in `lib/store.sh` flattens nested `query` values for the schema check, the details screen and the url); T8.5 is done (`files` in `REQ_SCHEMA_JQ` and in `REQ_SUBST_FIELDS`; jq tag `file` -> `REQ_P_FILES`; `req_files_args` builds `--form-string` and `-F name=@\"path\"` and fails for an unreadable file; `req_run_request` sets `REQ_REQUEST_DIR` so relative paths start at the request's folder; verbose and log show the files); T8.3 is done (`insecure` in `REQ_SCHEMA_JQ`, tag `insecure` -> `REQ_P_INSECURE` -> `-k`; `tests/mock_server.py <cert> <key>` serves https, the test needs `openssl`, which `tests/container.sh` installs); T8.2 is done (`follow_redirects` in `REQ_SCHEMA_JQ`, tag `follow` -> `REQ_P_FOLLOW` -> `-L --max-redirs 10`; `req_split_headers` skips 3xx blocks only while `REQ_P_FOLLOW` is true; the mock has `/redirect` and `/loop`); T8.1 is done (`timeout` in `REQ_SCHEMA_JQ`, `REQ_PREPARE_JQ` tag `timeout` -> `REQ_P_TIMEOUT` -> `--max-time`; `tests/mock_server.py` got `/sleep/<ms>`); Phase 7 is done except T7.1 and T7.2, which wait for tests run directly in the real environments (no docker): T7.4 and T7.5 in the README, T7.6 in `tests/test_e2e.sh`; Phase 6 is done, T6.7 verified with the real binary: log off by default, log and verbose with `REQ_VERBOSE=1`, `:v` and `:log` in a pty; T6.6 is done (`req_cmd_log` and `req_cmd_verbose` in `lib/cmd.sh`, with `req_cmd_switch` for the optional yes/no/on/off argument; `REQ_LOG_SESSION` in `lib/log.sh` wins over the `log` setting in `req_log_enabled`); T6.5 is done (`req_curl_exec` now runs curl with `-D -` and `req_split_headers` fills `REQ_RESP_STATUSLINE`, `REQ_RESP_HEADERS` and the body, skipping a `1xx` block; `req_verbose_response` prints them with `<<`); T6.4 is done (`REQ_VERBOSE`, `req_verbose_on`, `req_verbose_request` in `lib/http.sh`, called by `req_run_request` right after the `METHOD url` line); T6.3 is done (`req_log_response` after `req_curl_exec`, `req_log_failure <code>` when curl fails); T6.2 is done (`lib/log.sh`: `req_log_request` is called by `req_run_request` right before the curl call; `req_log_write <event> <text>` is the one writer, to reuse for T6.3); T6.1 is done: project settings over the global ones, `log=yes|no` only; Phase 5 is done, T5.7 was dropped). Reviews 1 (except TR.14, postponed: it waits for the user's answer), 2 and 3 are done. See "Review 1 findings" below and TASKS.md, section "Phase 6".
 
-Work rules agreed with the user (also in TASKS.md, "Decisões fechadas"):
+Work rules agreed with the user (also in TASKS.md, "Closed decisions"):
 - One task = one behavior, about 100 to 200 lines including tests, one commit.
   Helpers go in their own commit before the feature that uses them.
 - What is already implemented counts as done; do not re-validate it.
 - Everything in the repository is in English (code, messages, comments, tests,
-  README). The conversation is in Portuguese, and so is TASKS.md.
+  README) and so are the project documents: `DEVELOPMENT.md`, `TASKS.md` and
+  `guideline.md` (rule 10). Only the conversation with the user is in Portuguese.
 - The `manifest` file is the user's and is git-ignored; never commit it.
 - Branches (`guideline.md`, rule 7): every task gets its own branch, named with one or
   two words in slug-case plus a three-digit sequence number that never restarts and grows
@@ -283,14 +284,14 @@ worth observing in usability sessions; each one is cheap to change.
 
 Record findings as new tasks in TASKS.md rather than changing behavior ad hoc. What a
 session confirms becomes a task in a review section (see "Review 1 findings" below);
-what is still unconfirmed stays in "Adicionais" (TA.2 to TA.13). Items 1, 2, 4, 5, 7
+what is still unconfirmed stays in "Additional" (TA.2 to TA.13). Items 1, 2, 4, 5, 7
 and 11 above have a task there (TA.3 to TA.6 and TA.11), and so does the moving part
 of item 6 (TA.2).
 
 ## Review 1 findings (2026-11-13)
 
 First usability session. The notes are in the local `reviews` file (git-ignored, like
-`manifest`); TASKS.md, section "Revisão 1", keeps the summary and the tasks.
+`manifest`); TASKS.md, section "Review 1", keeps the summary and the tasks.
 
 | Finding | Outcome |
 |---|---|
@@ -302,7 +303,7 @@ First usability session. The notes are in the local `reviews` file (git-ignored,
 | R6 POST with JSON typed by the user, through vim | TR.3 to TR.8: `parameters`, `raw_data`, external editor |
 | R7 dependency error with `sudo` and `install` commands | TR.1 |
 
-Decisions taken with the user (also in TASKS.md, "Decisões fechadas"):
+Decisions taken with the user (also in TASKS.md, "Closed decisions"):
 - `data_parameter` is renamed `parameters`: form fields (key and value), always sent
   url-encoded.
 - `raw_data` is the raw body, edited in the user's editor like git does (`$VISUAL`,
@@ -338,6 +339,6 @@ verification and docs.
 Environment variable names are `<ENV>_<KEY>` in upper case (`${url}` in `dev` is
 `DEV_URL`); the variable wins over the environment file, which wins over the project variables.
 Then Phase 6 (logs, verbose with `>>` and `<<`), Phase 7 (portability, docs), the
-"Adicionais" section of TASKS.md (TA.2 to TA.13: everything still unconfirmed, mostly
+"Additional" section of TASKS.md (TA.2 to TA.13: everything still unconfirmed, mostly
 navigation changes) and Phase 8 (per-request options, file upload, nested query
 values).
