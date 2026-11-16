@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Show an incorrect command (an unknown command, nothing selected, a wrong usage, an invalid setting or
+  environment) as an orange warning bar at the top of the screen, once, instead of a dim line under the
+  menu. Confirmations stay under the menu.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added

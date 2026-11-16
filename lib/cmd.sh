@@ -21,7 +21,7 @@
 
 REQ_CMD_ACTIVE=0        # 1 while a command is being typed
 REQ_CMD_BUF=""          # the command typed so far
-REQ_STATUS=""           # one-shot message shown under the menu
+REQ_STATUS=""           # one-shot message shown under the menu (confirmations; warnings go to req_notification_warn)
 REQ_QUIT=0              # set by :q, ends the main loop
 
 # The help screen (:h) is built from this single table, "keys|description"; a line
@@ -97,7 +97,7 @@ req_cmd_run() {
         log)          req_cmd_log "$arg" ;;
         v|verbose)    req_cmd_verbose "$arg" ;;
         h|help)       REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=help ;;
-        *)            REQ_STATUS="unknown command :$cmd (:h lists the commands)" ;;
+        *)            req_notification_warn "unknown command :$cmd (:h lists the commands)" ;;
     esac
     return 0
 }
@@ -140,9 +140,9 @@ req_cmd_rename_dir() {
     local dir
     if ! dir=$(req_nav_selected_dir); then
         if req_nav_selected_request >/dev/null; then
-            REQ_STATUS=":ed renames a directory; edit a request with :e"
+            req_notification_warn ":ed renames a directory; edit a request with :e"
         else
-            REQ_STATUS="select a directory on the list first"
+            req_notification_warn "select a directory on the list first"
         fi
         return 0
     fi
@@ -174,7 +174,7 @@ req_cmd_copy() {
         fi
         req_nav_prompt_end
     else
-        REQ_STATUS="select a request or a directory first"
+        req_notification_warn "select a request or a directory first"
     fi
 }
 
@@ -182,7 +182,7 @@ req_cmd_remove() {
     local target sel=$REQ_SEL kind=request
     if target=$(req_nav_selected_request); then :
     elif target=$(req_nav_selected_dir); then kind=directory
-    else REQ_STATUS="select a request or a directory first"; return 0
+    else req_notification_warn "select a request or a directory first"; return 0
     fi
     req_nav_prompt_begin
     if [[ $kind == directory ]]; then
@@ -225,7 +225,7 @@ req_cmd_mkdir() {
 
 req_cmd_edit() {
     local file
-    file=$(req_nav_selected_request) || { REQ_STATUS="select a request first"; return 0; }
+    file=$(req_nav_selected_request) || { req_notification_warn "select a request first"; return 0; }
     req_nav_prompt_begin
     if req_wizard_edit "$file"; then
         [[ $REQ_VIEW == detail ]] && REQ_DETAIL_FILE=$REQ_LAST_FILE
@@ -237,7 +237,7 @@ req_cmd_edit() {
 
 req_cmd_dup() {
     local file
-    file=$(req_nav_selected_request) || { REQ_STATUS="select a request first"; return 0; }
+    file=$(req_nav_selected_request) || { req_notification_warn "select a request first"; return 0; }
     req_nav_prompt_begin
     if req_wizard_duplicate "$file"; then
         REQ_VIEW=list
@@ -267,20 +267,20 @@ req_cmd_config() {
         return 0
     fi
     if [[ $arg != *=* ]]; then
-        REQ_STATUS="usage: :config [-g] [key=value] (known keys: ${REQ_CONFIG_KEYS[*]})"
+        req_notification_warn "usage: :config [-g] [key=value] (known keys: ${REQ_CONFIG_KEYS[*]})"
         return 0
     fi
     if [[ $scope == project && -z $REQ_PROJECT_ID ]]; then
-        REQ_STATUS="no project is open: use :config -g key=value to change the global setting"
+        req_notification_warn "no project is open: use :config -g key=value to change the global setting"
         return 0
     fi
     key=$(req_trim "${arg%%=*}"); value=$(req_trim "${arg#*=}")
     if ! req_config_known "$key"; then
-        REQ_STATUS="unknown setting \"$key\" (known keys: ${REQ_CONFIG_KEYS[*]})"
+        req_notification_warn "unknown setting \"$key\" (known keys: ${REQ_CONFIG_KEYS[*]})"
         return 0
     fi
     if ! req_config_valid "$key" "$value"; then
-        REQ_STATUS="$key must be $(req_config_expect "$key"), not \"$value\""
+        req_notification_warn "$key must be $(req_config_expect "$key"), not \"$value\""
         return 0
     fi
     if [[ $scope == project ]]; then file=$(req_config_local_file); else file=$(req_config_file); fi
@@ -288,7 +288,7 @@ req_cmd_config() {
         req_config_load 2>/dev/null
         REQ_STATUS="$key=$value saved in $file"
     else
-        REQ_STATUS="cannot write $file"
+        req_notification_warn "cannot write $file"
     fi
     return 0
 }
@@ -310,12 +310,12 @@ req_cmd_switch() {
 req_cmd_log() {
     local now=no new
     if [[ -z $REQ_PROJECT_ID ]]; then
-        REQ_STATUS="no project is open, so there is no log to switch"
+        req_notification_warn "no project is open, so there is no log to switch"
         return 0
     fi
     req_log_enabled && now=yes
     if ! new=$(req_cmd_switch "$1" "$now"); then
-        REQ_STATUS="usage: :log [yes|no]"
+        req_notification_warn "usage: :log [yes|no]"
         return 0
     fi
     REQ_LOG_SESSION=$new
@@ -330,7 +330,7 @@ req_cmd_verbose() {
     local now=no new
     req_verbose_on && now=yes
     if ! new=$(req_cmd_switch "$1" "$now"); then
-        REQ_STATUS="usage: :v [yes|no]"
+        req_notification_warn "usage: :v [yes|no]"
         return 0
     fi
     if [[ $new == yes ]]; then REQ_VERBOSE=1; REQ_STATUS="verbose on for this session (>> sent, << received)"
@@ -344,7 +344,7 @@ req_cmd_verbose() {
 # in the header and used by the next request) when the project has a file for it
 # ("default" always works); otherwise it says which ones exist and where to create it.
 req_cmd_env() {
-    local name=$1 current=${REQ_ENV:-default} list
+    local name=$1 current=${REQ_ENV:-default} list msg
     list=$(req_env_list | tr '\n' ' '); list=${list% }
     if [[ -z $name ]]; then
         if [[ -n $list ]]; then
@@ -355,15 +355,16 @@ req_cmd_env() {
         return 0
     fi
     if ! req_valid_name "$name"; then
-        REQ_STATUS="invalid environment name \"$name\" (use a slug: lowercase letters, digits and hyphens)"
+        req_notification_warn "invalid environment name \"$name\" (use a slug: lowercase letters, digits and hyphens)"
     elif ! req_env_exists "$name"; then
-        REQ_STATUS="unknown environment \"$name\""
-        [[ -z $list ]] || REQ_STATUS+=" (known: ${list// /, })"
+        msg="unknown environment \"$name\""
+        [[ -z $list ]] || msg+=" (known: ${list// /, })"
         if [[ -n $REQ_PROJECT_ID ]]; then
-            REQ_STATUS+="; create it with a file at $(req_env_file "$REQ_PROJECT_ID" "$name")"
+            msg+="; create it with a file at $(req_env_file "$REQ_PROJECT_ID" "$name")"
         else
-            REQ_STATUS+="; the project state in $(req_config_dir) is not available"
+            msg+="; the project state in $(req_config_dir) is not available"
         fi
+        req_notification_warn "$msg"
     else
         REQ_ENV=$name
         REQ_STATUS="environment: $name"
