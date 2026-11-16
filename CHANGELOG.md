@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-16
+
+### Added
+
+- Run the lint and the tests automatically on every pull request with GitHub Actions, so contributors
+  see a broken change before it is merged. `req` itself behaves as in 0.1.0.
+
 ## [0.1.0] - 2026-11-16
 
 ### Added
@@ -26,5 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the verbose mode (`:v`).
 - Show the installed version with `req --version`.
 
-[unreleased]: https://github.com/rodrigoio/req/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/rodrigoio/req/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/rodrigoio/req/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/rodrigoio/req/tree/v0.1.0
