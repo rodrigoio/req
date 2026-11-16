@@ -19,6 +19,17 @@ make uninstall    # remove the symlink
 
 To install elsewhere: `make install PREFIX=/usr/local` (or `BINDIR=...`). If the directory is not in your `PATH`, `make install` warns and shows how to add it.
 
+### With a single download
+
+`req` is also published as one self-contained file, `release/req.sh`, with no need for the repository. The `main` branch always has the latest version:
+
+```sh
+curl -fsSL --create-dirs -o ~/.local/bin/req https://raw.githubusercontent.com/rodrigoio/req/main/release/req.sh && chmod +x ~/.local/bin/req
+req --version
+```
+
+To install a specific version, put its branch (`vX.Y.Z`) in the URL instead of `main`. To update, run the same command again. Make sure `~/.local/bin` is in your `PATH`.
+
 ## Getting started
 
 ```sh
@@ -89,12 +100,15 @@ In the prompts, Enter accepts the default shown in brackets and an empty name ca
 make test    # run the tests
 make lint    # shellcheck (if installed) + syntax check
 make check   # lint + tests
+make build   # build release/req.sh, the whole tool in one file
 ```
 
 ## Layout
 
 ```
 bin/req        thin entrypoint (resolves its directory and calls main)
+build.sh       builds release/req.sh from bin/req and the modules it sources (make build)
+release/req.sh the whole tool in one executable file, generated: do not edit it
 lib/core.sh    dependencies, errors, external editor and terminal restoration
 lib/ui.sh      ANSI colors, terminal helpers and per-method formatting
 lib/store.sh   request persistence and the .req project file
@@ -107,7 +121,7 @@ lib/config.sh  settings (global `~/.req/config` and the project's `config`) and 
 lib/env.sh     environments and variables (loading `vars` and `env/<env>`)
 lib/home.sh    the central directory in ~/.req: `key=value` files, projects and the current-project pointer
 tests/         plain bash tests (no dependencies; see Requirements)
-Makefile       test, lint, install and uninstall
+Makefile       test, lint, build, install and uninstall
 ```
 
 All the code is organized in functions inside `lib/`.

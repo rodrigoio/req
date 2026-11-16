@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Install `req` with a single download: `release/req.sh` is the whole tool in one executable file, which
+  `curl` can fetch straight into your `PATH` (see the README). `make build` generates it.
+
 ## [0.2.0] - 2026-11-16
 
 ### Added
