@@ -3,4 +3,4 @@
 # Sourced by bin/req; the build process reads REQ_VERSION from here.
 
 # shellcheck disable=SC2034  # read by bin/req
-REQ_VERSION="0.1.0"
+REQ_VERSION="0.2.0"
