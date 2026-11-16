@@ -311,6 +311,33 @@ test_more() {
     assert_eq "1" "$(( ${#cut} <= 27 ))" "and the whole fits a bar of 30 columns"
 }
 
+test_warn_file() {
+    echo "notification: what a command wrote to stderr, as one warning"
+    local f
+    f=$(mktemp)
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+
+    : >"$f"
+    req_notification_warn_file "$f"
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "an empty file is no warning"
+
+    printf 'req: error: no value for X in environment "dev"\n  X: set the variable DEV_X, or add X=... to /p/dev\n' >"$f"
+    req_notification_warn_file "$f"
+    assert_eq 'no value for X in environment "dev"; X: set the variable DEV_X, or add X=... to /p/dev' "$REQ_NOTIFICATION_WARN" "the marks and the indentation go, the lines are joined"
+    REQ_NOTIFICATION_WARN=""
+
+    printf 'curl: (6) Could not resolve host: nowhere.invalid\n\nreq: error: request failed (curl exit code 6)' >"$f"
+    req_notification_warn_file "$f"
+    assert_eq "curl: (6) Could not resolve host: nowhere.invalid; request failed (curl exit code 6)" "$REQ_NOTIFICATION_WARN" "blank lines are skipped and a last line with no newline counts"
+    REQ_NOTIFICATION_WARN=""
+
+    printf 'req: warning: a warning line\n' >"$f"
+    req_notification_warn_file "$f"
+    assert_eq "a warning line" "$REQ_NOTIFICATION_WARN" "a warning mark goes too"
+    REQ_NOTIFICATION_WARN=""
+    rm -f "$f"
+}
+
 test_color
 test_bar_with_colors
 test_bar_without_colors
@@ -320,6 +347,7 @@ test_warning
 test_more
 test_root_notice
 test_warn_routing
+test_warn_file
 test_overlay
 test_list_window
 test_summary

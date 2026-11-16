@@ -451,6 +451,7 @@ test_execute() {
 test_url_check() {
     echo "http: usable and broken addresses"
     local u i
+    # shellcheck disable=SC2016  # the ${key} placeholders are literal text here
     local -a good=(
         'http://example.com' 'https://example.com/a/b?x=1#f' 'HTTP://EXAMPLE.COM' 'http://user:pw@host:8080/x'
         'http://[::1]:8080/x' 'http://localhost:8080' 'localhost:8080/x' 'example.com/x'

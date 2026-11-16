@@ -302,6 +302,7 @@ test_detail_bad_address() {
     assert_eq "! invalid address in the url: it contains whitespace" "${REQ_SCREEN_LINES[0]}" "the problem is pinned at the top"
     assert_contains "GET    badaddr" "${REQ_SCREEN_LINES[1]}" "and the details follow it"
 
+    # shellcheck disable=SC2016  # a ${key} placeholder, literal text
     req_request_write "$PROJ/api" goodaddr GET 'http://example.com/${path}' >/dev/null
     REQ_DETAIL_FILE=$PROJ/api/goodaddr.get.json
     COLUMNS=80 screen detail
@@ -461,6 +462,38 @@ test_config_warnings_in_the_bar() {
     req_config_load 2>"$errfile"
     assert_eq "3" "$(grep -c '^req: warning:' "$errfile")" "outside the menu each one is still a line on stderr"
     REQ_CONFIG_DIR=$old_dir
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+}
+
+test_run_failures_in_the_bar() {
+    echo "nav: failures when running go to the bar"
+    local p=$TMP/runfail out rule after COLUMNS=140
+    local REQ_PROJECT_ID=""          # no project state: the cursor is neither saved nor restored between runs
+    rule=$(printf '=%.0s' {1..140})
+    mkdir -p "$p"; : >"$p/.req"
+    # nothing listens on port 1: curl fails at once, with its own message
+    req_request_write "$p" refused GET "http://127.0.0.1:1/x" >/dev/null
+    # shellcheck disable=SC2016  # a ${key} placeholder, literal text
+    req_request_write "$p" nokey GET 'http://127.0.0.1:1/${key_made_up_for_the_test}' >/dev/null
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    REQ_NOTIFICATION_ACTIVE=1
+
+    out=$(keys down enter enter | req_nav_run "$p/.req" 2>&1)        # refused is the second item
+    after=${out#*"$rule"}
+    assert_not_contains "req: error:" "$out" "the terminal is not filled with the error text"
+    assert_contains "! " "$after" "a warning bar is drawn after the result"
+    assert_contains "request failed (curl exit code 7)" "$after" "it says what failed"
+    assert_contains "Failed to connect" "$after" "with the message of curl"
+    assert_contains "$rule" "$out" "and the result block is still closed by its rule"
+
+    out=$(keys enter enter | req_nav_run "$p/.req" 2>&1)             # nokey is the first item
+    assert_not_contains "req: error:" "$out" "a missing key does not fill the terminal either"
+    assert_contains "! no value for key_made_up_for_the_test in environment \"default\"" "$out" "the bar names the key"
+    assert_contains "set the variable" "$out" "and the guidance follows, as far as it fits"
+
+    REQ_NOTIFICATION_ACTIVE=0
+    out=$(keys enter enter | req_nav_run "$p/.req" 2>&1)
+    assert_contains "req: error: no value for key_made_up_for_the_test" "$out" "outside the menu flag the errors stay on stderr"
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
 }
 
@@ -1330,5 +1363,6 @@ test_start_init
 test_notification_bars
 test_root_notice
 test_config_warnings_in_the_bar
+test_run_failures_in_the_bar
 test_end_to_end
 test_summary

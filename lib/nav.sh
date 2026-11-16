@@ -411,10 +411,21 @@ req_nav_back() {
     REQ_SEL=$sel
 }
 
-# req_nav_execute - Enter on the details: erases the menu, runs and leaves the result on screen.
+# req_nav_execute - Enter on the details: erases the menu, runs and leaves the result on screen
+# (the failures go to the warning bar).
 req_nav_execute() {
+    local errs=""
     req_screen_erase
-    req_run_request "$REQ_DETAIL_FILE"
+    # In the menu what the run writes to stderr (a key with no value, a file that cannot be read,
+    # a failure of curl) becomes one warning at the top, instead of text in the terminal.
+    [[ ${REQ_NOTIFICATION_ACTIVE-0} == 1 ]] && errs=$(mktemp 2>/dev/null)
+    if [[ -n $errs ]]; then
+        req_run_request "$REQ_DETAIL_FILE" 2>"$errs"
+        req_notification_warn_file "$errs"
+        rm -f "$errs"
+    else
+        req_run_request "$REQ_DETAIL_FILE"
+    fi
     return 0
 }
 

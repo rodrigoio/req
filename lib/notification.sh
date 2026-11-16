@@ -17,6 +17,7 @@ REQ_NOTIFICATION_LINES=()      # the bar lines of the current draw, from the top
 REQ_NOTIFICATION_IDS=()        # the persistent notifications, in registration order
 REQ_NOTIFICATION_CHECKS=()     # their check functions, in the same order
 REQ_NOTIFICATION_TEXT=""       # what a check that has something to say puts in its bar
+# shellcheck disable=SC2034  # read by req_warn (core.sh), req_run_request (http.sh) and the menu (nav.sh)
 REQ_NOTIFICATION_ACTIVE=0      # 1 while the menu is open: req_warn then goes through the warning bar
 REQ_NOTIFICATION_WARN=""       # the warning that waits for the next draw ("" when there is none)
 REQ_NOTIFICATION_WARN_MORE=0   # how many more came after it before that draw
@@ -120,6 +121,22 @@ req_notification_warn() {
         REQ_NOTIFICATION_WARN_MORE=$(( REQ_NOTIFICATION_WARN_MORE + 1 ))
     fi
     return 0
+}
+
+# req_notification_warn_file <file> - turns what a command wrote to stderr into one warning: every
+# line without its "req: error: " or "req: warning: " mark and without its indentation, the lines
+# joined with "; ", so the guidance that follows the summary is cut to what fits the bar. A file
+# with no text is no warning.
+req_notification_warn_file() {
+    local line text=""
+    [[ -s $1 ]] || return 0
+    while IFS= read -r line || [[ -n $line ]]; do
+        line=${line#req: error: }; line=${line#req: warning: }
+        line=${line#"${line%%[![:space:]]*}"}          # without the indentation
+        [[ -n $line ]] || continue
+        text+="${text:+; }$line"
+    done <"$1"
+    req_notification_warn "$text"
 }
 
 # req_notification_warn_lines - the producer of the warning (named in REQ_NOTIFICATION_PRODUCERS,
