@@ -406,7 +406,9 @@ test_end_to_end() {
 }
 
 # type <chars...> - sends each character to the handler, as the main loop would.
-type_keys() { local c; for c in "$@"; do req_nav_handle "$c"; done; }
+# A draw happens between two commands in the real loop, and it spends the warning of the one
+# before: so typing starts with none waiting.
+type_keys() { local c; REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0; for c in "$@"; do req_nav_handle "$c"; done; }
 
 test_command_mode() {
     echo "nav: command mode"
@@ -435,8 +437,11 @@ test_command_mode() {
     req_nav_handle esc
 
     type_keys : z z enter
-    assert_contains "unknown command :zz" "$REQ_STATUS" "an unknown command is reported"
-    req_nav_overlay; assert_eq "" "$REQ_STATUS" "the status is shown once"
+    assert_contains "unknown command :zz" "$REQ_NOTIFICATION_WARN" "an unknown command is reported"
+    req_notification_collect
+    assert_contains "unknown command :zz" "${REQ_NOTIFICATION_LINES[0]}" "it becomes a warning bar at the next draw"
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "and the warning is shown once"
     type_keys : enter
     assert_eq "0" "$REQ_CMD_ACTIVE" "an empty command just leaves command mode"
     type_keys : q enter
@@ -444,9 +449,9 @@ test_command_mode() {
     REQ_QUIT=0
 
     type_keys : e enter
-    assert_contains "select a request first" "$REQ_STATUS" ":e on a directory explains itself"
+    assert_contains "select a request first" "$REQ_NOTIFICATION_WARN" ":e on a directory explains itself"
     type_keys : d enter
-    assert_contains "select a request first" "$REQ_STATUS" ":d on a directory explains itself"
+    assert_contains "select a request first" "$REQ_NOTIFICATION_WARN" ":d on a directory explains itself"
     req_nav_handle "$(printf ':')"; assert_eq "1" "$REQ_CMD_ACTIVE" "command mode works on the root"
     req_nav_handle esc
 }
@@ -568,7 +573,7 @@ test_help() {
     assert_contains ":h help" "${REQ_SCREEN_LINES[-1]}" "details footer points to :h"
     REQ_VIEW=list
     type_keys : z enter
-    assert_contains ":h" "$REQ_STATUS" "unknown command points to :h"
+    assert_contains ":h" "$REQ_NOTIFICATION_WARN" "unknown command points to :h"
 }
 
 test_command_rename_dir() {
@@ -600,7 +605,7 @@ test_command_rename_dir() {
     # On a request there is nothing to rename.
     REQ_SEL=2
     type_keys : e d; req_nav_handle enter >/dev/null
-    assert_contains "edit a request with :e" "$REQ_STATUS" ":ed on a request points to :e"
+    assert_contains "edit a request with :e" "$REQ_NOTIFICATION_WARN" ":ed on a request points to :e"
     REQ_INPUT_FD=0
 }
 
@@ -650,7 +655,7 @@ test_command_copy() {
 
     # :c is gone; an invalid request cannot be copied; nothing selected.
     type_keys : c enter
-    assert_contains "unknown command :c" "$REQ_STATUS" ":c no longer exists"
+    assert_contains "unknown command :c" "$REQ_NOTIFICATION_WARN" ":c no longer exists"
     for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == broken ]] && REQ_SEL=$i; done
     type_keys : c p
     req_nav_handle enter 3<<<"x" >/dev/null 2>&1
@@ -690,13 +695,13 @@ test_command_config() {
     assert_eq "yes" "$(req_kv_get "$f" time_stats)" "spaces around the = are fine"
 
     REQ_STATUS=""; type_keys : c o n f i g ' ' - g ' ' c o l o r = r e d enter
-    assert_contains 'unknown setting "color"' "$REQ_STATUS" "an unknown key is explained"
-    assert_contains "time_stat_total" "$REQ_STATUS" "with the valid keys"
+    assert_contains 'unknown setting "color"' "$REQ_NOTIFICATION_WARN" "an unknown key is explained"
+    assert_contains "time_stat_total" "$REQ_NOTIFICATION_WARN" "with the valid keys"
     type_keys : c o n f i g ' ' - g ' ' t i m e _ s t a t s = m a y b e enter
-    assert_contains "time_stats must be yes or no" "$REQ_STATUS" "a wrong value says what is accepted"
+    assert_contains "time_stats must be yes or no" "$REQ_NOTIFICATION_WARN" "a wrong value says what is accepted"
     assert_eq "yes" "$(req_kv_get "$f" time_stats)" "and nothing is written"
     type_keys : c o n f i g ' ' - g ' ' t i m e _ s t a t s enter
-    assert_contains "usage: :config" "$REQ_STATUS" "a key without a value shows the usage"
+    assert_contains "usage: :config" "$REQ_NOTIFICATION_WARN" "a key without a value shows the usage"
     [[ $(<"$f") != *color* ]]; assert_eq "0" "$?" "an invalid setting never reaches the file"
 
     out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
@@ -706,8 +711,8 @@ test_command_config() {
     local lf
     REQ_PROJECT_ID=""
     type_keys : c o n f i g ' ' l o g = y e s enter
-    assert_contains "no project is open" "$REQ_STATUS" "without a project the setting is refused"
-    assert_contains ":config -g" "$REQ_STATUS" "and -g is suggested"
+    assert_contains "no project is open" "$REQ_NOTIFICATION_WARN" "without a project the setting is refused"
+    assert_contains ":config -g" "$REQ_NOTIFICATION_WARN" "and -g is suggested"
     [[ ! -e $f ]] || [[ $(<"$f") != *log* ]]; assert_eq "0" "$?" "nothing is written"
     REQ_PROJECT_ID=$(req_project_create "$PROJ"); lf=$(req_config_local_file)
     mkdir -p "$(dirname "$lf")"
@@ -729,9 +734,9 @@ test_command_config() {
     [[ $out != *"restore_cursor     yes   default yes   project"* ]]; assert_eq "0" "$?" "a global or default value is not marked"
     req_nav_handle x
     type_keys : c o n f i g ' ' - g enter
-    assert_contains "usage: :config [-g]" "$REQ_STATUS" "-g alone shows the usage"
+    assert_contains "usage: :config [-g]" "$REQ_NOTIFICATION_WARN" "-g alone shows the usage"
     type_keys : c o n f i g ' ' l o g = m a y b e enter
-    assert_contains "log must be yes or no" "$REQ_STATUS" "the value is checked for the project too"
+    assert_contains "log must be yes or no" "$REQ_NOTIFICATION_WARN" "the value is checked for the project too"
     assert_eq "yes" "$(req_kv_get "$lf" log)" "and nothing is written"
     REQ_PROJECT_ID=""; rm -f "$f" "$lf"; req_config_load
 }
@@ -762,17 +767,17 @@ test_command_env() {
 
     type_keys : e n v ' ' s t a g i n g enter
     assert_eq "dev" "$REQ_ENV" "an unknown environment changes nothing"
-    assert_contains 'unknown environment "staging" (known: dev, prod)' "$REQ_STATUS" "and is explained with the known ones"
-    assert_contains "$envdir/staging" "$REQ_STATUS" "and the file that would create it"
+    assert_contains 'unknown environment "staging" (known: dev, prod)' "$REQ_NOTIFICATION_WARN" "and is explained with the known ones"
+    assert_contains "$envdir/staging" "$REQ_NOTIFICATION_WARN" "and the file that would create it"
     type_keys : e n v ' ' B a d enter
-    assert_contains "invalid environment name" "$REQ_STATUS" "a name that is not a slug is refused"
+    assert_contains "invalid environment name" "$REQ_NOTIFICATION_WARN" "a name that is not a slug is refused"
     assert_eq "dev" "$REQ_ENV" "without a change"
     type_keys : e n v ' ' d e f a u l t enter
     assert_eq "default" "$REQ_ENV" "default can always be chosen, even without a file"
 
     REQ_PROJECT_ID=""; type_keys : e n v ' ' p r o d enter
     assert_eq "default" "$REQ_ENV" "without a saved project state only default is allowed"
-    assert_contains "not available" "$REQ_STATUS" "and the reason is given"
+    assert_contains "not available" "$REQ_NOTIFICATION_WARN" "and the reason is given"
     assert_contains ":env" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists :env"
     unset REQ_ENV
 }
@@ -785,7 +790,7 @@ test_command_log_verbose() {
     REQ_PROJECT_ID=""; REQ_LOG_SESSION=""; REQ_CONFIG=(); REQ_VERBOSE=0
 
     type_keys : l o g enter
-    assert_contains "no project is open" "$REQ_STATUS" ":log without a project says why"
+    assert_contains "no project is open" "$REQ_NOTIFICATION_WARN" ":log without a project says why"
     assert_eq "" "$REQ_LOG_SESSION" "and changes nothing"
     req_project_activate "$PROJ" || return
     lf=$(req_log_file)
@@ -804,7 +809,7 @@ test_command_log_verbose() {
     type_keys : l o g ' ' o f f enter
     assert_eq "no" "$REQ_LOG_SESSION" "off is accepted as no"
     type_keys : l o g ' ' m a y b e enter
-    assert_contains "usage: :log [yes|no]" "$REQ_STATUS" "another argument shows the usage"
+    assert_contains "usage: :log [yes|no]" "$REQ_NOTIFICATION_WARN" "another argument shows the usage"
     assert_eq "no" "$REQ_LOG_SESSION" "without a change"
     REQ_CONFIG=([log]=yes); REQ_LOG_SESSION=""
     type_keys : l o g enter
@@ -824,7 +829,7 @@ test_command_log_verbose() {
     type_keys : v e r b o s e enter
     assert_eq "0" "$REQ_VERBOSE" ":verbose is an alias"
     type_keys : v ' ' x enter
-    assert_contains "usage: :v [yes|no]" "$REQ_STATUS" "a wrong argument shows the usage"
+    assert_contains "usage: :v [yes|no]" "$REQ_NOTIFICATION_WARN" "a wrong argument shows the usage"
     out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
     assert_contains ":log" "$out" "the help lists :log"
     assert_contains ":v [yes|no]" "$out" "and :v"
@@ -879,7 +884,7 @@ test_command_remove() {
     REQ_INPUT_FD=3
     REQ_SEL=0; req_nav_handle enter                           # auth/empty
     type_keys : r m; req_nav_handle enter >/dev/null
-    assert_contains "select a request or a directory" "$REQ_STATUS" ":rm with nothing selected explains itself"
+    assert_contains "select a request or a directory" "$REQ_NOTIFICATION_WARN" ":rm with nothing selected explains itself"
     REQ_INPUT_FD=0
 }
 
