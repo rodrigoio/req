@@ -2,7 +2,7 @@
 
 The interactive request tool for your terminal. A bash + curl utility to register, browse and fire HTTP requests, with persistence in plain JSON files.
 
-> The roadmap lives in [TASKS.md](TASKS.md); architecture, conventions and open questions are in [DEVELOPMENT.md](DEVELOPMENT.md).
+> The roadmap lives in [TASKS.md](TASKS.md); architecture, gotchas and the points to validate with users are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Requirements
 

@@ -11,7 +11,7 @@ The `manifest` describes `req`: an interactive utility in bash + curl to registe
 - Agreed order: Phase 6 follows, since Phase 5 is done.
 - Suite: `make check` with 1382 asserts, 0 failures, and `shellcheck` 0.9.0 clean in `bin/`, `lib/` and `tests/` (`make lint`).
 - Pending items not yet confirmed are in the "Additional" section (TA.2 to TA.13), before Phase 8.
-- Architecture, conventions, gotchas found so far and the list of navigation points to validate with users are in `DEVELOPMENT.md`. Findings from the validations enter here as new tasks.
+- Architecture, gotchas found so far and the list of navigation points to validate with users are in `DEVELOPMENT.md`. Findings from the validations enter here as new tasks.
 
 ## Closed decisions
 - **Shell:** bash 4+. **Dependencies:** only `curl` and `jq`.
@@ -202,7 +202,7 @@ Gathers what was left open so far. The navigation tasks depend on validations wi
 - TA.10 `REQ_ESC_TIMEOUT` (50 ms) on slow connections, such as SSH: validate and document the setting.
 - TA.11 Validate in real terminals without UTF-8 and with `NO_COLOR`; the fallbacks exist, but were only tested in an automated test.
 - TA.12 Multi-line description in the details screen (today the line breaks become spaces).
-- ~~TA.13~~ Decided: `TASKS.md`, `DEVELOPMENT.md` and `guideline.md` are written in English, like the rest of the project (rule 10 of `guideline.md`); translated on `main`.
+- ~~TA.13~~ Decided: `TASKS.md`, `DEVELOPMENT.md` and `guideline.md` are written in English, like the rest of the project (see `guideline.md`); translated on `main`.
 - TA.14 How to write a literal `${key}` (not substituted) in a request: today there is no escape, so a text such as `${x}` with no value defined is always an error (T5.3). Options: `$${x}`, a backslash before it, or leave it unescaped. Decide before T5.4 is used with a `raw_data` that contains that snippet.
 
 ### Phase 8 — Extras (to be detailed at the end of the project)
