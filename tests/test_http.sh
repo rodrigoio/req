@@ -72,6 +72,21 @@ test_args() {
     req_build_curl_args '{"method":"get","url":"https://x","insecure":false}'
     has_arg -k; assert_eq "1" "$?" "insecure false does not"
 
+    printf 'content' >"$TMP/up one;b.txt"
+    REQ_REQUEST_DIR=$TMP req_build_curl_args '{"method":"post","url":"http://x","parameters":{"note":"@x","n":2},"files":{"doc":"up one;b.txt"}}'
+    has_arg --form-string && has_arg "note=@x" && has_arg "n=2"; assert_eq "0" "$?" "with files the parameters are text fields (--form-string)"
+    has_arg -F && has_arg "doc=@\"$TMP/up one;b.txt\""; assert_eq "0" "$?" "each file is -F field=@\"path\", relative to the request's folder"
+    has_arg --data-urlencode || has_arg --data-binary; assert_eq "1" "$?" "and there is no urlencoded body"
+    assert_eq "" "$REQ_BODY" "nor stdin"
+    REQ_REQUEST_DIR="" req_build_curl_args "{\"method\":\"put\",\"url\":\"http://x\",\"files\":{\"doc\":\"$TMP/up one;b.txt\"}}"
+    has_arg "doc=@\"$TMP/up one;b.txt\""; assert_eq "0" "$?" "an absolute path is used as it is"
+    REQ_REQUEST_DIR=$TMP req_build_curl_args '{"method":"post","url":"http://x","files":{"doc":"nope.txt"}}' 2>/dev/null
+    assert_eq "1" "$?" "a file that does not exist stops the request"
+    assert_contains 'file "'"$TMP"'/nope.txt" (field "doc") does not exist' "$(REQ_REQUEST_DIR=$TMP req_build_curl_args '{"method":"post","url":"http://x","files":{"doc":"nope.txt"}}' 2>&1)" "naming the path and the field"
+    REQ_REQUEST_DIR=$TMP req_build_curl_args '{"method":"get","url":"http://x","files":{"doc":"nope.txt"}}'
+    assert_eq "0" "$?" "a GET ignores files, like parameters"
+    REQ_REQUEST_DIR=""
+
     local m
     for m in GET DELETE; do
         req_build_curl_args "{\"method\":\"$m\",\"url\":\"http://x\",\"parameters\":{\"a\":1},\"headers\":{\"Content-Type\":\"application/json\"}}"
@@ -384,6 +399,24 @@ test_execute() {
     else
         echo "  skip openssl unavailable"
     fi
+
+    # files (T8.5): a multipart upload read by the mock server
+    printf 'hello file' >"$TMP/doc.txt"
+    printf '{"name":"up","method":"POST","url":"%s/echo","parameters":{"note":"@x"},"files":{"doc":"doc.txt"}}\n' "$base" >"$TMP/up.post.json"
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/up.post.json" 2>&1); assert_eq "0" "$?" "a request with files runs"
+    assert_contains 'multipart/form-data' "$out" "as a multipart form"
+    assert_contains 'name=\"doc\"; filename=\"doc.txt\"' "$out" "the file field and its name arrive"
+    assert_contains 'hello file' "$out" "with the content"
+    assert_contains 'name=\"note\"' "$out" "the parameter is a field too"
+    assert_contains '@x' "$out" "and an @ value is sent as text, never read as a file"
+    REQ_VERBOSE=1
+    out=$(NO_COLOR=1 COLUMNS=20 req_run_request "$TMP/up.post.json" 2>&1)
+    assert_contains $'>> note=@x\n>> doc=@doc.txt' "$out" "verbose shows the fields and the files"
+    REQ_VERBOSE=0
+    printf '{"name":"up","method":"POST","url":"%s/echo","files":{"doc":"missing.txt"}}\n' "$base" >"$TMP/up.post.json"
+    out=$(NO_COLOR=1 req_run_request "$TMP/up.post.json" 2>&1); assert_eq "1" "$?" "a missing file stops the run"
+    assert_contains 'does not exist or cannot be read' "$out" "with the reason"
+    [[ $out != *HTTP* ]]; assert_eq "0" "$?" "and nothing is sent"
 
     printf '{"name":"nourl","method":"GET"}\n' >"$TMP/nourl.get.json"
     out=$(req_run_request "$TMP/nourl.get.json" 2>&1); assert_eq "1" "$?" "a request without a url fails"

@@ -47,6 +47,7 @@ req_log_request() {
     text="file=${1##*/} env=$2 $REQ_P_METHOD $REQ_P_URL"
     for item in "${REQ_P_HEADERS[@]}"; do text+=" | header: $item"; done
     for item in "${REQ_P_FORM[@]}"; do text+=" | form: $item"; done
+    for item in "${REQ_P_FILES[@]}"; do text+=" | file: $item"; done
     (( REQ_P_RAWSET )) && text+=" | body: $REQ_BODY"
     req_log_write REQUEST "$text"
 }
