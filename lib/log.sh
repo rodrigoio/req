@@ -4,7 +4,7 @@
 # One line per event, in plain text: a timestamp, the kind of event and its data, with
 # line breaks inside values written as \n so a line never wraps. It is written only when
 # the "log" setting is yes (see config.sh) and a project is open. Values are logged as
-# they are sent, with the real value of every ${key} (nothing is masked, see TASKS.md).
+# they are sent, with the real value of every ${key} (nothing is masked, see TASKS.md in the req_context repository).
 # A log that cannot be written is one warning per run, never a reason to stop a request.
 
 # req_log_file - path of the open project's log.

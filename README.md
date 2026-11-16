@@ -2,7 +2,7 @@
 
 The interactive request tool for your terminal. A bash + curl utility to register, browse and fire HTTP requests, with persistence in plain JSON files.
 
-> The roadmap lives in [TASKS.md](TASKS.md); architecture, gotchas and the points to validate with users are in [DEVELOPMENT.md](DEVELOPMENT.md).
+> The roadmap lives in `TASKS.md` (in the `req_context` repository); architecture, gotchas and the points to validate with users are in `DEVELOPMENT.md` (in the `req_context` repository).
 
 ## Requirements
 
@@ -41,7 +41,7 @@ req run path/to/login.post.json   # run one request and show the response and ti
 req --version
 ```
 
-The response is shown in the terminal (indented JSON; text and HTML as received). Nothing is written to disk unless you turn the log on (see "Log"). `req run` exits with 0 whenever an HTTP response arrives, whatever its status code, and with 1 when the request is invalid or nothing came back (the exit code for 4xx and 5xx answers is an open question, see TA.8 in [TASKS.md](TASKS.md)). Optional variables: `REQ_TIMEOUT` (default 60s) and `REQ_CONNECT_TIMEOUT` (default 10s).
+The response is shown in the terminal (indented JSON; text and HTML as received). Nothing is written to disk unless you turn the log on (see "Log"). `req run` exits with 0 whenever an HTTP response arrives, whatever its status code, and with 1 when the request is invalid or nothing came back (the exit code for 4xx and 5xx answers is an open question, see TA.8 in `TASKS.md` (in the `req_context` repository)). Optional variables: `REQ_TIMEOUT` (default 60s) and `REQ_CONNECT_TIMEOUT` (default 10s).
 
 Central state: the first time `req` opens a project (or `req init` creates one) it is registered in `~/.req/projects/<id>/`, where its state lives; `~/.req/current` points to the project in use. If `~/.req` cannot be written, `req` warns once and works without it. `REQ_CONFIG_DIR` changes that directory. See "The central directory" below for every file in it.
 
@@ -234,8 +234,8 @@ Write `${key}` in the `url`, in the values of `headers`, `query` and `parameters
 2. the environment file `env/<env>`;
 3. the project `vars`.
 
-The environment is the `REQ_ENV` variable, `default` when it is not set. If a key has no value nothing is sent: the error lists every missing key and says which variable or file would define it. `name` and `description`, and the names of properties, are never replaced. There is no way yet to write a literal `${key}` in a request (see TA.14 in [TASKS.md](TASKS.md)). The url shown when a request runs is the substituted one.
+The environment is the `REQ_ENV` variable, `default` when it is not set. If a key has no value nothing is sent: the error lists every missing key and says which variable or file would define it. `name` and `description`, and the names of properties, are never replaced. There is no way yet to write a literal `${key}` in a request (see TA.14 in `TASKS.md` (in the `req_context` repository)). The url shown when a request runs is the substituted one.
 
 `req run` takes the project files from the project registered for the current folder, if there is one; otherwise only the process variables apply.
 
-Switch the environment of the session with `:env <name>`; `:env` alone lists the project's environments (the files in `env/`) and the one in use. An environment must have a file, except `default`, which needs none. The choice is not remembered: the next start uses `REQ_ENV` or `default`. See the roadmap in [TASKS.md](TASKS.md).
+Switch the environment of the session with `:env <name>`; `:env` alone lists the project's environments (the files in `env/`) and the one in use. An environment must have a file, except `default`, which needs none. The choice is not remembered: the next start uses `REQ_ENV` or `default`. See the roadmap in `TASKS.md` (in the `req_context` repository).
