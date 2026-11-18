@@ -6,7 +6,7 @@
 # menu is redrawn right below it. Outside a terminal nothing is erased (used by tests).
 #
 # Keys: up/down move the selection, Enter opens/runs, Esc goes back (does nothing at the root),
-# Ctrl-L clears the screen, ":" enters command mode (see cmd.sh).
+# Ctrl-L clears the screen, v shows the last response in a pager, ":" enters command mode (see cmd.sh).
 
 REQ_RAW_MAX_LINES=15    # lines of raw_data shown on the details screen
 REQ_PROBLEMS_MAX_LINES=10   # problems listed on the details of an invalid request

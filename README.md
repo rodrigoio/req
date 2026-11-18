@@ -6,7 +6,7 @@ The interactive request tool for your terminal. A bash + curl utility to registe
 
 ## Requirements
 
-Runtime: bash 4+, curl and jq. Nothing else.
+Runtime: bash 4+, curl and jq. Optional: a pager (`less`, or whatever `$PAGER` names) for the response view (`v`), which just warns when there is none; `req log` uses `tail`, which every GNU system has.
 
 Development only (not needed to use `req`): `shellcheck`, used by `make lint` over `bin/`, `lib/` and `tests/`. When it is not installed, `make lint` just warns and only checks the syntax. The tests need `python3` for the local mock server and skip those cases without it.
 
@@ -66,6 +66,7 @@ Central state: the first time `req` opens a project (or `req init` creates one) 
 | Up / Down | move the selection (wraps around at the ends) |
 | Enter | on a directory, enter it; on a request, open its details; on the details, run it |
 | Esc | go back (details → list → parent directory); does nothing at the root |
+| v | show the last response of this session in full screen, in a pager: JSON indented by `jq`, anything else as it came (see "Viewing the response") |
 | Ctrl-L | clear the screen: the results of the requests already made go away and the menu is drawn again at the top, with the same selection. It works in every screen, also while you type a command (the text stays) |
 | Ctrl-C | quit |
 | `:` | enter command mode (see below); `:h` lists every key and command |
