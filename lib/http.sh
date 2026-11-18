@@ -276,6 +276,7 @@ req_print_profile() {
 }
 
 REQ_BODY_TEXT=""        # what req_body_format made of the last body
+REQ_RESULT=""           # ok after a response, failed when the last request sent got none, empty before any
 
 # req_body_format <content-type> <body> <color 0|1> - puts in REQ_BODY_TEXT what is shown for a body:
 # indented by jq (with its colors when the third argument is 1) when the Content-Type has "json" and jq
@@ -300,6 +301,52 @@ req_print_body() {
     req_colors_enabled && color=1
     req_body_format "$1" "$2" "$color"
     printf '%s\n' "$REQ_BODY_TEXT"
+}
+
+# req_result_check - succeeds when there is a response to view and a pager to view it in (PAGER, else
+# less). Otherwise it warns (the menu shows the warning in the bar) and fails.
+req_result_check() {
+    local cmd=less
+    case ${REQ_RESULT-} in
+        ok) ;;
+        failed) req_warn "no response to view: the last request got none"; return 1 ;;
+        *) req_warn "no response to view yet: run a request first"; return 1 ;;
+    esac
+    if [[ -n ${PAGER-} ]]; then
+        cmd=${PAGER%%[[:space:]]*}
+        command -v "$cmd" >/dev/null 2>&1 || { req_warn "the pager PAGER=$PAGER was not found: set PAGER to one that exists"; return 1; }
+    else
+        command -v less >/dev/null 2>&1 || { req_warn "no pager found: install less or set PAGER"; return 1; }
+    fi
+}
+
+# req_result_view - "v": the body of the last response in the pager, full screen (the caller checked with
+# req_result_check and hands the terminal over). JSON is indented by jq and anything else comes as it
+# came. PAGER, when it is set, runs through sh -c and gets the text without colors, so any pager shows it
+# right. Without it, less runs with LESS emptied (the user's options, such as -F and -X, would get in the
+# way of a full screen): -R only for JSON, to carry the colors of jq -C, never for a body that is not JSON,
+# so that a control character in what a server sent is shown and not obeyed. Ctrl-C belongs to the pager
+# while it runs: it must not close req (req_trap_int_exit gives the trap back). Status 0, or 1 with a
+# warning when the pager fails.
+req_result_view() {
+    local color=0 json=1 flags=() status
+    [[ -z ${PAGER-} ]] && req_colors_enabled && color=1
+    REQ_BODY_TEXT="(no body)"
+    if [[ -n $REQ_RESP_BODY ]]; then
+        req_body_format "$REQ_RESP_CTYPE" "$REQ_RESP_BODY" "$color" && json=0
+    fi
+    trap ':' INT
+    if [[ -n ${PAGER-} ]]; then
+        printf '%s\n' "$REQ_BODY_TEXT" | sh -c "$PAGER"
+    else
+        (( json == 0 && color )) && flags=(-R)
+        printf '%s\n' "$REQ_BODY_TEXT" | LESS='' less "${flags[@]}"
+    fi
+    status=$?
+    req_trap_int_exit
+    (( status == 0 || status == 130 )) && return 0      # 130: the pager was stopped with Ctrl-C
+    req_warn "the pager failed (exit code $status)"
+    return 1
 }
 
 # req_verbose_on - succeeds when the verbose mode is on.
@@ -363,6 +410,7 @@ req_run_request() {
     req_verbose_request
 
     req_curl_exec; status=$?
+    REQ_RESULT=ok; (( status == 0 )) || REQ_RESULT=failed
     if (( status != 0 )); then
         req_log_failure "$status"
         req_err "request failed (curl exit code $status)"

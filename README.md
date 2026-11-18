@@ -66,9 +66,12 @@ Central state: the first time `req` opens a project (or `req init` creates one) 
 | Up / Down | move the selection (wraps around at the ends) |
 | Enter | on a directory, enter it; on a request, open its details; on the details, run it |
 | Esc | go back (details → list → parent directory); does nothing at the root |
+| v | show the last response of this session in full screen, in a pager: JSON indented by `jq`, anything else as it came (see "Viewing the response") |
 | Ctrl-L | clear the screen: the results of the requests already made go away and the menu is drawn again at the top, with the same selection. It works in every screen, also while you type a command (the text stays) |
 | Ctrl-C | quit |
 | `:` | enter command mode (see below); `:h` lists every key and command |
+
+**Viewing the response.** After a request has run, `v` (on the list or on the details) opens its response in a pager, full screen, so a long response can be scrolled and searched instead of read from the terminal's scrollback. A JSON response (a `Content-Type` with `json` and a body `jq` can read) is indented by `jq`; any other body is shown as it came. It is only the body of the last response received in this session, kept in memory: nothing is written to disk and it is gone when `req` quits. The pager is `$PAGER` when it is set (it gets the text without colors, so any pager shows it right), otherwise `less` (with colors for JSON; your `LESS` options are ignored, so the view is always full screen). If neither exists `req` warns, and you can install `less` or set `PAGER`. Leave the pager with its own key (`q` in `less`); Ctrl-C inside it belongs to the pager and does not close `req`. Before any request, or when the last request got no response, `v` says so in the warning bar. Do not mix it up with `:v`, which switches the verbose mode.
 
 The menu is redrawn in place without clearing the screen: a request's result stays visible and the menu is redrawn right below it, after the `====` line. The selected row is highlighted in bold bright green. Directories show as `dir  name/` and the other rows show the request's colored method. The details screen also shows `raw_data` (indented JSON or text, up to 15 lines) and flags what will not be sent: `parameters` when `raw_data` takes precedence, and both with GET and DELETE. An invalid request shows its problems on the details screen and is not run: the first problem (and how many more there are) stays pinned at the top in an orange bar, and at most 10 problems are listed under the full path of the file. A `url` that is not a usable address (it has whitespace, a scheme other than `http` or `https`, or no host after `://`) is flagged the same way on the details, and again in a warning when the request runs in the menu; it is still sent, and `curl` decides. A `${key}` placeholder is not judged until it is resolved, and a url with no `://` (`localhost:8080/x`) is accepted.
 
@@ -122,7 +125,7 @@ release/req.sh the whole tool in one executable file, generated: do not edit it
 lib/core.sh    dependencies, errors, external editor and terminal restoration
 lib/ui.sh      ANSI colors, terminal helpers and per-method formatting
 lib/store.sh   request persistence and the .req project file
-lib/http.sh    curl command building, execution, display and timing profile
+lib/http.sh    curl command building, execution, display, timing profile and the pager view of the last response
 lib/nav.sh     interactive menu: list, details and keys
 lib/notification.sh  the bars at the top of the menu (persistent notifications and the warning)
 lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :env :config :h :q) and its help table
