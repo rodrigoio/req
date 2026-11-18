@@ -66,7 +66,6 @@ Central state: the first time `req` opens a project (or `req init` creates one) 
 | Up / Down | move the selection (wraps around at the ends) |
 | Enter | on a directory, enter it; on a request, open its details; on the details, run it |
 | Esc | go back (details → list → parent directory); does nothing at the root |
-| v | show the last response of this session in full screen, in a pager: JSON indented by `jq`, anything else as it came (see "Viewing the response") |
 | Ctrl-L | clear the screen: the results of the requests already made go away and the menu is drawn again at the top, with the same selection. It works in every screen, also while you type a command (the text stays) |
 | Ctrl-C | quit |
 | `:` | enter command mode (see below); `:h` lists every key and command |

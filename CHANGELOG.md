@@ -9,9 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Show the last response in full screen with `v` (on the list or on the details): JSON indented by `jq`,
-  anything else as it came, in `$PAGER` or else `less`. Only the response of this session is kept, in
-  memory; nothing is written to disk.
 - Clear the screen with Ctrl-L: the results of the requests already made go away and the menu is drawn
   again at the top, with the same selection.
 - Follow the log of the project from another terminal with `req log` (`tail -n 200 -F` on its `req.log`),
