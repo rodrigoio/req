@@ -30,6 +30,22 @@ fake_editor() { printf '#!/bin/sh\n%s\n' "$2" >"$1"; chmod +x "$1"; }
 
 fresh() { D=$TMP/$1; rm -rf "$D"; mkdir -p "$D"; }
 
+test_ask_name() {
+    echo "wizard: asking for a name"
+    IN=$'valid-name\n'; run req_ask_name ""
+    assert_eq "0" "$STATUS" "a slug is accepted"
+    assert_eq "valid-name" "$REQ_REPLY" "and left in REQ_REPLY"
+    assert_contains "Name (a slug, e.g. list-users) - empty to cancel:" "$OUT" "the prompt gives list-users as the example by default"
+    IN=$'staging-test\n'; run req_ask_name "" "Environment name" "staging"
+    assert_contains "Environment name (a slug, e.g. staging) - empty to cancel:" "$OUT" "the caller says what it asks for and gives its own example"
+    assert_eq "staging-test" "$REQ_REPLY" "and the answer is the same"
+    IN=$'Bad Name\nsecond-try\n'; run req_ask_name ""
+    assert_eq "second-try" "$REQ_REPLY" "an invalid name is asked again"
+    assert_contains "invalid name" "$OUT" "with the reason"
+    IN=$'\n'; run req_ask_name ""; assert_eq "1" "$STATUS" "an empty answer cancels"
+    IN='<EOF>'; run req_ask_name ""; assert_eq "1" "$STATUS" "so does end of input"
+}
+
 test_pairs_and_presets() {
     echo "wizard: helpers"
     assert_eq '{"Content-Type":"application/json","Accept":"application/json"}' "$(req_preset_headers json)" "json preset"
@@ -517,6 +533,7 @@ test_remove_dir() {
     assert_contains "workspace not found" "$OUT" "with a message"
 }
 
+test_ask_name
 test_pairs_and_presets
 test_new
 test_edit
