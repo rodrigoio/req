@@ -59,6 +59,7 @@ keys() {
             down)  printf '\033[B' ;;
             enter) printf '\n' ;;
             esc)   printf '\033'; sleep 0.2 ;;
+            clear) printf '\f' ;;
             *)     printf '%s' "$k" ;;
         esac
     done
@@ -668,6 +669,111 @@ q
     REQ_INPUT_FD=0
 }
 
+test_clear_screen() {
+    echo "nav: Ctrl-L clears the screen"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local ff=$'\f' i dir sel file out
+    req_nav_handle enter                                        # api/
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    dir=$REQ_CUR_DIR; sel=$REQ_SEL
+    REQ_SCREEN_DRAWN=9
+    req_nav_handle "$ff"
+    assert_eq "0" "$REQ_SCREEN_DRAWN" "the next draw has nothing to erase: the rows are gone"
+    assert_eq "list" "$REQ_VIEW" "the list stays"
+    assert_eq "$dir" "$REQ_CUR_DIR" "in the same directory"
+    assert_eq "$sel" "$REQ_SEL" "with the same selection"
+    assert_eq "1" "$REQ_NAV_DIRTY" "and the screen is built again"
+    REQ_SCREEN_DRAWN=9; req_nav_clear_screen >"$TMP/clear_out"
+    assert_eq "" "$(<"$TMP/clear_out")" "outside a terminal nothing is printed"
+    assert_eq "0" "$REQ_SCREEN_DRAWN" "(the rows are forgotten all the same)"
+
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "(a request is open)"
+    file=$REQ_DETAIL_FILE
+    req_nav_handle "$ff"
+    assert_eq "detail" "$REQ_VIEW" "the details stay"
+    assert_eq "$file" "$REQ_DETAIL_FILE" "with the same request"
+
+    type_keys : a b
+    req_nav_handle "$ff"
+    assert_eq "1" "$REQ_CMD_ACTIVE" "command mode stays"
+    assert_eq "ab" "$REQ_CMD_BUF" "with what was typed"
+    type_keys esc
+
+    type_keys : h enter
+    req_nav_handle "$ff"
+    assert_eq "help" "$REQ_VIEW" "the help stays open (any other key closes it)"
+    req_nav_handle x
+    assert_eq "detail" "$REQ_VIEW" "and a key closes it, back to the details"
+
+    out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
+    assert_contains "Ctrl-L|clear the screen" "$out" "the help lists Ctrl-L"
+    out=$(keys down clear enter | req_nav_run "$PROJ/.req" 2>&1)
+    assert_eq "2" "$(grep -c '(2/2)' <<<"$out")" "in the loop, the key draws the list again with the same selection"
+    assert_contains "req /auth" "$out" "and the Enter after it opens that selection"
+}
+
+test_view_key() {
+    echo "nav: v shows the last response"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local stub=$TMP/view_stub old_path=$PATH i
+    mkdir -p "$stub"
+    # A less made up for the test: it keeps what it was given and does not wait for a key.
+    cat >"$stub/less" <<'EOF'
+#!/bin/sh
+cat >"$REQ_TEST_PAGER_IN"
+EOF
+    chmod +x "$stub/less"
+    export REQ_TEST_PAGER_IN=$TMP/view_in
+    unset PAGER
+    PATH=$stub:$PATH
+    REQ_NOTIFICATION_ACTIVE=1; REQ_COLORS=0
+
+    REQ_RESULT=""; REQ_NOTIFICATION_WARN=""; REQ_SCREEN_DRAWN=5; rm -f "$REQ_TEST_PAGER_IN"
+    req_nav_handle v
+    assert_contains "run a request first" "$REQ_NOTIFICATION_WARN" "nothing to view yet: a warning in the bar"
+    [[ ! -e $REQ_TEST_PAGER_IN ]]; assert_eq "0" "$?" "and no pager"
+    assert_eq "5" "$REQ_SCREEN_DRAWN" "the menu is not erased for nothing"
+
+    REQ_RESULT=ok; REQ_RESP_CTYPE=application/json; REQ_RESP_BODY='{"shown_by_the_test":1}'
+    req_nav_handle v
+    assert_contains '"shown_by_the_test": 1' "$(<"$REQ_TEST_PAGER_IN")" "on the list, v hands the response to the pager"
+    assert_eq "0" "$REQ_SCREEN_DRAWN" "and the menu is drawn again after it"
+    assert_eq "list" "$REQ_VIEW" "in the same view"
+
+    req_nav_handle enter                                        # api/
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "(a request is open)"
+    rm -f "$REQ_TEST_PAGER_IN"
+    req_nav_handle v
+    [[ -s $REQ_TEST_PAGER_IN ]]; assert_eq "0" "$?" "on the details too"
+    assert_eq "detail" "$REQ_VIEW" "which stay open"
+
+    rm -f "$REQ_TEST_PAGER_IN"
+    type_keys : v
+    assert_eq "v" "$REQ_CMD_BUF" "in command mode v is a letter of the command"
+    type_keys esc
+    type_keys : h enter
+    req_nav_handle v
+    [[ ! -e $REQ_TEST_PAGER_IN ]]; assert_eq "0" "$?" "on the help any key closes it: no pager"
+    assert_eq "detail" "$REQ_VIEW" "back to the details"
+
+    REQ_VIEW=list; COLUMNS=100 req_nav_build_list          # wide enough: the hint is cut at the width, v is the last item
+    assert_contains "v response" "${REQ_SCREEN_LINES[-1]}" "the list hint shows v once there is a response"
+    REQ_VIEW=detail; req_nav_build_detail
+    assert_contains "v response" "${REQ_SCREEN_LINES[-1]}" "and so does the details hint"
+    REQ_RESULT=failed; req_nav_build_detail
+    assert_not_contains "v response" "${REQ_SCREEN_LINES[-1]}" "not when the last request got no response"
+    REQ_VIEW=list; REQ_RESULT=""; COLUMNS=100 req_nav_build_list
+    assert_not_contains "v response" "${REQ_SCREEN_LINES[-1]}" "nor before any request"
+    assert_contains "v|show the last response" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists v"
+
+    PATH=$old_path; REQ_NOTIFICATION_ACTIVE=0; REQ_NOTIFICATION_WARN=""; REQ_RESP_CTYPE=""; REQ_RESP_BODY=""; REQ_VIEW=list
+}
+
 test_help() {
     echo "nav: help screen"
     make_project
@@ -956,6 +1062,7 @@ test_command_log_verbose() {
     out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
     assert_contains ":log" "$out" "the help lists :log"
     assert_contains ":v [yes|no]" "$out" "and :v"
+    assert_contains "req log|follow the project's log" "$out" "the help lists req log, outside the menu"
     REQ_PROJECT_ID=""; REQ_LOG_SESSION=""; REQ_CONFIG=(); REQ_VERBOSE=0
 }
 
@@ -1345,6 +1452,8 @@ test_empty_project
 test_command_mode
 test_command_actions
 test_help
+test_clear_screen
+test_view_key
 test_dynamic_root
 test_command_rename_dir
 test_command_copy

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-18
+
+### Added
+
+- Follow the log of the project from another terminal with `req log` (`tail -n 200 -F` on its `req.log`),
+  without looking for the file. If the log does not exist yet it waits for it. While the log is at its
+  `log_request_limit` lines, `tail` prints the whole log again after each new line (see the README).
+- Clear the screen with Ctrl-L: the results of the requests already made go away and the menu is drawn
+  again at the top, with the same selection.
+- Show the last response in full screen with `v` (on the list or on the details): JSON indented by `jq`,
+  anything else as it came, in `$PAGER` or else `less`. Only the response of this session is kept, in
+  memory; nothing is written to disk.
+
+### Changed
+
+- Download a smaller `release/req.sh`, about 30% lighter (139 KB down to 99 KB): the comments of the
+  sources are left out of the single file. It runs exactly as before.
+
 ## [0.4.0] - 2026-11-16
 
 ### Added
@@ -64,7 +82,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the verbose mode (`:v`).
 - Show the installed version with `req --version`.
 
-[unreleased]: https://github.com/rodrigoio/req/compare/v0.4.0...HEAD
+[unreleased]: https://github.com/rodrigoio/req/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/rodrigoio/req/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rodrigoio/req/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/rodrigoio/req/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/rodrigoio/req/compare/v0.1.0...v0.2.0
