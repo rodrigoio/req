@@ -81,3 +81,28 @@ req_log_response() {
 req_log_failure() {
     req_log_write ERROR "no response (curl exit code $1)"
 }
+
+REQ_LOG_FOLLOW_LINES=200    # lines "req log" shows before it starts to follow
+
+# req_log_follow - "req log": follows the log of the project of the current folder, so whoever has
+# req open in another terminal does not have to look for the file. It is tail -F and never -f:
+# req_log_trim replaces the file, and -f would go on reading the old one and stop in silence. (-F
+# prints the new file again after a trim: see Q19 in TASKS.md.) With no log yet it says so and waits
+# for the file, so it does not matter which terminal is opened first. Ctrl-C ends it.
+req_log_follow() {
+    local id file
+    if ! req_project_find . >/dev/null; then
+        req_err "no $REQ_PROJECT_FILE in $PWD: run 'req log' in the folder of a req project ('req init' starts one)"
+        return 1
+    fi
+    if ! id=$(req_project_find_id .); then
+        req_err "$PWD/$REQ_PROJECT_FILE is not registered yet: open the project once with 'req'"
+        return 1
+    fi
+    file=$(req_project_state_dir "$id" req.log)
+    if [[ ! -e $file ]]; then
+        printf 'req: waiting for the log %s (a request writes it with the log on: :log yes in the menu, or :config log=yes)\n' "$file" >&2
+        until [[ -e $file ]]; do sleep 0.5; done
+    fi
+    tail -n "$REQ_LOG_FOLLOW_LINES" -F -- "$file"
+}

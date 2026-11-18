@@ -51,6 +51,7 @@ req init          # creates the .req file (workspace=.) and suggests :n to creat
 req                               # interactive menu, using the .req of the current directory
 req init                          # initialize a project in the current directory
 req run path/to/login.post.json   # run one request and show the response and timing profile
+req log                           # follow the project's log (tail -F), from another terminal
 req --version
 ```
 
@@ -231,6 +232,12 @@ The values are the real ones, after `${key}` is replaced (nothing is masked). `:
 ```
 2026-11-13T22:30:01-0300 RESPONSE status=201 type=application/json total=0.150s | body: {"id":7}
 ```
+
+### Following the log
+
+`req log` follows the log of the project of the current folder (`tail -n 200 -F` on `~/.req/projects/<id>/req.log`), so you do not have to look for the file: keep the menu open in one terminal and run `req log` in another. It shows the last 200 lines and then each new line as it is written; Ctrl-C ends it. If the log does not exist yet it says so and waits for the file, so it does not matter which terminal you open first (turn the log on with `:log yes` or `:config log=yes`). The folder must hold the `.req` of a project that `req` has opened at least once.
+
+It follows the file by name (`-F`), so it keeps working when `req` trims the log to `log_request_limit` lines. With the log at its limit every new line trims it again, and `tail` then prints the whole log again, so expect repeats in that case (an open point, Q19 in `TASKS.md` in the `req_context` repository).
 
 ## Environments and variables
 
