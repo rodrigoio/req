@@ -343,9 +343,39 @@ req_cmd_verbose() {
 }
 
 # shellcheck disable=SC2034  # REQ_ENV is read by req_run_request and the header
+# req_env_activate <name> [file just made] - the end of req_env_use: makes <name> the environment
+# of the session and loads its whole set of variables right away (the project's plus the
+# environment's, see req_vars_load), so a broken file is reported now and not only when a
+# request runs. The problems go to the warning bar and the switch stands, with no variables
+# loaded; nothing is fixed or overwritten. The status says how many variables were loaded and,
+# for an environment that was just made, where its file is. The variables are loaded again at
+# every request (req_run_request), so a file edited while req is open is read as it is then.
+req_env_activate() {
+    local name=$1 made=${2-} errs ok=1 note n
+    REQ_ENV=$name
+    if errs=$(mktemp 2>/dev/null); then
+        req_vars_load "$name" 2>"$errs" || ok=0
+        req_notification_warn_file "$errs"
+        rm -f "$errs"
+    else
+        req_vars_load "$name" 2>/dev/null || { ok=0; req_notification_warn "cannot load the variables of environment \"$name\""; }
+    fi
+    if (( ok )); then
+        n=${#REQ_VARS[@]}
+        case $n in
+            0) note="no variables" ;;
+            1) note="1 variable" ;;
+            *) note="$n variables" ;;
+        esac
+    else
+        note="variables not loaded"
+    fi
+    REQ_STATUS="environment: $name${made:+, created in $made} ($note)"
+}
+
 # req_env_use <name> [ask|now] - switches the session to an environment (REQ_ENV, shown in the
-# header and used by the next request). An environment of the project, or "default", is switched
-# to at once. One that does not exist yet is created: with "ask" (the default) after a [Y/n]
+# header and used by the next request, req_env_activate). An environment of the project, or "default",
+# is switched to at once. One that does not exist yet is created: with "ask" (the default) after a [Y/n]
 # question, with "now" straight away (the caller has asked already). The new file is empty and
 # private, and the status says where it is. A name that is not a slug, or no project state to
 # keep the file in, is a warning and changes nothing; so is answering no or a file that cannot
@@ -357,8 +387,7 @@ req_env_use() {
         return 0
     fi
     if req_env_exists "$name"; then
-        REQ_ENV=$name
-        REQ_STATUS="environment: $name"
+        req_env_activate "$name"
         return 0
     fi
     if [[ -z $REQ_PROJECT_ID ]]; then
@@ -378,8 +407,7 @@ req_env_use() {
         req_notification_warn "${err#req: error: }"
         return 0
     fi
-    REQ_ENV=$name
-    REQ_STATUS="environment: $name, created in $(req_abs_path "$file")"
+    req_env_activate "$name" "$(req_abs_path "$file")"
     return 0
 }
 
