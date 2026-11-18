@@ -9,15 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Follow the log of the project from another terminal with `req log` (`tail -n 200 -F` on its `req.log`),
+  without looking for the file. If the log does not exist yet it waits for it. While the log is at its
+  `log_request_limit` lines, `tail` prints the whole log again after each new line (see the README).
 - Clear the screen with Ctrl-L: the results of the requests already made go away and the menu is drawn
   again at the top, with the same selection.
-- Follow the log of the project from another terminal with `req log` (`tail -n 200 -F` on its `req.log`),
-  without looking for the file. If the log does not exist yet it waits for it.
+- Show the last response in full screen with `v` (on the list or on the details): JSON indented by `jq`,
+  anything else as it came, in `$PAGER` or else `less`. Only the response of this session is kept, in
+  memory; nothing is written to disk.
 
 ### Changed
 
-- Download a smaller `release/req.sh`, about a third lighter: the comments of the sources are left out of
-  the single file. It runs exactly as before.
+- Download a smaller `release/req.sh`, about 30% lighter (139 KB down to 99 KB): the comments of the
+  sources are left out of the single file. It runs exactly as before.
 
 ## [0.4.0] - 2026-11-16
 
