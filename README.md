@@ -6,7 +6,7 @@ The interactive request tool for your terminal. A bash + curl utility to registe
 
 ## Requirements
 
-Runtime: bash 4+, curl and jq. Nothing else.
+Runtime: bash 4+, curl and jq. Optional: a pager (`less`, or whatever `$PAGER` names) for the response view (`v`), which just warns when there is none; `req log` uses `tail`, which every GNU system has.
 
 Development only (not needed to use `req`): `shellcheck`, used by `make lint` over `bin/`, `lib/` and `tests/`. When it is not installed, `make lint` just warns and only checks the syntax. The tests need `python3` for the local mock server and skip those cases without it.
 

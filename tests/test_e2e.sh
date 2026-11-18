@@ -180,7 +180,58 @@ test_usability() {
     command -v pgrep >/dev/null 2>&1 && assert_eq "" "$(pgrep -f "tail -n 200 -F -- $log")" "stopping it leaves no tail running"
 }
 
+test_response_view() {
+    echo "e2e: v shows the last response"
+    command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
+    [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
+    local work=$TMP/viewer port out status down=$'\033[B' standin=$TMP/pager_standin
+    port=$(<"$TMP/port")
+    mkdir -p "$work" && cd "$work" || return
+    $REQ init >/dev/null 2>&1
+    printf 'restore_cursor=no\n' >"$REQ_CONFIG_DIR/projects/viewer/config"
+    # In the order of the menu: ping (JSON), plain-text (text/plain), refused (nothing listens there).
+    printf '{"name":"ping","method":"GET","url":"http://127.0.0.1:%s/echo"}\n' "$port" >ping.get.json
+    printf '{"name":"plain-text","method":"GET","url":"http://127.0.0.1:%s/text"}\n' "$port" >plain-text.get.json
+    printf '{"name":"refused","method":"GET","url":"http://127.0.0.1:1/x"}\n' >refused.get.json
+    # A pager that keeps what it is given in a file, so the test can look at it.
+    cat >"$standin" <<'EOF'
+#!/bin/sh
+cat >"$REQ_TEST_PAGER_OUT"
+EOF
+    chmod +x "$standin"
+    export REQ_TEST_PAGER_OUT=$TMP/pager_out
+
+    rm -f "$REQ_TEST_PAGER_OUT"
+    out=$(PAGER=$standin menu "v" "$(cmd q)"); status=$?
+    assert_contains "! no response to view yet: run a request first" "$out" "v before any request: a warning in the bar"
+    [[ ! -e $REQ_TEST_PAGER_OUT ]]; assert_eq "0" "$?" "and no pager"
+    assert_eq "0" "$status" "and the menu goes on: :q ends it"
+
+    out=$(PAGER=$standin menu "$ENTER" "$ENTER" "v" "$(cmd q)"); status=$?
+    assert_contains "HTTP 200" "$out" "a JSON request ran"
+    assert_contains $'\n  "method": "GET"' $'\n'"$(<"$REQ_TEST_PAGER_OUT")" "v gave the pager the response, indented"
+    assert_eq "0" "$status" "the menu is back after the pager: :q ends it"
+    assert_contains "v response" "$out" "and the hint says v is there"
+
+    rm -f "$REQ_TEST_PAGER_OUT"
+    out=$(PAGER=$standin menu "$down" "$ENTER" "$ENTER" "v" "$(cmd q)"); status=$?
+    assert_eq "hello text" "$(<"$REQ_TEST_PAGER_OUT")" "a text response reaches the pager as it came"
+
+    rm -f "$REQ_TEST_PAGER_OUT"
+    out=$(PAGER=$standin menu "$down" "$down" "$ENTER" "$ENTER" "v" "$(cmd q)"); status=$?
+    assert_contains "! no response to view: the last request got none" "$out" "a request with no response, then v: the warning says so"
+    [[ ! -e $REQ_TEST_PAGER_OUT ]]; assert_eq "0" "$?" "and no pager"
+
+    command -v less >/dev/null 2>&1 || { echo "  skip less unavailable"; return; }
+    out=$(PAGER='' menu "$ENTER" "$ENTER" "v" "q" "$(cmd q)"); status=$?
+    assert_eq "2" "$(grep -c -F '"method": "GET"' <<<"$out")" "the real less showed the response (once on the screen, once in the pager)"
+    assert_eq "0" "$status" "q leaves it and the menu is back: :q ends it"
+    out=$(PAGER='' menu "$ENTER" "$ENTER" "v" $'\003' "q" "$(cmd q)"); status=$?
+    assert_eq "0" "$status" "Ctrl-C inside less does not close req: :q still ends it normally"
+}
+
 test_flow
 test_notifications
 test_usability
+test_response_view
 test_summary
