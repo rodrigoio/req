@@ -978,6 +978,7 @@ test_command_env() {
     local envdir
     envdir=$(req_project_state_dir "$REQ_PROJECT_ID" env)
     unset REQ_ENV
+    REQ_INPUT_FD=3
 
     type_keys : e n v enter
     assert_contains "environments: default (in use: default)" "$REQ_STATUS" ":env lists default, which opening the project made"
@@ -986,29 +987,75 @@ test_command_env() {
     type_keys : e n v enter
     assert_contains "environments: default, dev, prod (in use: default)" "$REQ_STATUS" ":env lists the environments and the one in use"
 
-    type_keys : e n v ' ' d e v enter
-    assert_eq "dev" "$REQ_ENV" ":env <name> switches the session"
+    type_keys : e n v ' ' d e v
+    req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "dev" "$REQ_ENV" ":env <name> switches the session, with no question for an environment that exists"
     assert_contains "environment: dev" "$REQ_STATUS" "and says so"
     req_nav_build_list; assert_contains "proj @ dev" "${REQ_SCREEN_LINES[0]}" "the header follows"
     type_keys : e n v enter
     assert_contains "(in use: dev)" "$REQ_STATUS" "and the listing shows the new one"
 
-    type_keys : e n v ' ' s t a g i n g enter
-    assert_eq "dev" "$REQ_ENV" "an unknown environment changes nothing"
-    assert_contains 'unknown environment "staging" (known: default, dev, prod)' "$REQ_NOTIFICATION_WARN" "and is explained with the known ones"
-    assert_contains "$envdir/staging" "$REQ_NOTIFICATION_WARN" "and the file that would create it"
-    type_keys : e n v ' ' B a d enter
-    assert_contains "invalid environment name" "$REQ_NOTIFICATION_WARN" "a name that is not a slug is refused"
-    assert_eq "dev" "$REQ_ENV" "without a change"
-    type_keys : e n v ' ' d e f a u l t enter
-    assert_eq "default" "$REQ_ENV" "default can always be chosen, even without a file"
+    # An environment that does not exist is offered for creation.
+    type_keys : e n v ' ' s t a g i n g
+    req_nav_handle enter 3<<<"n" >"$TMP/env-question.txt"
+    assert_contains 'Create environment "staging"? [Y/n]' "$(<"$TMP/env-question.txt")" "an unknown environment asks before it is created"
+    assert_eq "dev" "$REQ_ENV" "answering n changes nothing"
+    [[ ! -e $envdir/staging ]]; assert_eq "0" "$?" "and creates no file"
+    assert_contains 'environment "staging" not created (in use: dev)' "$REQ_STATUS" "and says so"
+    type_keys : e n v ' ' s t a g i n g; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "dev" "$REQ_ENV" "end of input counts as no"
+    [[ ! -e $envdir/staging ]]; assert_eq "0" "$?" "and creates no file"
+
+    type_keys : e n v ' ' s t a g i n g; req_nav_handle enter 3<<<"" >/dev/null
+    assert_eq "staging" "$REQ_ENV" "Enter creates it and switches to it"
+    [[ -f $envdir/staging ]]; assert_eq "0" "$?" "the file is in the project's env folder"
+    assert_eq "600" "$(stat -c %a "$envdir/staging")" "private"
+    assert_eq "0" "$(wc -c <"$envdir/staging" | tr -d ' ')" "and empty"
+    assert_contains "environment: staging, created in $envdir/staging" "$REQ_STATUS" "the status says where it is"
+    req_nav_build_list; assert_contains "proj @ staging" "${REQ_SCREEN_LINES[0]}" "the header follows"
+    type_keys : e n v enter
+    assert_contains "environments: default, dev, prod, staging (in use: staging)" "$REQ_STATUS" "and it is listed"
+
+    type_keys : e n v ' ' q a; req_nav_handle enter 3<<<"yes" >/dev/null
+    assert_eq "qa" "$REQ_ENV" "yes creates it too"
+    [[ -f $envdir/qa ]]; assert_eq "0" "$?" "with its file"
+    printf 'k=kept-by-the-test\n' >"$envdir/qa"
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3<<<"" >/dev/null
+    type_keys : e n v ' ' q a; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "k=kept-by-the-test" "$(<"$envdir/qa")" "an environment that exists is never touched"
+
+    req_env_use direct-test-env now 3</dev/null
+    assert_eq "direct-test-env" "$REQ_ENV" "req_env_use ... now creates with no question"
+    [[ -f $envdir/direct-test-env ]]; assert_eq "0" "$?" "and makes the file"
+
+    type_keys : e n v ' ' B a d; req_nav_handle enter 3<<<"y" >/dev/null
+    assert_eq "direct-test-env" "$REQ_ENV" "a name that is not a slug changes nothing"
+    assert_contains "invalid environment name" "$REQ_NOTIFICATION_WARN" "and is refused"
+    [[ ! -e $envdir/Bad ]]; assert_eq "0" "$?" "nothing is created for it"
+
+    rm -f "$envdir/default"
+    type_keys : e n v ' ' d e f a u l t; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "default" "$REQ_ENV" "default can always be chosen, even if its file is gone"
+    [[ ! -e $envdir/default ]]; assert_eq "0" "$?" "and choosing it makes no file"
+
+    if (( EUID != 0 )); then       # root ignores the permissions
+        chmod 500 "$envdir"
+        type_keys : e n v ' ' l o c k e d; req_nav_handle enter 3<<<"y" >/dev/null
+        chmod 700 "$envdir"
+        assert_eq "default" "$REQ_ENV" "a file that cannot be made changes nothing"
+        assert_contains "cannot create $envdir/locked" "$REQ_NOTIFICATION_WARN" "and the warning names it with the absolute path"
+    fi
 
     REQ_PROJECT_ID=""; type_keys : e n v ' ' p r o d enter
     assert_eq "default" "$REQ_ENV" "without a saved project state only default is allowed"
     assert_contains "not available" "$REQ_NOTIFICATION_WARN" "and the reason is given"
+    type_keys : e n v ' ' n e w; req_nav_handle enter 3<<<"y" >/dev/null
+    assert_eq "default" "$REQ_ENV" "and nothing is asked or created for another one"
+    assert_contains "unknown environment \"new\"" "$REQ_NOTIFICATION_WARN" "which is unknown"
     type_keys : e n v enter
     assert_contains "no environments yet (in use: default)" "$REQ_STATUS" "with no project state there is nothing to list"
     assert_contains ":env" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists :env"
+    REQ_INPUT_FD=0
     unset REQ_ENV
 }
 

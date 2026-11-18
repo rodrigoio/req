@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Make the `env/` folder and the `default` environment file of a project when `req` opens it, instead of
   leaving them for you to create by hand. A project you already had gets them the next time it is opened.
+- Offer to create the environment when `:env <name>` names one that does not exist (`Create environment
+  "<name>"? [Y/n]`), instead of telling you to create its file yourself. The new file is empty and private,
+  and the message says where it is.
 
 ## [0.5.0] - 2026-11-18
 
