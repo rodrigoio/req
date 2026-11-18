@@ -956,6 +956,7 @@ test_command_log_verbose() {
     out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
     assert_contains ":log" "$out" "the help lists :log"
     assert_contains ":v [yes|no]" "$out" "and :v"
+    assert_contains "req log|follow the project's log" "$out" "the help lists req log, outside the menu"
     REQ_PROJECT_ID=""; REQ_LOG_SESSION=""; REQ_CONFIG=(); REQ_VERBOSE=0
 }
 

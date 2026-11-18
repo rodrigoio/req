@@ -121,9 +121,63 @@ test_limit() {
     assert_eq "13" "$(wc -l <"$f" | tr -d ' ')" "the default (500) leaves a small log alone"
 }
 
+test_follow() {
+    echo "log: req log follows the project's log"
+    local work=$TMP/follow_work stub=$TMP/follow_stub args=$TMP/follow_args notice=$TMP/follow_notice
+    local out id file pid actual want
+    mkdir -p "$work" "$stub"
+    # A tail made up for the tests: it only records its arguments, so no test follows a file for real.
+    cat >"$stub/tail" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" >"$REQ_TEST_TAIL_ARGS"
+EOF
+    chmod +x "$stub/tail"
+    export REQ_TEST_TAIL_ARGS=$args
+
+    out=$(cd "$work" && req_log_follow 2>&1); assert_eq "1" "$?" "no .req in the folder: it fails"
+    assert_contains "no .req in $work" "$out" "naming the folder"
+    req_project_init "$work"
+    out=$(cd "$work" && req_log_follow 2>&1); assert_eq "1" "$?" "a .req that is not registered: it fails"
+    assert_contains "$work/.req is not registered yet" "$out" "naming the .req"
+
+    id=$(req_project_create "$work"); file=$(req_project_state_dir "$id" req.log)
+    want=$'-n\n200\n-F\n--\n'$file
+    printf 'line one\nline two\n' >"$file"
+    out=$(cd "$work" && PATH=$stub:$PATH req_log_follow 2>&1); assert_eq "0" "$?" "a registered project with a log: it follows"
+    assert_eq "$want" "$(<"$args")" "tail -n 200 -F on the log of the project (-F: the trim replaces the file)"
+
+    # No log yet: a notice, and tail only starts once the file exists.
+    rm -f "$file" "$args"
+    ( cd "$work" && PATH=$stub:$PATH req_log_follow 2>"$notice" ) &
+    pid=$!
+    for _ in {1..30}; do [[ -s $notice ]] && break; sleep 0.1; done
+    assert_contains "waiting for the log $file" "$(<"$notice")" "no log yet: it says it waits, with the absolute path"
+    assert_contains ":config log=yes" "$(<"$notice")" "and how to turn the log on"
+    [[ ! -e $args ]]; assert_eq "0" "$?" "tail does not start while there is no file"
+    : >"$file"
+    for _ in {1..30}; do [[ -s $args ]] && break; sleep 0.1; done
+    actual=""; [[ -s $args ]] && actual=$(<"$args")
+    assert_eq "$want" "$actual" "when the file appears tail starts with the same arguments"
+    kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null
+
+    out=$(cd "$work" && bash "$ROOT/bin/req" log extra_argument_test 2>&1); assert_eq "1" "$?" "bin/req: an extra argument is a usage error"
+    assert_contains "req log" "$out" "which shows the usage, with req log in it"
+
+    if command -v timeout >/dev/null 2>&1; then
+        printf 'first line\nsecond line\n' >"$file"
+        out=$(cd "$work" && timeout 1 bash "$ROOT/bin/req" log 2>&1)
+        assert_contains "second line" "$out" "bin/req with the real tail prints the last lines of the log"
+        sleep 0.3
+        command -v pgrep >/dev/null 2>&1 && assert_eq "" "$(pgrep -f "tail -n 200 -F -- $file")" "and no tail is left running"
+    else
+        echo "  skip timeout unavailable"
+    fi
+}
+
 test_enabled
 test_limit
 test_write
 test_request
 test_response
+test_follow
 test_summary

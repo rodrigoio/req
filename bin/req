@@ -17,6 +17,7 @@ req_usage() {
 usage: req                  open the interactive menu (uses the .req in the current directory)
        req init             initialize a req project in the current directory
        req run <file>       run a request and show the result
+       req log              follow the project's log (tail -F), from another terminal
        req --version | --help
 USAGE
 }
@@ -75,6 +76,10 @@ main() {
             if req_project_find . >/dev/null; then REQ_PROJECT_ID=$(req_project_find_id .) || REQ_PROJECT_ID=""; fi
             req_config_load_local || true
             req_run_request "$2"
+            ;;
+        log)
+            [[ -z ${2-} ]] || { req_usage >&2; return 1; }
+            req_log_follow
             ;;
         '')
             req_nav_start

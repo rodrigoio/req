@@ -46,6 +46,8 @@ REQ_HELP_ROWS=(
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
     ":h|this help (alias :help)"
     ":q|quit (alias :quit)"
+    "Outside the menu"
+    "req log|follow the project's log from another terminal (tail -F)"
 )
 REQ_HELP_BACK=list      # view to return to when the help screen closes
 

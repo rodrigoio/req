@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Follow the log of the project from another terminal with `req log` (`tail -n 200 -F` on its `req.log`),
+  without looking for the file. If the log does not exist yet it waits for it.
+
 ### Changed
 
 - Download a smaller `release/req.sh`, about a third lighter: the comments of the sources are left out of
