@@ -31,6 +31,7 @@ REQ_HELP_ROWS=(
     "up/down|move the selection (wraps around)"
     "Enter|open a directory or request; on the details, run it"
     "Esc|go back (details, then list, then parent directory)"
+    "Ctrl-L|clear the screen: old results go away and the menu is drawn at the top"
     ":|command mode (Esc cancels)"
     "Commands"
     ":n|new request in the current directory"
