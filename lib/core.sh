@@ -128,9 +128,15 @@ req_on_exit() {
     req_restore_terminal
 }
 
+# req_trap_int_exit - Ctrl-C ends req (status 130). A child that owns the terminal for a while (the pager)
+# puts a no-op in its place and calls this to get it back.
+req_trap_int_exit() {
+    trap 'exit 130' INT
+}
+
 # req_setup_traps - restores the terminal on normal exit, error or signal.
 req_setup_traps() {
     trap req_on_exit EXIT
-    trap 'exit 130' INT
+    req_trap_int_exit
     trap 'exit 143' TERM
 }

@@ -149,6 +149,113 @@ test_timing() {
         "$(req_timing_stages 0 0 0 0 0 0)" "all zero"
 }
 
+test_body_format() {
+    echo "http: how a body is formatted"
+    req_body_format application/json '{"a":1}' 0; assert_eq "0" "$?" "JSON is formatted: status 0"
+    assert_eq $'{\n  "a": 1\n}' "$REQ_BODY_TEXT" "and indented"
+    req_body_format application/json '{"a":1}' 1; assert_eq "0" "$?" "with colors, the same status"
+    assert_contains $'\033[' "$REQ_BODY_TEXT" "and jq's colors in the text"
+    req_body_format application/json '{"a":1}' 0
+    assert_not_contains $'\033' "$REQ_BODY_TEXT" "no colors when they are not asked for"
+    req_body_format application/vnd.api+json '[1]' 0; assert_eq "0" "$?" "a Content-Type that only has json in it counts"
+    req_body_format 'Application/JSON; charset=utf-8' '[1]' 0; assert_eq "0" "$?" "whatever the case and the parameters"
+    req_body_format application/json '{broken_test_body' 0; assert_eq "1" "$?" "a JSON Content-Type with a body jq cannot read: status 1"
+    assert_eq "{broken_test_body" "$REQ_BODY_TEXT" "and the body as it came"
+    req_body_format text/plain '{"a":1}' 0; assert_eq "1" "$?" "JSON in a text Content-Type is not formatted"
+    assert_eq '{"a":1}' "$REQ_BODY_TEXT" "it comes as it is"
+    req_body_format text/html '<h1>x</h1>' 1; assert_eq "<h1>x</h1>" "$REQ_BODY_TEXT" "HTML as it came, colors or not"
+    req_body_format application/json '' 0; assert_eq "1" "$?" "an empty body is not JSON"
+    assert_eq "" "$REQ_BODY_TEXT" "and stays empty"
+}
+
+# pager_run - runs the view the way the menu does (check, then view) with the recording stand-ins.
+pager_run() {
+    rm -f "$REQ_TEST_PAGER_ARGS" "$REQ_TEST_PAGER_LESS" "$REQ_TEST_PAGER_IN"
+    req_result_check && req_result_view
+}
+
+test_result_view() {
+    echo "http: the last response in a pager"
+    local stub=$TMP/pager_stub out old_path=$PATH
+    mkdir -p "$stub"
+    # A less and a pager made up for the tests: they only record what they got (arguments, LESS and
+    # stdin), so nothing here waits for a key.
+    cat >"$stub/less" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$@" >"$REQ_TEST_PAGER_ARGS"
+printf '%s' "${LESS-unset}" >"$REQ_TEST_PAGER_LESS"
+cat >"$REQ_TEST_PAGER_IN"
+exit "${REQ_TEST_PAGER_EXIT:-0}"
+EOF
+    chmod +x "$stub/less"; cp "$stub/less" "$stub/custom_pager_test"
+    export REQ_TEST_PAGER_ARGS=$TMP/pager_args REQ_TEST_PAGER_LESS=$TMP/pager_less REQ_TEST_PAGER_IN=$TMP/pager_in
+    unset PAGER
+    PATH=$stub:$PATH
+
+    REQ_RESULT=""; out=$(req_result_check 2>&1); assert_eq "1" "$?" "no request yet: nothing to view"
+    assert_contains "run a request first" "$out" "and it says what to do"
+    REQ_RESULT=failed; out=$(req_result_check 2>&1); assert_eq "1" "$?" "the last request got no response: nothing to view"
+    assert_contains "the last request got none" "$out" "and it says why"
+
+    REQ_RESULT=ok; REQ_RESP_CTYPE=application/json; REQ_RESP_BODY='{"a":1}'
+    REQ_COLORS=1; LESS='-F -X'; export LESS
+    pager_run; assert_eq "0" "$?" "JSON with colors on: the pager runs"
+    assert_eq "-R" "$(<"$REQ_TEST_PAGER_ARGS")" "default pager: less -R, to carry the colors"
+    assert_eq "" "$(<"$REQ_TEST_PAGER_LESS")" "with the LESS of the user emptied, so -F and -X cannot get in the way"
+    assert_contains $'\033[' "$(<"$REQ_TEST_PAGER_IN")" "and the text has the colors of jq"
+    assert_contains '"a"' "$(<"$REQ_TEST_PAGER_IN")" "and the indented JSON"
+    unset LESS
+
+    REQ_COLORS=0
+    pager_run; assert_eq "" "$(<"$REQ_TEST_PAGER_ARGS")" "without colors there is no -R"
+    assert_eq $'{\n  "a": 1\n}' "$(<"$REQ_TEST_PAGER_IN")" "and the JSON is only indented"
+
+    REQ_COLORS=1; REQ_RESP_CTYPE=text/plain; REQ_RESP_BODY=$'plain \033[31mred\033[0m text'
+    pager_run; assert_eq "" "$(<"$REQ_TEST_PAGER_ARGS")" "a body that is not JSON never gets -R: a control character is shown, not obeyed"
+    assert_eq "$REQ_RESP_BODY" "$(<"$REQ_TEST_PAGER_IN")" "and it comes as it came"
+    REQ_RESP_CTYPE=application/json; REQ_RESP_BODY='{broken_test_body'
+    pager_run; assert_eq "" "$(<"$REQ_TEST_PAGER_ARGS")" "so does a JSON Content-Type with a body jq cannot read"
+    assert_eq "{broken_test_body" "$(<"$REQ_TEST_PAGER_IN")" "as it came"
+    REQ_RESP_BODY=''
+    pager_run; assert_eq "(no body)" "$(<"$REQ_TEST_PAGER_IN")" "an empty body says so"
+
+    REQ_RESP_CTYPE=application/json; REQ_RESP_BODY='{"a":1}'
+    PAGER="custom_pager_test --flag_made_up_for_the_test"
+    pager_run; assert_eq "0" "$?" "PAGER set: that pager runs, with its arguments"
+    assert_eq "--flag_made_up_for_the_test" "$(<"$REQ_TEST_PAGER_ARGS")" "(through sh -c)"
+    assert_not_contains $'\033' "$(<"$REQ_TEST_PAGER_IN")" "it gets the text without colors, so any pager shows it right"
+    PAGER=no_such_pager_made_up_for_the_test
+    out=$(req_result_check 2>&1); assert_eq "1" "$?" "PAGER names something that does not exist: it fails"
+    assert_contains "the pager PAGER=no_such_pager_made_up_for_the_test was not found" "$out" "and says which"
+    unset PAGER
+
+    out=$(PATH=$TMP/dir_without_a_pager_test req_result_check 2>&1); assert_eq "1" "$?" "no PAGER and no less: it fails"
+    assert_contains "install less or set PAGER" "$out" "and says how to fix it"
+
+    REQ_TEST_PAGER_EXIT=3 pager_run 2>"$TMP/pager_err"; assert_eq "1" "$?" "a pager that fails: status 1"
+    assert_contains "the pager failed (exit code 3)" "$(<"$TMP/pager_err")" "with a warning that has its exit code"
+    REQ_TEST_PAGER_EXIT=130 pager_run; assert_eq "0" "$?" "a pager stopped with Ctrl-C (130) is not a failure"
+
+    PATH=$old_path; REQ_COLORS=0; REQ_RESULT=""; REQ_RESP_CTYPE=""; REQ_RESP_BODY=""
+}
+
+test_result_state() {
+    echo "http: REQ_RESULT after a request"
+    if ! start_server; then
+        echo "  skip python3 unavailable or the server did not start"
+        return
+    fi
+    local f=$TMP/result-state-test.get.json
+    printf '{"name":"result-state-test","method":"GET","url":"http://127.0.0.1:%s/x"}\n' "$PORT" >"$f"
+    REQ_RESULT=""
+    req_run_request "$f" >/dev/null 2>&1; assert_eq "ok" "$REQ_RESULT" "a response: ok"
+    printf '{"name":"result-state-test","method":"GET","url":"http://127.0.0.1:1/x"}\n' >"$f"
+    req_run_request "$f" >/dev/null 2>&1; assert_eq "failed" "$REQ_RESULT" "no response (nothing listens): failed"
+    printf '{"name":"result-state-test","method":"GET","url":"http://127.0.0.1:%s/x","bad_field_made_up_for_the_test":1}\n' "$PORT" >"$f"
+    req_run_request "$f" >/dev/null 2>&1; assert_eq "failed" "$REQ_RESULT" "a request that is not sent leaves it as it was"
+    REQ_RESULT=""
+}
+
 test_print() {
     echo "http: display"
     local out
@@ -499,6 +606,9 @@ test_nested_query
 test_args
 test_timing
 test_headers
+test_body_format
+test_result_view
+test_result_state
 test_print
 test_execute
 test_url_check

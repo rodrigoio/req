@@ -274,6 +274,7 @@ req_nav_build_list() {
     if req_utf8; then arrows="↑↓"; else arrows="up/down"; fi
     hint="$arrows move   Enter open   : commands   :h help"
     [[ ${#REQ_STACK_DIR[@]} -gt 0 ]] && hint+="   Esc back"
+    [[ ${REQ_RESULT-} == ok ]] && hint+="   v response"
     REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $((cols - 1)))${c_reset}")
 }
 
@@ -340,7 +341,9 @@ req_nav_build_detail() {
         req_nav_detail_section "$raw_title" "$width" "${raw_lines[@]}"
     fi
 
-    REQ_SCREEN_LINES+=("${c_dim}Enter run   : commands   :h help   Esc back${c_reset}")
+    hint="Enter run   : commands   :h help   Esc back"
+    [[ ${REQ_RESULT-} == ok ]] && hint+="   v response"
+    REQ_SCREEN_LINES+=("${c_dim}${hint}${c_reset}")
 }
 
 # req_nav_build_help - builds REQ_SCREEN_LINES with the help screen, from REQ_HELP_ROWS.
@@ -439,6 +442,16 @@ req_nav_execute() {
     return 0
 }
 
+# req_nav_view_result - "v": the last response in the pager, full screen. The menu is erased first and
+# drawn again when the pager returns (what goes wrong is a warning, see req_result_check and view).
+req_nav_view_result() {
+    req_result_check || return 0
+    req_nav_prompt_begin
+    req_result_view || true
+    req_nav_prompt_end
+    return 0
+}
+
 # req_nav_handle <key> - applies a key to the current state.
 req_nav_handle() {
     local key=$1 n=${#REQ_ITEM_KIND[@]}
@@ -464,6 +477,7 @@ req_nav_handle() {
         case $key in
             enter) (( REQ_DETAIL_VALID )) && req_nav_execute ;;
             esc)   REQ_VIEW=list ;;
+            v)     req_nav_view_result ;;
         esac
     else
         case $key in
@@ -471,6 +485,7 @@ req_nav_handle() {
             down)  (( n > 0 )) && REQ_SEL=$(( (REQ_SEL + 1) % n )) ;;
             enter) (( n > 0 )) && req_nav_open ;;
             esc)   req_nav_back ;;
+            v)     req_nav_view_result ;;
         esac
     fi
     return 0
