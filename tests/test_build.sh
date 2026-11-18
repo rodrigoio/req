@@ -67,6 +67,68 @@ test_build_standalone() {
     assert_contains "Total" "$out" "and the timing profile"
 }
 
+test_build_comments() {
+    echo "build: full-line comments are left out"
+    local rest joined text out tree=$TMP/comments_test_tree built=$TMP/comments_test_tree/req.sh
+    local dir_a=$TMP/same_output_a dir_b=$TMP/same_output_b
+
+    # The real file: only the shebang, the notice and the markers are comments, and it got smaller.
+    rest=$(grep -E '^[[:space:]]*#' "$BUILT" | grep -vE '^(#!/usr/bin/env bash|# Built from the sources|# ==== )')
+    assert_eq "" "$rest" "no full-line comment is left but the shebang, the notice and the markers"
+    joined=$(cat "$ROOT/version.sh" "$ROOT"/lib/*.sh "$ROOT/bin/req" | wc -c)
+    (( $(wc -c <"$BUILT") < joined )); assert_eq "0" "$?" "the file is smaller than the sources joined"
+
+    # What it prints is what bin/req prints: a line of text taken for a comment would show here.
+    mkdir -p "$dir_a" "$dir_b"
+    assert_eq "$(bash "$ROOT/bin/req" --help)" "$(bash "$BUILT" --help)" "--help says the same as bin/req"
+    out=$(cd "$dir_a" && bash "$ROOT/bin/req" init 2>&1)
+    text=$(cd "$dir_b" && bash "$BUILT" init 2>&1)
+    assert_eq "${out//$dir_a/DIR}" "${text//$dir_b/DIR}" "req init says the same as bin/req"
+    assert_eq "$(<"$dir_a/.req")" "$(<"$dir_b/.req")" "and writes the same .req, comment line included"
+
+    # A tree made for it: heredocs, a string with << and a trailing comment. Every comment that must go
+    # says "dropped" in it.
+    mkdir -p "$tree/bin" "$tree/lib"
+    cp "$ROOT/build.sh" "$ROOT/version.sh" "$tree/"
+    cat >"$tree/bin/req" <<'EOF'
+#!/usr/bin/env bash
+# the entrypoint comment (dropped)
+main() {
+    REQ_HOME=/nowhere
+    source "$REQ_HOME/lib/fixture.sh"
+    fixture_text
+}
+main "$@"
+EOF
+    cat >"$tree/lib/fixture.sh" <<'EOF'
+# a comment (dropped)
+
+fixture_one() { :; }
+
+# a comment between two blank lines (dropped)
+
+fixture_two() { :; }
+
+fixture_text() {
+    # a comment inside a function (dropped)
+    cat <<'TEXT'
+# a line of text, not a comment
+TEXT
+    printf 'a # inside a string\n'   # a trailing comment stays
+    printf '(>> sent, << received)\n'
+    # a comment after a string with << in it (dropped)
+EOF
+    printf '%s\n' "    cat <<-'TABBED'" $'\t# a line of text under a tab' $'\tTABBED' '}' >>"$tree/lib/fixture.sh"
+    out=$(bash "$tree/build.sh" "$built" 2>&1); assert_eq "0" "$?" "a tree with heredocs builds"
+    text=$(<"$built")
+    assert_not_contains "(dropped)" "$text" "every comment line is gone, in the modules and in the entrypoint"
+    assert_contains "# a line of text, not a comment" "$text" "the body of a heredoc stays, even a line that starts with #"
+    assert_contains "# a trailing comment stays" "$text" "a comment after code stays"
+    assert_eq $'fixture_one() { :; }\n\nfixture_two() { :; }' "$(grep -A2 '^fixture_one' "$built")" "the blank lines around a removed comment become one"
+    out=$(bash "$built" 2>&1)
+    assert_eq $'# a line of text, not a comment\na # inside a string\n(>> sent, << received)\n# a line of text under a tab' "$out" "and it prints the text of the heredocs, the string and the tabbed heredoc"
+}
+
 test_build_failures() {
     echo "build: failures leave the output alone"
     local tree=$TMP/missing_module_test_tree out
@@ -91,5 +153,6 @@ test_build_failures() {
 
 test_build_output
 test_build_standalone
+test_build_comments
 test_build_failures
 test_summary
