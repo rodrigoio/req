@@ -230,8 +230,84 @@ EOF
     assert_eq "0" "$status" "Ctrl-C inside less does not close req: :q still ends it normally"
 }
 
+# shellcheck disable=SC2016  # the ${key} placeholders of the requests are single-quoted on purpose
+test_environments() {
+    echo "e2e: environments the program creates and lets you choose"
+    command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
+    [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
+    local work=$TMP/envs port out state up=$'\033[A' down=$'\033[B' esc=$'\033' envdir
+    port=$(<"$TMP/port")
+    mkdir -p "$work" && cd "$work" || return
+    $REQ init >/dev/null 2>&1
+    state=$REQ_CONFIG_DIR/projects/envs; envdir=$state/env
+    printf 'restore_cursor=no\n' >"$state/config"
+    printf '{"name":"a-ping","method":"GET","url":"http://127.0.0.1:%s/echo","headers":{"X-Test":"${tag}"}}\n' "$port" >a-ping.get.json
+    printf '{"name":"b-extra","method":"GET","url":"http://127.0.0.1:%s/echo/${extra}"}\n' "$port" >b-extra.get.json
+
+    # 1. nothing is made by hand: the folder and default exist right after req init, private
+    [[ -d $envdir && -f $envdir/default ]]; assert_eq "0" "$?" "req init made the env folder and the default environment"
+    assert_eq "700" "$(stat -c %a "$envdir")" "the folder is private"
+    assert_eq "600" "$(stat -c %a "$envdir/default")" "and so is the file"
+    rm -rf "$envdir"
+    menu "$(cmd q)" >/dev/null
+    [[ -f $envdir/default ]]; assert_eq "0" "$?" "a project from before this gets them when its menu opens"
+
+    # 2. :env opens the menu: default in use, and the last row creates a new one
+    out=$(menu "$(cmd env)" "$esc" "$(cmd q)")
+    assert_contains "req environments" "$out" ":env opens the environment menu"
+    assert_contains "default (in use)" "$out" "with default, the one in use"
+    assert_contains "+ new environment" "$out" "and + new environment as the last row"
+    assert_contains "Enter choose   Esc cancel" "$out" "and the keys on the hint line"
+
+    # 3. the last row creates an environment: the name is asked, the file made, the variables loaded
+    out=$(menu "$(cmd env)" "$up" "$ENTER" $'staging\r' "$(cmd q)")
+    assert_contains "Environment name (a slug, e.g. staging)" "$out" "up from the top is + new environment, and Enter asks for the name"
+    assert_contains "environment: staging, created in $envdir/staging (no variables)" "$out" "the environment is created and says where"
+    assert_contains "envs @ staging" "$out" "and the header shows it"
+    [[ -f $envdir/staging ]]; assert_eq "0" "$?" "the file is there"
+    assert_eq "600" "$(stat -c %a "$envdir/staging")" "private"
+
+    # 4. each environment is its own set of variables (the files are filled as a user would)
+    printf 'tag=from-staging\nextra=staging-extra\n' >"$envdir/staging"
+    printf 'tag=from-dev\n' >"$envdir/dev"
+    out=$(menu "$(cmd env staging)" "$ENTER" "$ENTER" "$esc" "$down" "$ENTER" "$ENTER" "$(cmd q)")
+    assert_contains "environment: staging (2 variables)" "$out" ":env <name> switches straight to an environment and loads its variables"
+    assert_contains '"x_test": "from-staging"' "$out" "a request uses the values of staging"
+    assert_contains '"path": "/echo/staging-extra"' "$out" "all of them"
+    out=$(menu "$(cmd env staging)" "$(cmd env dev)" "$ENTER" "$ENTER" "$esc" "$down" "$ENTER" "$ENTER" "$(cmd q)")
+    assert_contains "environment: dev (1 variable)" "$out" "switching to dev loads its own set"
+    assert_contains '"x_test": "from-dev"' "$out" "a request uses the values of dev"
+    assert_contains 'no value for extra in environment "dev"' "$out" "and nothing of staging stays: the key only staging had is missing"
+    assert_not_contains "staging-extra" "$out" "so the request was not sent with it"
+
+    # 5. the menu chooses too: default is in use, down is dev
+    out=$(menu "$(cmd env)" "$down" "$ENTER" "$ENTER" "$ENTER" "$(cmd q)")
+    assert_contains "environment: dev (1 variable)" "$out" "Enter on a row of the menu switches to it"
+    assert_contains '"x_test": "from-dev"' "$out" "and the next request runs in it"
+    out=$(menu "$(cmd env dev)" "$(cmd env)" "$down" "$esc" "$ENTER" "$ENTER" "$(cmd q)")
+    assert_contains '"x_test": "from-dev"' "$out" "Esc on the menu leaves the environment as it was"
+
+    # 6. an environment that does not exist is offered for creation
+    out=$(menu "$(cmd env prd)" $'n\r' "$(cmd q)")
+    assert_contains 'Create environment "prd"? [Y/n]' "$out" ":env <name> asks before it creates one"
+    assert_contains 'environment "prd" not created (in use: default)' "$out" "n says so and changes nothing"
+    [[ ! -e $envdir/prd ]]; assert_eq "0" "$?" "no file is made"
+    out=$(menu "$(cmd env prd)" "$ENTER" "$(cmd q)")
+    assert_contains "environment: prd, created in $envdir/prd" "$out" "Enter creates it and switches"
+    [[ -f $envdir/prd ]]; assert_eq "0" "$?" "with its file"
+
+    # 7. a broken file is reported when switching to it, and left alone
+    printf 'url=http://x\nthis line is not a pair\n' >"$envdir/broken-test-env"
+    out=$(menu "$(cmd env broken-test-env)" "$(cmd q)")
+    assert_contains "$envdir/broken-test-env:2: expected key=value" "$out" "the warning has the path and the line"
+    assert_contains "environment: broken-test-env (variables not loaded)" "$out" "the switch stands, with nothing loaded"
+    assert_eq $'url=http://x\nthis line is not a pair' "$(<"$envdir/broken-test-env")" "and the file is not touched"
+    cd "$ROOT" || return
+}
+
 test_flow
 test_notifications
 test_usability
 test_response_view
+test_environments
 test_summary

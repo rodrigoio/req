@@ -258,7 +258,7 @@ url=https://api.example.com
 token=abc123
 ```
 
-Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. The environment wins over the project variables. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
+`req` makes the `env/` folder and the `default` environment itself when it opens the project, and `:env` makes the others (see "Choosing the environment"); you only fill the files with `key=value` lines. `vars` is yours to create. Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. The environment wins over the project variables. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
 
 ### Placeholders
 
@@ -272,4 +272,16 @@ The environment is the `REQ_ENV` variable, `default` when it is not set. If a ke
 
 `req run` takes the project files from the project registered for the current folder, if there is one; otherwise only the process variables apply.
 
-Switch the environment of the session with `:env <name>`. If the project has no environment with that name, `req` asks `Create environment "<name>"? [Y/n]`; Enter makes the empty, private file `env/<name>` and says where it is, ready for your `key=value` lines (answer `n` to change nothing). `:env` alone opens a menu of the project's environments (the files in `env/`): the one in use is marked, up and down move (wrapping around), Enter switches to the one under the selection and Esc leaves it as it was, going back to where you were, the list or the details of a request. The last row, `+ new environment`, asks for a name (a slug; an empty name cancels), makes the environment and switches to it; the name of one that exists just switches to it. `default` is one of them, since `req` makes it when it opens the project, and it is always offered and accepted even if its file is gone. Switching loads the whole set of variables of the environment at once, the project's `vars` plus the environment's file, and says how many came in (`environment: dev (3 variables)`); a file that is not valid is reported there, with its path and line, instead of waiting for a request to run (the switch still happens, with nothing loaded, and the file is not touched). Each environment is its own set: nothing of the previous one stays. The variables are read again every time a request runs, so a file you edit while `req` is open counts on the next run. The choice is not remembered: the next start uses `REQ_ENV` or `default`. See the roadmap in `TASKS.md` (in the `req_context` repository).
+### Choosing the environment
+
+The environment of a session is chosen with `:env`:
+
+- `:env` alone opens a menu of the project's environments (the files in `env/`). The one in use is marked; up and down move (wrapping around), Enter switches to the one under the selection and Esc leaves things as they were, going back to where you were: the list or the details of a request.
+- The last row of the menu, `+ new environment`, asks for a name (a slug; an empty name cancels), makes the environment and switches to it. The name of one that already exists just switches to it.
+- `:env <name>` switches straight to the environment, with no menu. If the project has no environment with that name, `req` asks `Create environment "<name>"? [Y/n]`: Enter makes the empty, private file `env/<name>` and says where it is, ready for your `key=value` lines; `n` changes nothing.
+- `default` is always offered and accepted, even if its file is gone.
+- Switching loads the whole set of variables of the environment at once, the project's `vars` plus the environment's file, and says how many came in (`environment: dev (3 variables)`). Each environment is its own set: nothing of the previous one stays. A file that is not valid is reported right then, with its path and line, instead of waiting for a request to run: the switch still happens, with nothing loaded, and the file is not touched.
+- The variables are read again every time a request runs, so a file you edit while `req` is open counts on the next run.
+- The choice is not remembered: the next start uses `REQ_ENV` or `default`.
+
+See the roadmap in `TASKS.md` (in the `req_context` repository).
