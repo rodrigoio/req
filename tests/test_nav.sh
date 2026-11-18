@@ -980,12 +980,11 @@ test_command_env() {
     unset REQ_ENV
 
     type_keys : e n v enter
-    assert_contains "no environments yet (in use: default)" "$REQ_STATUS" ":env lists nothing when there are no files"
-    assert_contains "$envdir" "$REQ_STATUS" "and says where to create one"
+    assert_contains "environments: default (in use: default)" "$REQ_STATUS" ":env lists default, which opening the project made"
 
-    mkdir -p "$envdir"; printf 'url=http://dev\n' >"$envdir/dev"; printf 'url=http://prod\n' >"$envdir/prod"
+    printf 'url=http://dev\n' >"$envdir/dev"; printf 'url=http://prod\n' >"$envdir/prod"
     type_keys : e n v enter
-    assert_contains "environments: dev, prod (in use: default)" "$REQ_STATUS" ":env lists the environments and the one in use"
+    assert_contains "environments: default, dev, prod (in use: default)" "$REQ_STATUS" ":env lists the environments and the one in use"
 
     type_keys : e n v ' ' d e v enter
     assert_eq "dev" "$REQ_ENV" ":env <name> switches the session"
@@ -996,7 +995,7 @@ test_command_env() {
 
     type_keys : e n v ' ' s t a g i n g enter
     assert_eq "dev" "$REQ_ENV" "an unknown environment changes nothing"
-    assert_contains 'unknown environment "staging" (known: dev, prod)' "$REQ_NOTIFICATION_WARN" "and is explained with the known ones"
+    assert_contains 'unknown environment "staging" (known: default, dev, prod)' "$REQ_NOTIFICATION_WARN" "and is explained with the known ones"
     assert_contains "$envdir/staging" "$REQ_NOTIFICATION_WARN" "and the file that would create it"
     type_keys : e n v ' ' B a d enter
     assert_contains "invalid environment name" "$REQ_NOTIFICATION_WARN" "a name that is not a slug is refused"
@@ -1007,6 +1006,8 @@ test_command_env() {
     REQ_PROJECT_ID=""; type_keys : e n v ' ' p r o d enter
     assert_eq "default" "$REQ_ENV" "without a saved project state only default is allowed"
     assert_contains "not available" "$REQ_NOTIFICATION_WARN" "and the reason is given"
+    type_keys : e n v enter
+    assert_contains "no environments yet (in use: default)" "$REQ_STATUS" "with no project state there is nothing to list"
     assert_contains ":env" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists :env"
     unset REQ_ENV
 }
