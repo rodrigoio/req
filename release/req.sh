@@ -3,7 +3,7 @@
 
 # ==== version.sh
 
-REQ_VERSION="0.5.0"
+REQ_VERSION="0.5.1"
 
 # ==== lib/core.sh
 
@@ -875,9 +875,13 @@ REQ_NAV_ROOT=""         # the menu root: the workspace of the project (set only 
 REQ_CUR_DIR=""          # directory being shown ("" = project root)
 REQ_STACK_DIR=()        # navigation stack: previous directories and selections
 REQ_STACK_SEL=()
-REQ_VIEW=list           # list | detail | help | config
+REQ_VIEW=list           # list | detail | help | config | env
 REQ_DETAIL_FILE=""
 REQ_DETAIL_VALID=0
+REQ_ENV_SEL=0           # selected row of the environment menu, an index of REQ_ENV_CHOICES
+REQ_ENV_TOP=0           # first row of the environment menu that is shown
+REQ_ENV_BACK=list       # the view the environment menu returns to (list or detail)
+REQ_ENV_NEW_LABEL="+ new environment"     # the last row of the environment menu
 
 REQ_ITEM_KIND=()        # d | r, per item of the current list
 REQ_ITEM_LABEL=()
@@ -1188,6 +1192,74 @@ req_nav_build_config() {
     REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value (:config -g key=value for the global file)   Press any key to go back${c_reset}")
 }
 
+req_nav_build_env() {
+    local total=$(( ${#REQ_ENV_CHOICES[@]} + 1 )) cols rows visible i end width label inuse current=${REQ_ENV:-default}
+    local c_dim c_bold c_reset c_sel arrows hint
+    cols=$(req_term_cols); rows=$(req_term_rows)
+    c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
+    c_sel=$(req_color sel)
+    REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
+    REQ_SCREEN_LINES+=("${c_bold}req${c_reset} environments${c_dim}$(req_trunc "  $REQ_NAV_PROJECT  (in use: $current)" $(( cols - 16 )))${c_reset}")
+
+    visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+    (( total < visible )) && visible=$total
+    (( REQ_ENV_SEL < REQ_ENV_TOP )) && REQ_ENV_TOP=$REQ_ENV_SEL
+    (( REQ_ENV_SEL >= REQ_ENV_TOP + visible )) && REQ_ENV_TOP=$(( REQ_ENV_SEL - visible + 1 ))
+    end=$(( REQ_ENV_TOP + visible ))
+    width=$(( cols - 16 ))
+    for (( i = REQ_ENV_TOP; i < end; i++ )); do
+        inuse=""
+        if (( i < total - 1 )); then
+            label=$(req_trunc "${REQ_ENV_CHOICES[i]}" "$width")
+            [[ ${REQ_ENV_CHOICES[i]} == "$current" ]] && inuse=" (in use)"
+        else
+            label=$REQ_ENV_NEW_LABEL
+        fi
+        if (( i == REQ_ENV_SEL )); then
+            REQ_SCREEN_LINES+=("${c_sel}$(req_marker) ${label}${inuse}${c_reset}")
+        elif (( i == total - 1 )); then
+            REQ_SCREEN_LINES+=("  ${c_dim}${label}${c_reset}")
+        else
+            REQ_SCREEN_LINES+=("  ${label}${c_dim}${inuse}${c_reset}")
+        fi
+    done
+
+    if req_utf8; then arrows="↑↓"; else arrows="up/down"; fi
+    hint="$arrows move   Enter choose   Esc cancel"
+    REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $(( cols - 1 )))${c_reset}")
+}
+
+req_nav_env_key() {
+    local total=$(( ${#REQ_ENV_CHOICES[@]} + 1 ))
+    case $1 in
+        up)    REQ_ENV_SEL=$(( (REQ_ENV_SEL + total - 1) % total )) ;;
+        down)  REQ_ENV_SEL=$(( (REQ_ENV_SEL + 1) % total )) ;;
+        esc)   REQ_VIEW=$REQ_ENV_BACK ;;
+        enter) req_nav_env_enter ;;
+    esac
+    return 0
+}
+
+req_nav_env_enter() {
+    if (( REQ_ENV_SEL < ${#REQ_ENV_CHOICES[@]} )); then
+        REQ_VIEW=$REQ_ENV_BACK
+        req_env_use "${REQ_ENV_CHOICES[REQ_ENV_SEL]}" now
+    else
+        req_nav_env_new
+    fi
+}
+
+req_nav_env_new() {
+    req_nav_prompt_begin
+    if req_ask_name "" "Environment name" "staging"; then
+        REQ_VIEW=$REQ_ENV_BACK
+        req_env_use "$REQ_REPLY" now
+    else
+        req_cancelled
+    fi
+    req_nav_prompt_end
+}
+
 req_nav_detail_section() {
     local title=$1 width=$2 line
     shift 2
@@ -1258,6 +1330,10 @@ req_nav_handle() {
         REQ_VIEW=$REQ_HELP_BACK     # any key closes the help and the settings
         return 0
     fi
+    if [[ $REQ_VIEW == env ]]; then
+        req_nav_env_key "$key"      # the environment menu has its own keys, and ":" is not one of them
+        return 0
+    fi
     if [[ $key == : ]]; then
         REQ_CMD_ACTIVE=1; REQ_CMD_BUF=""
         REQ_NAV_DIRTY=0
@@ -1304,6 +1380,7 @@ req_nav_run() {
                 detail) req_nav_build_detail ;;
                 help)   req_nav_build_help ;;
                 config) req_nav_build_config ;;
+                env)    req_nav_build_env ;;
                 *)      req_nav_build_list ;;
             esac
             REQ_BASE_LINES=("${REQ_SCREEN_LINES[@]}"); REQ_BASE_EXTRA=$REQ_SCREEN_EXTRA
@@ -1471,8 +1548,8 @@ req_cancelled() {
 }
 
 req_ask_name() {
-    local def=${1-} what=${2:-Name} label
-    label="$what (a slug, e.g. list-users)"
+    local def=${1-} what=${2:-Name} example=${3:-list-users} label
+    label="$what (a slug, e.g. $example)"
     [[ -z $def ]] && label+=" - empty to cancel"
     while :; do
         req_prompt "$label" "$def" || return 1
@@ -1866,7 +1943,7 @@ REQ_HELP_ROWS=(
     ":rm|remove the selected request or directory, with a y/N question first"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
-    ":env [name]|show the environments of the project, or switch to one (REQ_ENV)"
+    ":env [name]|menu to pick or create one, or jump to <name>"
     ":log [yes|no]|switch the log of requests and responses in this session (setting: log)"
     ":v [yes|no]|switch the verbose mode (>> sent, << received) in this session (REQ_VERBOSE)"
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
@@ -2143,32 +2220,76 @@ req_cmd_verbose() {
     return 0
 }
 
-req_cmd_env() {
-    local name=$1 current=${REQ_ENV:-default} list msg
-    list=$(req_env_list | tr '\n' ' '); list=${list% }
-    if [[ -z $name ]]; then
-        if [[ -n $list ]]; then
-            REQ_STATUS="environments: ${list// /, } (in use: $current)"
-        else
-            REQ_STATUS="no environments yet (in use: $current); add a file in $(req_project_state_dir "${REQ_PROJECT_ID:-<project>}" env)"
-        fi
-        return 0
+req_env_activate() {
+    local name=$1 made=${2-} errs ok=1 note n
+    REQ_ENV=$name
+    if errs=$(mktemp 2>/dev/null); then
+        req_vars_load "$name" 2>"$errs" || ok=0
+        req_notification_warn_file "$errs"
+        rm -f "$errs"
+    else
+        req_vars_load "$name" 2>/dev/null || { ok=0; req_notification_warn "cannot load the variables of environment \"$name\""; }
     fi
+    if (( ok )); then
+        n=${#REQ_VARS[@]}
+        case $n in
+            0) note="no variables" ;;
+            1) note="1 variable" ;;
+            *) note="$n variables" ;;
+        esac
+    else
+        note="variables not loaded"
+    fi
+    REQ_STATUS="environment: $name${made:+, created in $made} ($note)"
+}
+
+req_env_use() {
+    local name=$1 mode=${2:-ask} file err
     if ! req_valid_name "$name"; then
         req_notification_warn "invalid environment name \"$name\" (use a slug: lowercase letters, digits and hyphens)"
-    elif ! req_env_exists "$name"; then
-        msg="unknown environment \"$name\""
-        [[ -z $list ]] || msg+=" (known: ${list// /, })"
-        if [[ -n $REQ_PROJECT_ID ]]; then
-            msg+="; create it with a file at $(req_env_file "$REQ_PROJECT_ID" "$name")"
-        else
-            msg+="; the project state in $(req_config_dir) is not available"
-        fi
-        req_notification_warn "$msg"
-    else
-        REQ_ENV=$name
-        REQ_STATUS="environment: $name"
+        return 0
     fi
+    if req_env_exists "$name"; then
+        req_env_activate "$name"
+        return 0
+    fi
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        req_notification_warn "unknown environment \"$name\"; the project state in $(req_config_dir) is not available"
+        return 0
+    fi
+    if [[ $mode == ask ]]; then
+        req_nav_prompt_begin
+        req_confirm "Create environment \"$name\"?" y || {
+            req_nav_prompt_end
+            REQ_STATUS="environment \"$name\" not created (in use: ${REQ_ENV:-default})"
+            return 0; }
+        req_nav_prompt_end
+    fi
+    file=$(req_env_file "$REQ_PROJECT_ID" "$name")
+    if ! err=$(req_env_create "$name" 2>&1); then
+        req_notification_warn "${err#req: error: }"
+        return 0
+    fi
+    req_env_activate "$name" "$(req_abs_path "$file")"
+    return 0
+}
+
+req_cmd_env() {
+    local name=$1 current=${REQ_ENV:-default} i
+    if [[ -n $name ]]; then
+        req_env_use "$name"
+        return 0
+    fi
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        req_notification_warn "the project state in $(req_config_dir) is not available, so only the default environment can be used (in use: $current)"
+        return 0
+    fi
+    req_env_choices
+    REQ_ENV_SEL=0; REQ_ENV_TOP=0
+    for i in "${!REQ_ENV_CHOICES[@]}"; do
+        [[ ${REQ_ENV_CHOICES[i]} == "$current" ]] && REQ_ENV_SEL=$i
+    done
+    REQ_ENV_BACK=$REQ_VIEW; REQ_VIEW="env"
     return 0
 }
 
@@ -2333,6 +2454,39 @@ req_env_exists() {
     req_valid_name "$env" || return 1
     [[ $env == default ]] && return 0
     [[ -n $id && -f $(req_env_file "$id" "$env") ]]
+}
+
+req_env_ensure_dir() {
+    local id=${1-$REQ_PROJECT_ID} dir
+    [[ -n $id ]] || { req_err "no project is open, so there is no folder for its environments"; return 1; }
+    req_valid_name "$id" || { req_err "invalid project id: \"$id\""; return 1; }
+    dir=$(req_project_state_dir "$id" env)
+    [[ -d $dir ]] && return 0
+    (umask 077; mkdir -p "$dir") 2>/dev/null || { req_err "cannot create $(req_abs_path "$dir")"; return 1; }
+}
+
+req_env_create() {
+    local env=$1 id=${2-$REQ_PROJECT_ID} file abs
+    req_valid_name "$env" || {
+        req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
+        return 1; }
+    req_env_ensure_dir "$id" || return 1
+    file=$(req_env_file "$id" "$env")
+    abs=$(req_abs_path "$file")
+    [[ -f $file ]] && return 0
+    [[ ! -e $file && ! -L $file ]] || { req_err "$abs exists and is not a file"; return 1; }
+    (umask 077; set -o noclobber; : >"$file") 2>/dev/null || { req_err "cannot create $abs"; return 1; }
+}
+
+declare -ga REQ_ENV_CHOICES=()      # the environments to choose from (req_env_choices)
+
+req_env_choices() {
+    local id=${1-$REQ_PROJECT_ID} name
+    REQ_ENV_CHOICES=(default)
+    while IFS= read -r name; do
+        [[ -z $name || $name == default ]] || REQ_ENV_CHOICES+=("$name")
+    done < <(req_env_list "$id")
+    return 0
 }
 
 # ==== lib/home.sh
@@ -2524,6 +2678,8 @@ req_project_activate() {
         return 1
     fi
     REQ_PROJECT_ID=$id
+    problem=$(req_env_create default "$id" 2>&1) || req_warn "${problem#req: error: }"
+    return 0
 }
 
 req_cursor_file() {
