@@ -141,6 +141,46 @@ test_notifications() {
     fi
 }
 
+test_usability() {
+    echo "e2e: Ctrl-L and req log"
+    command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
+    [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
+    local work=$TMP/usability port out after count stripped log fpid
+    local clear=$'\033[H\033[2J'
+    port=$(<"$TMP/port")
+    mkdir -p "$work" && cd "$work" || return
+    $REQ init >/dev/null 2>&1
+    log=$REQ_CONFIG_DIR/projects/usability/req.log
+    printf 'restore_cursor=no\nlog=yes\n' >"$REQ_CONFIG_DIR/projects/usability/config"
+    printf '{"name":"ping","method":"GET","url":"http://127.0.0.1:%s/echo?q=ping_marker"}\n' "$port" >ping.get.json
+
+    # The details of the request, a run (its result stays on the screen), Ctrl-L, quit. The raw bytes
+    # are needed to see the clear sequence (PTY_RAW keeps the escapes).
+    out=$(PTY_RAW=1 menu "$ENTER" "$ENTER" $'\f' "$(cmd q)")
+    assert_contains "HTTP 200" "$out" "the request ran and its result is on the screen"
+    stripped=${out//"$clear"/}
+    count=$(( (${#out} - ${#stripped}) / ${#clear} ))
+    assert_eq "1" "$count" "Ctrl-L cleared the terminal once (and no draw before it did)"
+    after=${out#*"$clear"}
+    assert_eq "GET    ping" "${after%%$'\n'*}" "the menu is drawn again right after, from the top, with the same request open"
+    assert_not_contains "HTTP 200" "$after" "and the old result is not drawn again"
+
+    # What that run wrote to the log is what req log shows, and it keeps following.
+    assert_contains "RESPONSE status=200" "$(<"$log")" "(the run wrote its request and response to the log)"
+    command -v timeout >/dev/null 2>&1 || { echo "  skip timeout unavailable"; return; }
+    timeout 10 bash "$ROOT/bin/req" log >"$TMP/follow_out" 2>&1 &
+    fpid=$!
+    for _ in {1..50}; do grep -q 'RESPONSE status=200' "$TMP/follow_out" && break; sleep 0.1; done
+    assert_contains "REQUEST file=ping.get.json" "$(<"$TMP/follow_out")" "req log shows the lines the real run wrote"
+    printf '2026-11-18T00:00:00+0000 NOTE line_appended_by_the_test\n' >>"$log"
+    for _ in {1..50}; do grep -q line_appended_by_the_test "$TMP/follow_out" && break; sleep 0.1; done
+    assert_contains "line_appended_by_the_test" "$(<"$TMP/follow_out")" "and a line appended while it runs"
+    kill "$fpid" 2>/dev/null; wait "$fpid" 2>/dev/null
+    sleep 0.3
+    command -v pgrep >/dev/null 2>&1 && assert_eq "" "$(pgrep -f "tail -n 200 -F -- $log")" "stopping it leaves no tail running"
+}
+
 test_flow
 test_notifications
+test_usability
 test_summary

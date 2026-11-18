@@ -11,7 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Clear the screen with Ctrl-L: the results of the requests already made go away and the menu is drawn
   again at the top, with the same selection.
-
 - Follow the log of the project from another terminal with `req log` (`tail -n 200 -F` on its `req.log`),
   without looking for the file. If the log does not exist yet it waits for it.
 
