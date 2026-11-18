@@ -59,6 +59,7 @@ keys() {
             down)  printf '\033[B' ;;
             enter) printf '\n' ;;
             esc)   printf '\033'; sleep 0.2 ;;
+            clear) printf '\f' ;;
             *)     printf '%s' "$k" ;;
         esac
     done
@@ -666,6 +667,51 @@ q
 ' 2>&1)
     assert_contains "fix the file first" "$out" ":e refuses an invalid request"
     REQ_INPUT_FD=0
+}
+
+test_clear_screen() {
+    echo "nav: Ctrl-L clears the screen"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local ff=$'\f' i dir sel file out
+    req_nav_handle enter                                        # api/
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    dir=$REQ_CUR_DIR; sel=$REQ_SEL
+    REQ_SCREEN_DRAWN=9
+    req_nav_handle "$ff"
+    assert_eq "0" "$REQ_SCREEN_DRAWN" "the next draw has nothing to erase: the rows are gone"
+    assert_eq "list" "$REQ_VIEW" "the list stays"
+    assert_eq "$dir" "$REQ_CUR_DIR" "in the same directory"
+    assert_eq "$sel" "$REQ_SEL" "with the same selection"
+    assert_eq "1" "$REQ_NAV_DIRTY" "and the screen is built again"
+    REQ_SCREEN_DRAWN=9; req_nav_clear_screen >"$TMP/clear_out"
+    assert_eq "" "$(<"$TMP/clear_out")" "outside a terminal nothing is printed"
+    assert_eq "0" "$REQ_SCREEN_DRAWN" "(the rows are forgotten all the same)"
+
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "(a request is open)"
+    file=$REQ_DETAIL_FILE
+    req_nav_handle "$ff"
+    assert_eq "detail" "$REQ_VIEW" "the details stay"
+    assert_eq "$file" "$REQ_DETAIL_FILE" "with the same request"
+
+    type_keys : a b
+    req_nav_handle "$ff"
+    assert_eq "1" "$REQ_CMD_ACTIVE" "command mode stays"
+    assert_eq "ab" "$REQ_CMD_BUF" "with what was typed"
+    type_keys esc
+
+    type_keys : h enter
+    req_nav_handle "$ff"
+    assert_eq "help" "$REQ_VIEW" "the help stays open (any other key closes it)"
+    req_nav_handle x
+    assert_eq "detail" "$REQ_VIEW" "and a key closes it, back to the details"
+
+    out=$(printf '%s\n' "${REQ_HELP_ROWS[@]}")
+    assert_contains "Ctrl-L|clear the screen" "$out" "the help lists Ctrl-L"
+    out=$(keys down clear enter | req_nav_run "$PROJ/.req" 2>&1)
+    assert_eq "2" "$(grep -c '(2/2)' <<<"$out")" "in the loop, the key draws the list again with the same selection"
+    assert_contains "req /auth" "$out" "and the Enter after it opens that selection"
 }
 
 test_help() {
@@ -1346,6 +1392,7 @@ test_empty_project
 test_command_mode
 test_command_actions
 test_help
+test_clear_screen
 test_dynamic_root
 test_command_rename_dir
 test_command_copy

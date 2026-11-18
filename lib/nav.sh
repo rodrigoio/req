@@ -6,7 +6,7 @@
 # menu is redrawn right below it. Outside a terminal nothing is erased (used by tests).
 #
 # Keys: up/down move the selection, Enter opens/runs, Esc goes back (does nothing at the root),
-# ":" enters command mode (see cmd.sh).
+# Ctrl-L clears the screen, ":" enters command mode (see cmd.sh).
 
 REQ_RAW_MAX_LINES=15    # lines of raw_data shown on the details screen
 REQ_PROBLEMS_MAX_LINES=10   # problems listed on the details of an invalid request
@@ -67,6 +67,16 @@ req_screen_erase() {
         printf '\033[%dA\r\033[J' "$REQ_SCREEN_DRAWN"
     fi
     REQ_SCREEN_DRAWN=0
+}
+
+# req_nav_clear_screen - Ctrl-L: clears the terminal (cursor to the top, visible screen cleared; the
+# scrollback is kept, as Ctrl-L does in a shell), so the results of the requests already made go away
+# and the next draw puts the menu at the top. REQ_SCREEN_DRAWN goes to 0 because the rows the erase
+# would move up over are gone. Outside a terminal nothing is printed, like the erase.
+req_nav_clear_screen() {
+    [[ -t 1 ]] && printf '\033[H\033[2J'
+    REQ_SCREEN_DRAWN=0
+    return 0
 }
 
 # req_screen_draw - replaces the previous block with REQ_SCREEN_LINES.
@@ -433,6 +443,10 @@ req_nav_execute() {
 req_nav_handle() {
     local key=$1 n=${#REQ_ITEM_KIND[@]}
     REQ_NAV_DIRTY=1
+    if [[ $key == $'\f' ]]; then     # Ctrl-L works in every view and while a command is typed, and changes nothing else
+        req_nav_clear_screen
+        return 0
+    fi
     if (( REQ_CMD_ACTIVE )); then
         req_cmd_key "$key"
         return 0
