@@ -275,21 +275,31 @@ req_print_profile() {
     done <<<"$stages"
 }
 
+REQ_BODY_TEXT=""        # what req_body_format made of the last body
+
+# req_body_format <content-type> <body> <color 0|1> - puts in REQ_BODY_TEXT what is shown for a body:
+# indented by jq (with its colors when the third argument is 1) when the Content-Type has "json" and jq
+# can read the body; the body as it came otherwise. Status 0 when jq formatted it, 1 when it is as it came.
+req_body_format() {
+    local flags=()
+    REQ_BODY_TEXT=$2
+    [[ -n $2 && ${1,,} == *json* ]] || return 1
+    [[ $3 == 1 ]] && flags=(-C)
+    REQ_BODY_TEXT=$(jq "${flags[@]}" . <<<"$2" 2>/dev/null) && return 0
+    REQ_BODY_TEXT=$2
+    return 1
+}
+
 # req_print_body <content-type> <body> - indented JSON; text and HTML as received.
 req_print_body() {
-    local ctype=$1 body=$2 pretty flags=()
-    if [[ -z $body ]]; then
+    local color=0
+    if [[ -z $2 ]]; then
         req_color dim; printf '(no body)\n'; req_color reset
         return 0
     fi
-    if [[ ${ctype,,} == *json* ]]; then
-        req_colors_enabled && flags=(-C)
-        if pretty=$(jq "${flags[@]}" . <<<"$body" 2>/dev/null); then
-            printf '%s\n' "$pretty"
-            return 0
-        fi
-    fi
-    printf '%s\n' "$body"
+    req_colors_enabled && color=1
+    req_body_format "$1" "$2" "$color"
+    printf '%s\n' "$REQ_BODY_TEXT"
 }
 
 # req_verbose_on - succeeds when the verbose mode is on.

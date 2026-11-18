@@ -149,6 +149,25 @@ test_timing() {
         "$(req_timing_stages 0 0 0 0 0 0)" "all zero"
 }
 
+test_body_format() {
+    echo "http: how a body is formatted"
+    req_body_format application/json '{"a":1}' 0; assert_eq "0" "$?" "JSON is formatted: status 0"
+    assert_eq $'{\n  "a": 1\n}' "$REQ_BODY_TEXT" "and indented"
+    req_body_format application/json '{"a":1}' 1; assert_eq "0" "$?" "with colors, the same status"
+    assert_contains $'\033[' "$REQ_BODY_TEXT" "and jq's colors in the text"
+    req_body_format application/json '{"a":1}' 0
+    assert_not_contains $'\033' "$REQ_BODY_TEXT" "no colors when they are not asked for"
+    req_body_format application/vnd.api+json '[1]' 0; assert_eq "0" "$?" "a Content-Type that only has json in it counts"
+    req_body_format 'Application/JSON; charset=utf-8' '[1]' 0; assert_eq "0" "$?" "whatever the case and the parameters"
+    req_body_format application/json '{broken_test_body' 0; assert_eq "1" "$?" "a JSON Content-Type with a body jq cannot read: status 1"
+    assert_eq "{broken_test_body" "$REQ_BODY_TEXT" "and the body as it came"
+    req_body_format text/plain '{"a":1}' 0; assert_eq "1" "$?" "JSON in a text Content-Type is not formatted"
+    assert_eq '{"a":1}' "$REQ_BODY_TEXT" "it comes as it is"
+    req_body_format text/html '<h1>x</h1>' 1; assert_eq "<h1>x</h1>" "$REQ_BODY_TEXT" "HTML as it came, colors or not"
+    req_body_format application/json '' 0; assert_eq "1" "$?" "an empty body is not JSON"
+    assert_eq "" "$REQ_BODY_TEXT" "and stays empty"
+}
+
 test_print() {
     echo "http: display"
     local out
@@ -499,6 +518,7 @@ test_nested_query
 test_args
 test_timing
 test_headers
+test_body_format
 test_print
 test_execute
 test_url_check
