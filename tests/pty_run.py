@@ -6,7 +6,8 @@ usage: pty_run.py <chunk> [<chunk> ...] -- <command> [args...]
 Each chunk is typed as is (use \\r for Enter); after each one the driver waits until the
 program has been quiet for a moment, so keys and prompts stay in step. When the chunks are
 over it waits for the program to end (the last chunk should quit it) and exits with its
-status. The output has the escape sequences removed. Works with Python 3.6 and later."""
+status. The output has the escape sequences removed, unless PTY_RAW=1 is set (then they stay, for a
+test that looks at them). Works with Python 3.6 and later."""
 import fcntl
 import os
 import pty
@@ -64,7 +65,8 @@ def main():
             break
     _, status = os.waitpid(pid, 0)
     text = output.decode("utf-8", "replace").replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
+    if not os.environ.get("PTY_RAW"):
+        text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)
     sys.stdout.write(text)
     sys.exit(os.WEXITSTATUS(status) if os.WIFEXITED(status) else 1)
 
