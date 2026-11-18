@@ -981,11 +981,14 @@ test_command_env() {
     REQ_INPUT_FD=3
 
     type_keys : e n v enter
-    assert_contains "environments: default (in use: default)" "$REQ_STATUS" ":env lists default, which opening the project made"
+    assert_eq "env" "$REQ_VIEW" ":env opens the environment menu"
+    assert_eq "default" "${REQ_ENV_CHOICES[*]}" "which lists default, made when the project was opened"
+    req_nav_handle esc
 
     printf 'url=http://dev\n' >"$envdir/dev"; printf 'url=http://prod\n' >"$envdir/prod"
     type_keys : e n v enter
-    assert_contains "environments: default, dev, prod (in use: default)" "$REQ_STATUS" ":env lists the environments and the one in use"
+    assert_eq "default dev prod" "${REQ_ENV_CHOICES[*]}" "the menu lists the environments of the project"
+    req_nav_handle esc
 
     type_keys : e n v ' ' d e v
     req_nav_handle enter 3</dev/null >/dev/null
@@ -993,7 +996,8 @@ test_command_env() {
     assert_contains "environment: dev" "$REQ_STATUS" "and says so"
     req_nav_build_list; assert_contains "proj @ dev" "${REQ_SCREEN_LINES[0]}" "the header follows"
     type_keys : e n v enter
-    assert_contains "(in use: dev)" "$REQ_STATUS" "and the listing shows the new one"
+    assert_eq "1" "$REQ_ENV_SEL" "and the menu opens on the new one"
+    req_nav_handle esc
 
     # An environment that does not exist is offered for creation.
     type_keys : e n v ' ' s t a g i n g
@@ -1014,7 +1018,8 @@ test_command_env() {
     assert_contains "environment: staging, created in $envdir/staging" "$REQ_STATUS" "the status says where it is"
     req_nav_build_list; assert_contains "proj @ staging" "${REQ_SCREEN_LINES[0]}" "the header follows"
     type_keys : e n v enter
-    assert_contains "environments: default, dev, prod, staging (in use: staging)" "$REQ_STATUS" "and it is listed"
+    assert_eq "default dev prod staging" "${REQ_ENV_CHOICES[*]}" "and the menu lists it"
+    req_nav_handle esc
 
     type_keys : e n v ' ' q a; req_nav_handle enter 3<<<"yes" >/dev/null
     assert_eq "qa" "$REQ_ENV" "yes creates it too"
@@ -1053,10 +1058,102 @@ test_command_env() {
     assert_eq "default" "$REQ_ENV" "and nothing is asked or created for another one"
     assert_contains "unknown environment \"new\"" "$REQ_NOTIFICATION_WARN" "which is unknown"
     type_keys : e n v enter
-    assert_contains "no environments yet (in use: default)" "$REQ_STATUS" "with no project state there is nothing to list"
+    assert_eq "list" "$REQ_VIEW" "with no project state there is no menu"
+    assert_contains "only the default environment can be used (in use: default)" "$REQ_NOTIFICATION_WARN" "a warning says why"
     assert_contains ":env" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists :env"
     REQ_INPUT_FD=0
     unset REQ_ENV
+}
+
+test_env_menu() {
+    echo "nav: the environment menu"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_project_activate "$PROJ" || return
+    local envdir out i
+    envdir=$(req_project_state_dir "$REQ_PROJECT_ID" env)
+    unset REQ_ENV
+    rm -rf "$envdir"; req_env_create default          # the central directory is shared with the other tests
+    printf 'url=http://dev\ntoken=dev-token\n' >"$envdir/dev"
+    printf 'url=http://prod\n' >"$envdir/prod"
+
+    type_keys : e n v enter
+    assert_eq "env" "$REQ_VIEW" ":env opens the menu"
+    assert_eq "list" "$REQ_ENV_BACK" "which goes back to the list"
+    assert_eq "default dev prod" "${REQ_ENV_CHOICES[*]}" "with default first, then the others in order"
+    assert_eq "0" "$REQ_ENV_SEL" "the selection starts on the environment in use"
+    req_nav_build_env; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
+    assert_contains "req environments  proj  (in use: default)" "${REQ_SCREEN_LINES[0]}" "the header names the project and the environment in use"
+    assert_contains "> default (in use)" "$out" "the selected row is marked, and so is the one in use"
+    assert_contains "  dev" "$out" "the others are listed below it"
+    assert_not_contains "dev (in use)" "$out" "only the one in use is marked"
+    assert_contains "Enter choose" "$out" "the hint line says what the keys do"
+    assert_contains "Esc cancel" "$out" "and how to leave"
+    assert_eq "5" "${#REQ_SCREEN_LINES[@]}" "the header, three rows and the hint"
+
+    req_nav_handle down; assert_eq "1" "$REQ_ENV_SEL" "down moves the selection"
+    req_nav_handle down; req_nav_handle down
+    assert_eq "0" "$REQ_ENV_SEL" "and wraps around at the end"
+    req_nav_handle up; assert_eq "2" "$REQ_ENV_SEL" "up wraps around at the start"
+    for k in v : x n; do req_nav_handle "$k"; done
+    assert_eq "env" "$REQ_VIEW" "other keys do nothing: the menu stays"
+    assert_eq "0" "$REQ_CMD_ACTIVE" "and : does not open command mode"
+    assert_eq "2" "$REQ_ENV_SEL" "or move the selection"
+    req_nav_handle $'\f'
+    assert_eq "env" "$REQ_VIEW" "Ctrl-L keeps the menu open"
+
+    req_nav_handle esc
+    assert_eq "list" "$REQ_VIEW" "Esc goes back to the list"
+    assert_eq "" "${REQ_ENV:-}" "changing nothing"
+    assert_eq "" "$REQ_STATUS" "and saying nothing"
+
+    type_keys : e n v enter; req_nav_handle down
+    req_nav_handle enter
+    assert_eq "list" "$REQ_VIEW" "Enter goes back to the list"
+    assert_eq "dev" "$REQ_ENV" "having switched to the row under the selection"
+    assert_contains "environment: dev (2 variables)" "$REQ_STATUS" "and its variables are loaded"
+    req_nav_build_list; assert_contains "proj @ dev" "${REQ_SCREEN_LINES[0]}" "the header follows"
+    type_keys : e n v enter
+    assert_eq "1" "$REQ_ENV_SEL" "the menu opens on the environment in use"
+    req_nav_build_env; assert_contains "> dev (in use)" "$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")" "which is the marked one"
+    req_nav_handle enter
+    assert_contains "environment: dev (2 variables)" "$REQ_STATUS" "choosing the one in use loads it again"
+
+    # Opened from the details of a request: back to the details, which stay as they were.
+    req_nav_handle enter                         # api
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "a request is open"
+    type_keys : e n v enter
+    assert_eq "detail" "$REQ_ENV_BACK" "the menu remembers where it came from"
+    req_nav_handle esc
+    assert_eq "detail" "$REQ_VIEW" "Esc returns to the details"
+    type_keys : e n v enter; req_nav_handle up
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "so does choosing"
+    assert_eq "default" "$REQ_ENV" "after switching (up from dev is default)"
+    assert_contains "list-users.get.json" "$REQ_DETAIL_FILE" "and the request is still the open one"
+
+    # Many environments: a window, like the list's, that follows the selection.
+    for i in $(seq -w 1 30); do : >"$envdir/many-test-env-$i"; done
+    REQ_VIEW=list; type_keys : e n v enter
+    LINES=10 req_nav_build_env
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[@]} <= 10 ))" "the menu fits the terminal height"
+    for i in $(seq 1 20); do req_nav_handle down; done
+    LINES=10 req_nav_build_env; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
+    assert_contains "> many-test-env-" "$out" "the selected row stays in the window"
+    assert_eq "20" "$REQ_ENV_SEL" "after moving down 20 rows"
+    COLUMNS=24 req_nav_build_env; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}"); local max=0 line
+    while IFS= read -r line; do (( ${#line} > max )) && max=${#line}; done <<<"$out"
+    assert_eq "1" "$(( max <= 24 ))" "no line is wider than the terminal"
+    req_nav_handle esc
+
+    # The main loop draws the view and takes its keys.
+    out=$(keys : e n v enter down enter | req_nav_run "$PROJ/.req" 2>&1)
+    assert_contains "req environments" "$out" "the loop draws the menu"
+    assert_contains "Enter choose" "$out" "with its hint"
+    assert_contains "environment: dev" "$out" "and the choice is made through it"
+    REQ_VIEW=list; unset REQ_ENV
 }
 
 test_command_env_load() {
@@ -1578,6 +1675,7 @@ test_command_rename_dir
 test_command_copy
 test_command_config
 test_command_env
+test_env_menu
 test_command_env_load
 test_command_log_verbose
 test_command_remove

@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Load the whole set of variables of an environment when you switch to it with `:env`, and report a broken
   file right then (with its path and line) instead of only when a request runs. The status line says how
   many variables were loaded.
+- Choose the environment from a menu: `:env` with no name lists the environments of the project, with the
+  one in use marked (up and down, Enter to switch, Esc to leave), instead of printing a line of text.
 
 ## [0.5.0] - 2026-11-18
 
