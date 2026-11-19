@@ -1059,6 +1059,77 @@ test_command_env() {
     unset REQ_ENV
 }
 
+test_command_env_load() {
+    echo "nav: :env loads the whole set of variables"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_project_activate "$PROJ" || return
+    local envdir statedir
+    statedir=$(req_project_state_dir "$REQ_PROJECT_ID"); envdir=$statedir/env
+    unset REQ_ENV
+    REQ_INPUT_FD=3
+    printf 'region=eu\ntoken=shared\n' >"$statedir/vars"
+    printf 'url=http://dev\ntoken=dev-token\n' >"$envdir/dev"
+    printf 'url=http://prod\nextra=only-in-prod\n' >"$envdir/prod"
+
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "dev" "$REQ_ENV" "switching to dev"
+    assert_eq "3" "${#REQ_VARS[@]}" "loads the project variables and the environment's"
+    assert_eq "dev-token" "${REQ_VARS[token]}" "the environment wins over the project variables"
+    assert_eq "eu" "${REQ_VARS[region]}" "and the shared ones are there"
+    assert_contains "environment: dev (3 variables)" "$REQ_STATUS" "the status says how many were loaded"
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "with no warning"
+
+    type_keys : e n v ' ' p r o d; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "4" "${#REQ_VARS[@]}" "another environment is another set: its own count"
+    assert_eq "http://prod" "${REQ_VARS[url]}" "with its own values"
+    assert_eq "shared" "${REQ_VARS[token]}" "and none of the previous environment's (token falls back to the project's)"
+    assert_contains "environment: prod (4 variables)" "$REQ_STATUS" "the status follows"
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "" "${REQ_VARS[extra]-}" "switching back leaves nothing of prod"
+    assert_eq "3" "${#REQ_VARS[@]}" "exactly the set of dev"
+
+    rm -f "$statedir/vars" "$envdir/prod"; printf 'only=one\n' >"$envdir/default"
+    type_keys : e n v ' ' d e f a u l t; req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "environment: default (1 variable)" "$REQ_STATUS" "one variable is not plural"
+    : >"$envdir/default"
+    type_keys : e n v ' ' d e f a u l t; req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "environment: default (no variables)" "$REQ_STATUS" "an environment with none says so"
+
+    printf 'region=eu\n' >"$statedir/vars"
+    type_keys : e n v ' ' f r e s h - t e s t; req_nav_handle enter 3<<<"" >/dev/null
+    assert_contains "environment: fresh-test, created in $envdir/fresh-test (1 variable)" "$REQ_STATUS" "a new environment loads the project variables too"
+
+    # A broken file: reported when switching, the switch stands, nothing is changed.
+    printf 'url=http://x\nthis line is not a pair\n' >"$envdir/broken-test-env"
+    type_keys : e n v ' ' b r o k e n - t e s t - e n v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "broken-test-env" "$REQ_ENV" "a broken environment file does not stop the switch"
+    assert_contains "$envdir/broken-test-env:2: expected key=value" "$REQ_NOTIFICATION_WARN" "the warning has the absolute path and the line"
+    assert_eq "0" "${#REQ_VARS[@]}" "and no variable is loaded"
+    assert_contains "environment: broken-test-env (variables not loaded)" "$REQ_STATUS" "the status says so"
+    assert_eq $'url=http://x\nthis line is not a pair' "$(<"$envdir/broken-test-env")" "the file is never fixed or overwritten"
+    printf 'url=http://x\n' >"$envdir/broken-test-env"
+    type_keys : e n v ' ' b r o k e n - t e s t - e n v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "once the file is fixed the switch is clean"
+    assert_contains "environment: broken-test-env (2 variables)" "$REQ_STATUS" "and loads it"
+
+    # A broken project variables file is reported the same way.
+    printf 'bad line in vars\n' >"$statedir/vars"
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "$statedir/vars:1: expected key=value" "$REQ_NOTIFICATION_WARN" "a broken vars file is reported at the switch too"
+    assert_eq "dev" "$REQ_ENV" "with the switch standing"
+
+    # The old secrets.json is still only a warning.
+    printf 'region=eu\n' >"$statedir/vars"
+    mkdir -p "$REQ_CONFIG_DIR/env/dev"; printf '{}' >"$REQ_CONFIG_DIR/env/dev/secrets.json"
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "no longer read" "$REQ_NOTIFICATION_WARN" "the old secrets.json is warned about when switching to its environment"
+    assert_contains "environment: dev (" "$REQ_STATUS" "and the variables are loaded"
+    rm -rf "$REQ_CONFIG_DIR/env"
+    REQ_INPUT_FD=0
+    unset REQ_ENV
+}
+
 test_command_log_verbose() {
     echo "nav: :log and :v"
     make_project
@@ -1507,6 +1578,7 @@ test_command_rename_dir
 test_command_copy
 test_command_config
 test_command_env
+test_command_env_load
 test_command_log_verbose
 test_command_remove
 test_command_remove_dir

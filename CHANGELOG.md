@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Offer to create the environment when `:env <name>` names one that does not exist (`Create environment
   "<name>"? [Y/n]`), instead of telling you to create its file yourself. The new file is empty and private,
   and the message says where it is.
+- Load the whole set of variables of an environment when you switch to it with `:env`, and report a broken
+  file right then (with its path and line) instead of only when a request runs. The status line says how
+  many variables were loaded.
 
 ## [0.5.0] - 2026-11-18
 
