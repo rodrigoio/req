@@ -77,6 +77,46 @@ test_editor() {
     VISUAL='' EDITOR='' PATH=$TMP/empty req_edit_text 'x'; assert_eq "2" "$?" "no editor gives status 2"
 }
 
+test_editor_for_a_file() {
+    echo "core: external editor on a file"
+    local bin=$TMP/filebin file=$TMP/edited-file-test status
+    mkdir -p "$bin" "$TMP/empty-file-bin"
+    ln -s "$(command -v sh)" "$bin/sh"      # the only tool the editor run needs, so the PATH can hold just the fakes
+    printf '#!/bin/sh\n' >"$bin/vi"; chmod +x "$bin/vi"
+    assert_eq "vi" "$(VISUAL='' EDITOR='' PATH=$bin req_editor)" "with no candidates the fallbacks are still vim, then vi"
+    assert_eq "" "$(VISUAL='' EDITOR='' PATH=$bin req_editor vim nano)" "vi is not a candidate when the caller names vim and nano"
+    printf '#!/bin/sh\n' >"$bin/nano"; chmod +x "$bin/nano"
+    assert_eq "nano" "$(VISUAL='' EDITOR='' PATH=$bin req_editor vim nano)" "nano is used when there is no vim"
+    printf '#!/bin/sh\n' >"$bin/vim"; chmod +x "$bin/vim"
+    assert_eq "vim" "$(VISUAL='' EDITOR='' PATH=$bin req_editor vim nano)" "vim wins over nano"
+    assert_eq "myvisual" "$(VISUAL=myvisual EDITOR=myeditor PATH=$bin req_editor vim nano)" "the user's VISUAL still comes first"
+    assert_eq "myeditor" "$(VISUAL='' EDITOR=myeditor PATH=$bin req_editor vim nano)" "then EDITOR, before vim and nano"
+    VISUAL='' EDITOR='' PATH=$TMP/empty-file-bin req_editor vim nano >/dev/null
+    assert_eq "1" "$?" "fails when none of the candidates exists"
+
+    # A fake editor that appends a line to the file it is given, as a user would type.
+    # shellcheck disable=SC2016  # the script text is meant to be expanded by sh, not here
+    fake_editor "$bin/vim" 'echo "written-by-vim" >>"$1"'
+    printf 'first=1\n' >"$file"
+    VISUAL='' EDITOR='' PATH=$bin req_edit_file "$file" vim nano; status=$?
+    assert_eq "0" "$status" "an edit succeeds"
+    assert_eq $'first=1\nwritten-by-vim' "$(<"$file")" "the editor works on the file itself, not on a copy"
+    # shellcheck disable=SC2016  # idem
+    fake_editor "$bin/nano" 'echo "written-by-nano" >>"$1"'
+    rm -f "$bin/vim"
+    VISUAL='' EDITOR='' PATH=$bin req_edit_file "$file" vim nano
+    assert_contains "written-by-nano" "$(<"$file")" "nano runs when vim is not there"
+    # shellcheck disable=SC2016  # idem
+    fake_editor "$bin/failer" 'echo changed >"$1"; exit 3'
+    VISUAL=$bin/failer req_edit_file "$file" vim nano; status=$?
+    assert_eq "1" "$status" "an editor that fails is reported"
+    VISUAL="env REQ_X=1 $bin/nano" req_edit_file "$file" vim nano
+    assert_eq "0" "$?" "an editor command with arguments works"
+    rm -f "$bin/nano" "$bin/vi"
+    VISUAL='' EDITOR='' PATH=$TMP/empty-file-bin req_edit_file "$file" vim nano; status=$?
+    assert_eq "2" "$status" "no editor gives status 2"
+}
+
 test_bash_check() {
     local out status
     out=$(REQ_REQUIRED_BASH_MAJOR=99 req_check_bash 2>&1)
@@ -155,6 +195,7 @@ test_abs_path() {
 test_missing_deps
 test_check_deps_message
 test_editor
+test_editor_for_a_file
 test_bash_check
 test_colors
 test_confirm

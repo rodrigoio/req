@@ -296,6 +296,67 @@ test_env_create() {
     fi
 }
 
+test_vars_create() {
+    echo "env: creating the project variables"
+    local cfg=$REQ_CONFIG_DIR out f file
+    mkdir -p "$cfg/projects/varsmaker"
+    file=$cfg/projects/varsmaker/vars
+
+    assert_contains "# host=https://api.example.com" "$(req_vars_template)" "the template shows a commented example"
+    assert_contains '${host}' "$(req_vars_template)" "and how a request uses a variable"
+    req_vars_create varsmaker; assert_eq "0" "$?" "the file is made"
+    [[ -f $file ]]; assert_eq "0" "$?" "and it is in the project's folder"
+    assert_eq "600" "$(stat -c %a "$file")" "private, since it may hold credentials"
+    assert_eq "$(req_vars_template)" "$(<"$file")" "it starts with the template"
+    req_kv_check "$file"; assert_eq "0" "$?" "which is a valid file"
+    req_vars_load default varsmaker
+    assert_eq "0" "${#REQ_VARS[@]}" "its comment lines are not variables, the commented example included"
+    printf 'host=https://dev.example.com\n' >>"$file"
+    req_vars_load default varsmaker
+    assert_eq "1" "${#REQ_VARS[@]}" "only the line written after them is"
+    assert_eq "https://dev.example.com" "${REQ_VARS[host]}" "with its value"
+    req_subst '${host}/users' default varsmaker
+    assert_eq "https://dev.example.com/users" "$REQ_SUBST_OUT" "and a request can use it"
+
+    : >"$file"; chmod 640 "$file"
+    req_vars_create varsmaker; assert_eq "0" "$?" "making it again is not an error"
+    assert_eq "0" "$(wc -c <"$file" | tr -d ' ')" "an empty file is left empty"
+    assert_eq "640" "$(stat -c %a "$file")" "and keeps its mode"
+    printf 'token=kept\n' >"$file"
+    req_vars_create varsmaker
+    assert_eq "token=kept" "$(<"$file")" "a file with content is never touched"
+
+    rm -rf "$cfg/projects/varsmaker"
+    req_vars_create varsmaker; assert_eq "0" "$?" "the project folder is made with it when it is missing"
+    [[ -f $file ]]; assert_eq "0" "$?" "and so is the file"
+    assert_eq "700" "$(stat -c %a "$cfg/projects/varsmaker")" "the folder is private"
+
+    REQ_PROJECT_ID=varsmaker; rm -f "$file"
+    req_vars_create; assert_eq "0" "$?" "the project defaults to REQ_PROJECT_ID"
+    [[ -f $file ]]; assert_eq "0" "$?" "and the file is made in it"
+    REQ_PROJECT_ID=""
+    out=$(req_vars_create 2>&1); assert_eq "1" "$?" "without a project nothing is made"
+    assert_contains "no project is open" "$out" "and the error says why"
+    out=$(req_vars_create "Bad_Id" 2>&1); assert_eq "1" "$?" "a project id that is not a slug is refused"
+    assert_contains 'invalid project id: "Bad_Id"' "$out" "and named"
+
+    rm -f "$file"; mkdir "$file"
+    out=$(req_vars_create varsmaker 2>&1); assert_eq "1" "$?" "a folder where the file goes is refused"
+    assert_contains "$file exists and is not a file" "$out" "with the absolute path"
+    rmdir "$file"; ln -s "$TMP/nowhere-vars" "$file"
+    out=$(req_vars_create varsmaker 2>&1); assert_eq "1" "$?" "so is a link that points nowhere"
+    [[ ! -e $TMP/nowhere-vars ]]; assert_eq "0" "$?" "and the target of the link is not created"
+    rm -f "$file"
+
+    if (( EUID != 0 )); then       # root ignores the permissions
+        chmod 500 "$cfg/projects/varsmaker"
+        out=$(req_vars_create varsmaker 2>&1); f=$?
+        chmod 700 "$cfg/projects/varsmaker"
+        assert_eq "1" "$f" "a folder that cannot be written fails"
+        assert_contains "req: error: cannot create $file" "$out" "naming the file with its absolute path"
+    fi
+}
+
 test_env_choices() {
     echo "env: the choices of the environment menu"
     local cfg=$REQ_CONFIG_DIR dir
@@ -326,5 +387,6 @@ test_subst
 test_subst_json
 test_env_list
 test_env_create
+test_vars_create
 test_env_choices
 test_summary
