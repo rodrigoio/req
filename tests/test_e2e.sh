@@ -230,8 +230,182 @@ EOF
     assert_eq "0" "$status" "Ctrl-C inside less does not close req: :q still ends it normally"
 }
 
+# shellcheck disable=SC2016  # the ${key} placeholders of the requests are single-quoted on purpose
+test_environments() {
+    echo "e2e: environments the program creates and lets you choose"
+    command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
+    [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
+    local work=$TMP/envs port out state up=$'\033[A' down=$'\033[B' esc=$'\033' envdir
+    port=$(<"$TMP/port")
+    mkdir -p "$work" && cd "$work" || return
+    $REQ init >/dev/null 2>&1
+    state=$REQ_CONFIG_DIR/projects/envs; envdir=$state/env
+    printf 'restore_cursor=no\n' >"$state/config"
+    printf '{"name":"a-ping","method":"GET","url":"http://127.0.0.1:%s/echo","headers":{"X-Test":"${tag}"}}\n' "$port" >a-ping.get.json
+    printf '{"name":"b-extra","method":"GET","url":"http://127.0.0.1:%s/echo/${extra}"}\n' "$port" >b-extra.get.json
+
+    # 1. nothing is made by hand: the folder and default exist right after req init, private
+    [[ -d $envdir && -f $envdir/default ]]; assert_eq "0" "$?" "req init made the env folder and the default environment"
+    assert_eq "700" "$(stat -c %a "$envdir")" "the folder is private"
+    assert_eq "600" "$(stat -c %a "$envdir/default")" "and so is the file"
+    rm -rf "$envdir"
+    menu "$(cmd q)" >/dev/null
+    [[ -f $envdir/default ]]; assert_eq "0" "$?" "a project from before this gets them when its menu opens"
+
+    # 2. :env opens the menu: default in use, and the last row creates a new one
+    out=$(menu "$(cmd env)" "$esc" "$(cmd q)")
+    assert_contains "req environments" "$out" ":env opens the environment menu"
+    assert_contains "default (in use)" "$out" "with default, the one in use"
+    assert_contains "+ new environment" "$out" "and + new environment as the last row"
+    assert_contains "Enter choose   Esc cancel" "$out" "and the keys on the hint line"
+
+    # 3. the last row creates an environment: the name is asked, the file made, the variables loaded
+    out=$(menu "$(cmd env)" "$up" "$ENTER" $'staging\r' "$(cmd q)")
+    assert_contains "Environment name (a slug, e.g. staging)" "$out" "up from the top is + new environment, and Enter asks for the name"
+    assert_contains "environment: staging, created in $envdir/staging (no variables)" "$out" "the environment is created and says where"
+    assert_contains "envs @ staging" "$out" "and the header shows it"
+    [[ -f $envdir/staging ]]; assert_eq "0" "$?" "the file is there"
+    assert_eq "600" "$(stat -c %a "$envdir/staging")" "private"
+
+    # 4. each environment is its own set of variables (the files are filled as a user would)
+    printf 'tag=from-staging\nextra=staging-extra\n' >"$envdir/staging"
+    printf 'tag=from-dev\n' >"$envdir/dev"
+    out=$(menu "$(cmd env staging)" "$ENTER" "$ENTER" "$esc" "$down" "$ENTER" "$ENTER" "$(cmd q)")
+    assert_contains "environment: staging (2 variables)" "$out" ":env <name> switches straight to an environment and loads its variables"
+    assert_contains '"x_test": "from-staging"' "$out" "a request uses the values of staging"
+    assert_contains '"path": "/echo/staging-extra"' "$out" "all of them"
+    out=$(menu "$(cmd env staging)" "$(cmd env dev)" "$ENTER" "$ENTER" "$esc" "$down" "$ENTER" "$ENTER" "$(cmd q)")
+    assert_contains "environment: dev (1 variable)" "$out" "switching to dev loads its own set"
+    assert_contains '"x_test": "from-dev"' "$out" "a request uses the values of dev"
+    assert_contains 'no value for extra in environment "dev"' "$out" "and nothing of staging stays: the key only staging had is missing"
+    assert_not_contains "staging-extra" "$out" "so the request was not sent with it"
+
+    # 5. the menu chooses too: default is in use, down is dev
+    out=$(menu "$(cmd env)" "$down" "$ENTER" "$ENTER" "$ENTER" "$(cmd q)")
+    assert_contains "environment: dev (1 variable)" "$out" "Enter on a row of the menu switches to it"
+    assert_contains '"x_test": "from-dev"' "$out" "and the next request runs in it"
+    out=$(menu "$(cmd env dev)" "$(cmd env)" "$down" "$esc" "$ENTER" "$ENTER" "$(cmd q)")
+    assert_contains '"x_test": "from-dev"' "$out" "Esc on the menu leaves the environment as it was"
+
+    # 6. an environment that does not exist is offered for creation
+    out=$(menu "$(cmd env prd)" $'n\r' "$(cmd q)")
+    assert_contains 'Create environment "prd"? [Y/n]' "$out" ":env <name> asks before it creates one"
+    assert_contains 'environment "prd" not created (in use: default)' "$out" "n says so and changes nothing"
+    [[ ! -e $envdir/prd ]]; assert_eq "0" "$?" "no file is made"
+    out=$(menu "$(cmd env prd)" "$ENTER" "$(cmd q)")
+    assert_contains "environment: prd, created in $envdir/prd" "$out" "Enter creates it and switches"
+    [[ -f $envdir/prd ]]; assert_eq "0" "$?" "with its file"
+
+    # 7. a broken file is reported when switching to it, and left alone
+    printf 'url=http://x\nthis line is not a pair\n' >"$envdir/broken-test-env"
+    out=$(menu "$(cmd env broken-test-env)" "$(cmd q)")
+    assert_contains "$envdir/broken-test-env:2: expected key=value" "$out" "the warning has the path and the line"
+    assert_contains "environment: broken-test-env (variables not loaded)" "$out" "the switch stands, with nothing loaded"
+    assert_eq $'url=http://x\nthis line is not a pair' "$(<"$envdir/broken-test-env")" "and the file is not touched"
+    cd "$ROOT" || return
+}
+
+# editors_off <dir> - makes <dir> a PATH with what the menu needs and no editor at all (no vim, vi,
+# nano or editor), so that "there is no vim" is true for the real run and not only on this machine.
+editors_off() {
+    local t
+    mkdir -p "$1"
+    for t in bash sh env python3 curl jq awk sed grep cat mktemp rm mkdir dirname basename tr sort stty \
+             tput date stat tail head wc cp mv ls tty cut sleep id uname readlink chmod ln touch less; do
+        command -v "$t" >/dev/null 2>&1 && ln -sf "$(command -v "$t")" "$1/$t"
+    done
+    return 0
+}
+
+# shellcheck disable=SC2016  # the text of the fake editors and the placeholders are single-quoted on purpose
+test_vars() {
+    echo "e2e: :vars edits the project variables in the editor"
+    command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
+    [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
+    local work=$TMP/varsproj port out status state file fakes=$TMP/vars-fakes tools=$TMP/vars-tools
+    port=$(<"$TMP/port")
+    mkdir -p "$work" "$fakes" && cd "$work" || return
+    $REQ init >/dev/null 2>&1
+    state=$REQ_CONFIG_DIR/projects/varsproj; file=$state/vars
+    printf 'restore_cursor=no\n' >"$state/config"
+    printf '{"name":"a-ping","method":"GET","url":"${host}/echo","headers":{"X-Test":"${tag}"}}\n' >a-ping.get.json
+    printf '#!/bin/sh\nprintf "host=http://127.0.0.1:%s\\ntag=from-vars\\n" >>"$1"\n' "$port" >"$fakes/writer"
+    printf '#!/bin/sh\necho "tag=second-line" >>"$1"\n' >"$fakes/second"
+    printf '#!/bin/sh\nprintf "ok=1\\nthis line is not a pair\\n" >"$1"\n' >"$fakes/breaker"
+    printf '#!/bin/sh\nexit 3\n' >"$fakes/failer"
+    printf '#!/bin/sh\ncat "$1" >"%s/seen"\n' "$fakes" >"$fakes/viewer"
+    chmod +x "$fakes"/*
+    unset VISUAL EDITOR
+
+    # 1. a new project has no vars file; :vars makes it, private and commented, and runs the editor on it
+    [[ ! -e $file ]]; assert_eq "0" "$?" "a new project has no vars file"
+    out=$(VISUAL=$fakes/viewer menu "$(cmd vars)" "$(cmd q)")
+    [[ -f $file ]]; assert_eq "0" "$?" ":vars made the file"
+    assert_eq "600" "$(stat -c %a "$file")" "private"
+    assert_contains "# host=https://api.example.com" "$(<"$fakes/seen")" "the editor found the commented examples in it"
+    assert_contains "environment: default (no variables)" "$out" "the comment lines are not variables"
+
+    # 2. what the editor writes is used by the next request, and the comments define nothing
+    out=$(VISUAL=$fakes/writer menu "$(cmd vars)" "$ENTER" "$ENTER" "$(cmd q)")
+    assert_contains "environment: default (2 variables)" "$out" "when the editor closes the variables are loaded and counted"
+    assert_contains "GET http://127.0.0.1:$port/echo" "$out" "the request goes to the host from the file, not to the commented example"
+    assert_contains '"x_test": "from-vars"' "$out" "and uses its other variable"
+    assert_contains "# Variables of this project" "$(<"$file")" "the file keeps the comments the program wrote"
+
+    # 3. :var is the same command, and the editor works on the file in the project's folder
+    out=$(VISUAL=$fakes/second menu "$(cmd var)" "$(cmd q)")
+    assert_contains "environment: default (2 variables)" "$out" ":var runs it too (a repeated key keeps its first line)"
+    assert_contains "tag=second-line" "$(<"$file")" "and the editor appended to the same file"
+
+    # 4. the editors, in order: VISUAL, EDITOR, vim, nano, then the message (a PATH with no real editor)
+    editors_off "$tools"
+    printf '#!/bin/sh\necho "from-vim" >>"$1"\n' >"$tools/vim"
+    printf '#!/bin/sh\necho "from-nano" >>"$1"\n' >"$tools/nano"
+    chmod +x "$tools/vim" "$tools/nano"
+    : >"$file"
+    PATH=$tools menu "$(cmd vars)" "$(cmd q)" >/dev/null
+    assert_eq "from-vim" "$(<"$file")" "with no VISUAL or EDITOR vim is used"
+    rm -f "$tools/vim"; : >"$file"
+    PATH=$tools menu "$(cmd vars)" "$(cmd q)" >/dev/null
+    assert_eq "from-nano" "$(<"$file")" "without vim, nano is used"
+    printf '#!/bin/sh\necho "from-vim" >>"$1"\n' >"$tools/vim"; chmod +x "$tools/vim"; : >"$file"
+    PATH=$tools EDITOR=$fakes/second menu "$(cmd vars)" "$(cmd q)" >/dev/null
+    assert_eq "tag=second-line" "$(<"$file")" "the user's EDITOR comes before vim and nano"
+    : >"$file"
+    PATH=$tools VISUAL=$fakes/writer EDITOR=$fakes/second menu "$(cmd vars)" "$(cmd q)" >/dev/null
+    assert_contains "tag=from-vars" "$(<"$file")" "and VISUAL before EDITOR"
+
+    # 5. no editor at all: the file is made anyway and the message says where it is and how to write it
+    rm -f "$tools/vim" "$tools/nano" "$file"
+    out=$(PATH=$tools menu "$(cmd vars)" "$ENTER" "$(cmd q)"); status=$?
+    assert_contains 'No editor found (tried $VISUAL, $EDITOR, vim and nano).' "$out" "with no editor the message says so"
+    assert_contains "$file" "$out" "gives the whole path of the file"
+    assert_contains "host=https://api.example.com" "$out" "shows how to write a variable"
+    assert_contains 'use it in a request as ${host}' "$out" "and how a request uses it"
+    [[ -f $file ]]; assert_eq "0" "$?" "the file exists, ready to be filled any other way"
+    assert_eq "600" "$(stat -c %a "$file")" "private"
+    assert_contains "Press Enter to go back" "$out" "and waits for Enter"
+    assert_eq "0" "$status" "after which the menu is back: the :q that follows quit it"
+
+    # 6. a bad line is reported with its path and line, and the file is left as the editor wrote it
+    out=$(VISUAL=$fakes/breaker menu "$(cmd vars)" "$(cmd q)")
+    assert_contains "$file:2: expected key=value" "$out" "a bad line has the path and the line in the warning"
+    assert_contains "environment: default (variables not loaded)" "$out" "and nothing is loaded"
+    assert_eq $'ok=1\nthis line is not a pair' "$(<"$file")" "the file is not fixed"
+
+    # 7. an editor that fails, and a wrong use
+    out=$(VISUAL=$fakes/failer menu "$(cmd vars)" "$(cmd q)")
+    assert_contains "the editor failed; $file is as the editor left it" "$out" "an editor that fails is a warning with the path"
+    out=$(VISUAL=$fakes/viewer menu "$(cmd vars dev)" "$(cmd q)")
+    assert_contains "usage: :vars" "$out" "an argument is a usage warning"
+    assert_contains ":vars" "$(menu "$(cmd h)" "$ENTER" "$(cmd q)")" "the help lists :vars"
+    cd "$ROOT" || return
+}
+
 test_flow
 test_notifications
 test_usability
 test_response_view
+test_environments
+test_vars
 test_summary

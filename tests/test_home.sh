@@ -6,6 +6,7 @@ source "$ROOT/tests/helpers.sh"
 source "$ROOT/lib/core.sh"
 source "$ROOT/lib/store.sh"
 source "$ROOT/lib/home.sh"
+source "$ROOT/lib/env.sh"
 
 TMP=$(mktemp -d)
 export REQ_CONFIG_DIR=$TMP/cfg
@@ -194,6 +195,32 @@ test_activate() {
     assert_eq "one" "$REQ_PROJECT_ID" "reopening a registered project reuses its id"
     assert_eq "one" "$(req_current_get)" "and moves the pointer back"
     assert_eq "2" "$(find "$TMP/act-cfg/projects" -mindepth 1 -maxdepth 1 | wc -l)" "no duplicate project was created"
+
+    # The environments: the folder and "default" are made by the activation, nothing is asked of the user.
+    local envdir=$TMP/act-cfg/projects/one/env
+    [[ -d $envdir && -f $envdir/default ]]; assert_eq "0" "$?" "the activation makes env/ and the default environment"
+    assert_eq "700" "$(stat -c %a "$envdir")" "the folder is private"
+    assert_eq "600" "$(stat -c %a "$envdir/default")" "and so is the file"
+    assert_eq "0" "$(wc -c <"$envdir/default" | tr -d ' ')" "which is empty"
+    printf 'token=kept-by-the-test\n' >"$envdir/default"
+    req_project_activate "$a"; assert_eq "0" "$?" "opening the project again works"
+    assert_eq "token=kept-by-the-test" "$(<"$envdir/default")" "and leaves the default environment as it is"
+    rm -rf "$envdir"
+    req_project_activate "$a"
+    [[ -f $envdir/default ]]; assert_eq "0" "$?" "a project registered before this existed gets them when it is opened"
+    assert_eq "default" "$(req_env_list one)" "and it is the only environment listed"
+
+    # An environment folder that cannot be written is a warning only: the project stays active.
+    if (( EUID != 0 )); then       # root ignores the permissions
+        rm -rf "$envdir"; chmod 500 "$TMP/act-cfg/projects/one"
+        out=$(req_project_activate "$a" 2>&1); status=$?
+        chmod 700 "$TMP/act-cfg/projects/one"
+        assert_eq "0" "$status" "a folder that cannot be made does not fail the activation"
+        assert_contains "req: warning: cannot create $envdir" "$out" "it is one warning with the absolute path"
+        assert_eq "1" "$(grep -c "warning" <<<"$out")" "printed once"
+        req_project_activate "$a" 2>/dev/null
+        assert_eq "one" "$REQ_PROJECT_ID" "and the project is the one in use"
+    fi
 
     # ~/.req cannot be written: one warning, no failure of the caller's flow.
     printf 'x' >"$TMP/not-a-dir"

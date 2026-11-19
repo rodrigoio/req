@@ -7,6 +7,7 @@
 # Both are plain "key=value" files. The environment wins over the project variables.
 # An invalid file is only reported, never fixed or overwritten. The old format
 # ($REQ_CONFIG_DIR/env/<env>/secrets.json, T5.1) is not read and not migrated.
+# req_env_create makes the folder and the file of an environment; the user does not have to.
 
 declare -gA REQ_VARS=()      # variables of the last loaded environment (key -> value)
 
@@ -214,4 +215,82 @@ req_env_exists() {
     req_valid_name "$env" || return 1
     [[ $env == default ]] && return 0
     [[ -n $id && -f $(req_env_file "$id" "$env") ]]
+}
+
+# req_env_ensure_dir [project id] - makes the folder of the project's environments
+# (projects/<id>/env), private (0700) like everything in the central directory. It is
+# not an error when it is already there. The error carries the absolute path.
+req_env_ensure_dir() {
+    local id=${1-$REQ_PROJECT_ID} dir
+    [[ -n $id ]] || { req_err "no project is open, so there is no folder for its environments"; return 1; }
+    req_valid_name "$id" || { req_err "invalid project id: \"$id\""; return 1; }
+    dir=$(req_project_state_dir "$id" env)
+    [[ -d $dir ]] && return 0
+    (umask 077; mkdir -p "$dir") 2>/dev/null || { req_err "cannot create $(req_abs_path "$dir")"; return 1; }
+}
+
+# req_env_create <env> [project id] - makes an environment: its file, empty and private (0600),
+# in the environment folder, which is made too when it is missing. An environment that already
+# exists is left exactly as it is (status 0): it is never overwritten, not even by a race
+# (noclobber). Something that is not a regular file in its place is an error.
+req_env_create() {
+    local env=$1 id=${2-$REQ_PROJECT_ID} file abs
+    req_valid_name "$env" || {
+        req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
+        return 1; }
+    req_env_ensure_dir "$id" || return 1
+    file=$(req_env_file "$id" "$env")
+    abs=$(req_abs_path "$file")
+    [[ -f $file ]] && return 0
+    [[ ! -e $file && ! -L $file ]] || { req_err "$abs exists and is not a file"; return 1; }
+    (umask 077; set -o noclobber; : >"$file") 2>/dev/null || { req_err "cannot create $abs"; return 1; }
+}
+
+# shellcheck disable=SC2016  # the ${key} and ${host} in the quotes are text for the user, not expansions
+# req_vars_template - prints the text a new project `vars` file starts with: comment lines that
+# show the format, which the loader ignores (req_kv_parse_line), so a new file has no variables.
+# It ends with a blank line: in vim a line opened right after a comment line (`o`) continues the comment,
+# so a variable typed there would be a comment without the user noticing.
+# Quoted strings and not a heredoc: the single-file build drops full-line comments, and a line
+# of a heredoc that starts with # would look like one to the test that checks the built file.
+req_vars_template() {
+    printf '%s\n' \
+        '# Variables of this project, shared by every environment (the file of an environment wins).' \
+        '# One per line, key=value: the key uses letters, digits and underscores; the value is the rest of the line.' \
+        '# Lines that start with # are comments. A request uses a variable as ${key}, for example ${host}/users.' \
+        '#' \
+        '# host=https://api.example.com' \
+        ''
+}
+
+# req_vars_create [project id] - makes the project's `vars` file when it is missing: private
+# (0600) and with the comment lines of req_vars_template. A file that exists is left exactly
+# as it is (status 0), even an empty one; it is never overwritten, not even by a race
+# (noclobber). Something that is not a regular file in its place is an error. The error
+# carries the absolute path.
+req_vars_create() {
+    local id=${1-$REQ_PROJECT_ID} file abs
+    [[ -n $id ]] || { req_err "no project is open, so there are no variables to make"; return 1; }
+    req_valid_name "$id" || { req_err "invalid project id: \"$id\""; return 1; }
+    file=$(req_vars_file "$id")
+    abs=$(req_abs_path "$file")
+    [[ -f $file ]] && return 0
+    [[ ! -e $file && ! -L $file ]] || { req_err "$abs exists and is not a file"; return 1; }
+    (umask 077; mkdir -p "${file%/*}"; set -o noclobber; req_vars_template >"$file") 2>/dev/null ||
+        { req_err "cannot create $abs"; return 1; }
+}
+
+declare -ga REQ_ENV_CHOICES=()      # the environments to choose from (req_env_choices)
+
+# shellcheck disable=SC2034  # REQ_ENV_CHOICES is read by the environment menu
+# req_env_choices [project id] - fills REQ_ENV_CHOICES with the environments one can switch
+# to: "default" first, which is always there, whether it has a file or not, then those of
+# req_env_list in its order, with no repeat. Without a project only "default".
+req_env_choices() {
+    local id=${1-$REQ_PROJECT_ID} name
+    REQ_ENV_CHOICES=(default)
+    while IFS= read -r name; do
+        [[ -z $name || $name == default ]] || REQ_ENV_CHOICES+=("$name")
+    done < <(req_env_list "$id")
+    return 0
 }

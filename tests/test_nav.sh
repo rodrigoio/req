@@ -978,36 +978,451 @@ test_command_env() {
     local envdir
     envdir=$(req_project_state_dir "$REQ_PROJECT_ID" env)
     unset REQ_ENV
+    REQ_INPUT_FD=3
 
     type_keys : e n v enter
-    assert_contains "no environments yet (in use: default)" "$REQ_STATUS" ":env lists nothing when there are no files"
-    assert_contains "$envdir" "$REQ_STATUS" "and says where to create one"
+    assert_eq "env" "$REQ_VIEW" ":env opens the environment menu"
+    assert_eq "default" "${REQ_ENV_CHOICES[*]}" "which lists default, made when the project was opened"
+    req_nav_handle esc
 
-    mkdir -p "$envdir"; printf 'url=http://dev\n' >"$envdir/dev"; printf 'url=http://prod\n' >"$envdir/prod"
+    printf 'url=http://dev\n' >"$envdir/dev"; printf 'url=http://prod\n' >"$envdir/prod"
     type_keys : e n v enter
-    assert_contains "environments: dev, prod (in use: default)" "$REQ_STATUS" ":env lists the environments and the one in use"
+    assert_eq "default dev prod" "${REQ_ENV_CHOICES[*]}" "the menu lists the environments of the project"
+    req_nav_handle esc
 
-    type_keys : e n v ' ' d e v enter
-    assert_eq "dev" "$REQ_ENV" ":env <name> switches the session"
+    type_keys : e n v ' ' d e v
+    req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "dev" "$REQ_ENV" ":env <name> switches the session, with no question for an environment that exists"
     assert_contains "environment: dev" "$REQ_STATUS" "and says so"
     req_nav_build_list; assert_contains "proj @ dev" "${REQ_SCREEN_LINES[0]}" "the header follows"
     type_keys : e n v enter
-    assert_contains "(in use: dev)" "$REQ_STATUS" "and the listing shows the new one"
+    assert_eq "1" "$REQ_ENV_SEL" "and the menu opens on the new one"
+    req_nav_handle esc
 
-    type_keys : e n v ' ' s t a g i n g enter
-    assert_eq "dev" "$REQ_ENV" "an unknown environment changes nothing"
-    assert_contains 'unknown environment "staging" (known: dev, prod)' "$REQ_NOTIFICATION_WARN" "and is explained with the known ones"
-    assert_contains "$envdir/staging" "$REQ_NOTIFICATION_WARN" "and the file that would create it"
-    type_keys : e n v ' ' B a d enter
-    assert_contains "invalid environment name" "$REQ_NOTIFICATION_WARN" "a name that is not a slug is refused"
-    assert_eq "dev" "$REQ_ENV" "without a change"
-    type_keys : e n v ' ' d e f a u l t enter
-    assert_eq "default" "$REQ_ENV" "default can always be chosen, even without a file"
+    # An environment that does not exist is offered for creation.
+    type_keys : e n v ' ' s t a g i n g
+    req_nav_handle enter 3<<<"n" >"$TMP/env-question.txt"
+    assert_contains 'Create environment "staging"? [Y/n]' "$(<"$TMP/env-question.txt")" "an unknown environment asks before it is created"
+    assert_eq "dev" "$REQ_ENV" "answering n changes nothing"
+    [[ ! -e $envdir/staging ]]; assert_eq "0" "$?" "and creates no file"
+    assert_contains 'environment "staging" not created (in use: dev)' "$REQ_STATUS" "and says so"
+    type_keys : e n v ' ' s t a g i n g; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "dev" "$REQ_ENV" "end of input counts as no"
+    [[ ! -e $envdir/staging ]]; assert_eq "0" "$?" "and creates no file"
+
+    type_keys : e n v ' ' s t a g i n g; req_nav_handle enter 3<<<"" >/dev/null
+    assert_eq "staging" "$REQ_ENV" "Enter creates it and switches to it"
+    [[ -f $envdir/staging ]]; assert_eq "0" "$?" "the file is in the project's env folder"
+    assert_eq "600" "$(stat -c %a "$envdir/staging")" "private"
+    assert_eq "0" "$(wc -c <"$envdir/staging" | tr -d ' ')" "and empty"
+    assert_contains "environment: staging, created in $envdir/staging" "$REQ_STATUS" "the status says where it is"
+    req_nav_build_list; assert_contains "proj @ staging" "${REQ_SCREEN_LINES[0]}" "the header follows"
+    type_keys : e n v enter
+    assert_eq "default dev prod staging" "${REQ_ENV_CHOICES[*]}" "and the menu lists it"
+    req_nav_handle esc
+
+    type_keys : e n v ' ' q a; req_nav_handle enter 3<<<"yes" >/dev/null
+    assert_eq "qa" "$REQ_ENV" "yes creates it too"
+    [[ -f $envdir/qa ]]; assert_eq "0" "$?" "with its file"
+    printf 'k=kept-by-the-test\n' >"$envdir/qa"
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3<<<"" >/dev/null
+    type_keys : e n v ' ' q a; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "k=kept-by-the-test" "$(<"$envdir/qa")" "an environment that exists is never touched"
+
+    req_env_use direct-test-env now 3</dev/null
+    assert_eq "direct-test-env" "$REQ_ENV" "req_env_use ... now creates with no question"
+    [[ -f $envdir/direct-test-env ]]; assert_eq "0" "$?" "and makes the file"
+
+    type_keys : e n v ' ' B a d; req_nav_handle enter 3<<<"y" >/dev/null
+    assert_eq "direct-test-env" "$REQ_ENV" "a name that is not a slug changes nothing"
+    assert_contains "invalid environment name" "$REQ_NOTIFICATION_WARN" "and is refused"
+    [[ ! -e $envdir/Bad ]]; assert_eq "0" "$?" "nothing is created for it"
+
+    rm -f "$envdir/default"
+    type_keys : e n v ' ' d e f a u l t; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "default" "$REQ_ENV" "default can always be chosen, even if its file is gone"
+    [[ ! -e $envdir/default ]]; assert_eq "0" "$?" "and choosing it makes no file"
+
+    if (( EUID != 0 )); then       # root ignores the permissions
+        chmod 500 "$envdir"
+        type_keys : e n v ' ' l o c k e d; req_nav_handle enter 3<<<"y" >/dev/null
+        chmod 700 "$envdir"
+        assert_eq "default" "$REQ_ENV" "a file that cannot be made changes nothing"
+        assert_contains "cannot create $envdir/locked" "$REQ_NOTIFICATION_WARN" "and the warning names it with the absolute path"
+    fi
 
     REQ_PROJECT_ID=""; type_keys : e n v ' ' p r o d enter
     assert_eq "default" "$REQ_ENV" "without a saved project state only default is allowed"
     assert_contains "not available" "$REQ_NOTIFICATION_WARN" "and the reason is given"
+    type_keys : e n v ' ' n e w; req_nav_handle enter 3<<<"y" >/dev/null
+    assert_eq "default" "$REQ_ENV" "and nothing is asked or created for another one"
+    assert_contains "unknown environment \"new\"" "$REQ_NOTIFICATION_WARN" "which is unknown"
+    type_keys : e n v enter
+    assert_eq "list" "$REQ_VIEW" "with no project state there is no menu"
+    assert_contains "only the default environment can be used (in use: default)" "$REQ_NOTIFICATION_WARN" "a warning says why"
     assert_contains ":env" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists :env"
+    REQ_INPUT_FD=0
+    unset REQ_ENV
+}
+
+test_env_menu() {
+    echo "nav: the environment menu"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_project_activate "$PROJ" || return
+    local envdir out i
+    envdir=$(req_project_state_dir "$REQ_PROJECT_ID" env)
+    unset REQ_ENV
+    rm -rf "$envdir"; req_env_create default          # the central directory is shared with the other tests
+    printf 'url=http://dev\ntoken=dev-token\n' >"$envdir/dev"
+    printf 'url=http://prod\n' >"$envdir/prod"
+
+    type_keys : e n v enter
+    assert_eq "env" "$REQ_VIEW" ":env opens the menu"
+    assert_eq "list" "$REQ_ENV_BACK" "which goes back to the list"
+    assert_eq "default dev prod" "${REQ_ENV_CHOICES[*]}" "with default first, then the others in order"
+    assert_eq "0" "$REQ_ENV_SEL" "the selection starts on the environment in use"
+    req_nav_build_env; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
+    assert_contains "req environments  proj  (in use: default)" "${REQ_SCREEN_LINES[0]}" "the header names the project and the environment in use"
+    assert_contains "> default (in use)" "$out" "the selected row is marked, and so is the one in use"
+    assert_contains "  dev" "$out" "the others are listed below it"
+    assert_not_contains "dev (in use)" "$out" "only the one in use is marked"
+    assert_contains "Enter choose" "$out" "the hint line says what the keys do"
+    assert_contains "Esc cancel" "$out" "and how to leave"
+    assert_eq "6" "${#REQ_SCREEN_LINES[@]}" "the header, three environments, the new one and the hint"
+    assert_eq "  + new environment" "${REQ_SCREEN_LINES[4]}" "the last row is + new environment"
+
+    req_nav_handle down; assert_eq "1" "$REQ_ENV_SEL" "down moves the selection"
+    req_nav_handle down; req_nav_handle down
+    assert_eq "3" "$REQ_ENV_SEL" "down reaches + new environment, after the last one"
+    req_nav_build_env; assert_eq "> + new environment" "${REQ_SCREEN_LINES[4]}" "which is highlighted like the others"
+    req_nav_handle down; assert_eq "0" "$REQ_ENV_SEL" "and wraps around at the end"
+    req_nav_handle up; assert_eq "3" "$REQ_ENV_SEL" "up wraps around at the start, to + new environment"
+    req_nav_handle up; assert_eq "2" "$REQ_ENV_SEL" "and goes on up from there"
+    for k in v : x n; do req_nav_handle "$k"; done
+    assert_eq "env" "$REQ_VIEW" "other keys do nothing: the menu stays"
+    assert_eq "0" "$REQ_CMD_ACTIVE" "and : does not open command mode"
+    assert_eq "2" "$REQ_ENV_SEL" "or move the selection"
+    req_nav_handle $'\f'
+    assert_eq "env" "$REQ_VIEW" "Ctrl-L keeps the menu open"
+
+    req_nav_handle esc
+    assert_eq "list" "$REQ_VIEW" "Esc goes back to the list"
+    assert_eq "" "${REQ_ENV:-}" "changing nothing"
+    assert_eq "" "$REQ_STATUS" "and saying nothing"
+
+    type_keys : e n v enter; req_nav_handle down
+    req_nav_handle enter
+    assert_eq "list" "$REQ_VIEW" "Enter goes back to the list"
+    assert_eq "dev" "$REQ_ENV" "having switched to the row under the selection"
+    assert_contains "environment: dev (2 variables)" "$REQ_STATUS" "and its variables are loaded"
+    req_nav_build_list; assert_contains "proj @ dev" "${REQ_SCREEN_LINES[0]}" "the header follows"
+    type_keys : e n v enter
+    assert_eq "1" "$REQ_ENV_SEL" "the menu opens on the environment in use"
+    req_nav_build_env; assert_contains "> dev (in use)" "$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")" "which is the marked one"
+    req_nav_handle enter
+    assert_contains "environment: dev (2 variables)" "$REQ_STATUS" "choosing the one in use loads it again"
+
+    # Opened from the details of a request: back to the details, which stay as they were.
+    req_nav_handle enter                         # api
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "a request is open"
+    type_keys : e n v enter
+    assert_eq "detail" "$REQ_ENV_BACK" "the menu remembers where it came from"
+    req_nav_handle esc
+    assert_eq "detail" "$REQ_VIEW" "Esc returns to the details"
+    type_keys : e n v enter; req_nav_handle up
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "so does choosing"
+    assert_eq "default" "$REQ_ENV" "after switching (up from dev is default)"
+    assert_contains "list-users.get.json" "$REQ_DETAIL_FILE" "and the request is still the open one"
+
+    # Many environments: a window, like the list's, that follows the selection.
+    for i in $(seq -w 1 30); do : >"$envdir/many-test-env-$i"; done
+    REQ_VIEW=list; type_keys : e n v enter
+    LINES=10 req_nav_build_env
+    assert_eq "1" "$(( ${#REQ_SCREEN_LINES[@]} <= 10 ))" "the menu fits the terminal height"
+    for i in $(seq 1 20); do req_nav_handle down; done
+    LINES=10 req_nav_build_env; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
+    assert_contains "> many-test-env-" "$out" "the selected row stays in the window"
+    assert_eq "20" "$REQ_ENV_SEL" "after moving down 20 rows"
+    COLUMNS=24 req_nav_build_env; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}"); local max=0 line
+    while IFS= read -r line; do (( ${#line} > max )) && max=${#line}; done <<<"$out"
+    assert_eq "1" "$(( max <= 24 ))" "no line is wider than the terminal"
+    req_nav_handle esc
+
+    # The main loop draws the view and takes its keys.
+    out=$(keys : e n v enter down enter | req_nav_run "$PROJ/.req" 2>&1)
+    assert_contains "req environments" "$out" "the loop draws the menu"
+    assert_contains "Enter choose" "$out" "with its hint"
+    assert_contains "environment: dev" "$out" "and the choice is made through it"
+    REQ_VIEW=list; unset REQ_ENV
+}
+
+# env_menu_new_row - opens the environment menu and moves down to its last row, + new environment,
+# wherever the selection starts (it starts on the environment in use).
+env_menu_new_row() {
+    type_keys : e n v enter
+    while (( REQ_ENV_SEL < ${#REQ_ENV_CHOICES[@]} )); do req_nav_handle down; done
+}
+
+test_env_new() {
+    echo "nav: + new environment"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_project_activate "$PROJ" || return
+    local envdir statedir i before out
+    statedir=$(req_project_state_dir "$REQ_PROJECT_ID"); envdir=$statedir/env
+    rm -rf "$envdir" "$statedir/vars"; req_env_create default       # the central directory is shared with the other tests
+    printf 'k=kept-by-the-test\n' >"$envdir/dev"
+    unset REQ_ENV
+    REQ_INPUT_FD=3
+
+    type_keys : e n v enter; req_nav_handle up
+    assert_eq "2" "$REQ_ENV_SEL" "up from the top selects + new environment"
+    req_nav_handle enter 3<<<"new-test-env" >"$TMP/env-new-prompt.txt"
+    assert_contains "Environment name (a slug, e.g. staging) - empty to cancel:" "$(<"$TMP/env-new-prompt.txt")" "Enter on it asks for the name, with an example"
+    [[ -f $envdir/new-test-env ]]; assert_eq "0" "$?" "the environment is created"
+    assert_eq "600" "$(stat -c %a "$envdir/new-test-env")" "private"
+    assert_eq "new-test-env" "$REQ_ENV" "and switched to"
+    assert_eq "list" "$REQ_VIEW" "going back to the list"
+    assert_contains "environment: new-test-env, created in $envdir/new-test-env (no variables)" "$REQ_STATUS" "the status says where it is and that it is empty"
+    type_keys : e n v enter
+    assert_eq "default dev new-test-env" "${REQ_ENV_CHOICES[*]}" "the menu lists it now"
+    assert_eq "2" "$REQ_ENV_SEL" "and opens on it"
+    req_nav_handle esc
+
+    # A name that exists is only switched to.
+    env_menu_new_row
+    assert_eq "3" "$REQ_ENV_SEL" "(the new row, with one more environment now)"
+    req_nav_handle enter 3<<<"dev" >/dev/null
+    assert_eq "dev" "$REQ_ENV" "the name of an existing environment switches to it"
+    assert_eq "k=kept-by-the-test" "$(<"$envdir/dev")" "leaving it as it is"
+    assert_not_contains "created" "$REQ_STATUS" "and saying nothing about creating"
+    assert_contains "environment: dev (1 variable)" "$REQ_STATUS" "with its variables loaded"
+    env_menu_new_row
+    req_nav_handle enter 3<<<"default" >"$TMP/env-new-prompt.txt"
+    assert_contains "Environment name" "$(<"$TMP/env-new-prompt.txt")" "so does default, typed at the prompt"
+    assert_eq "default" "$REQ_ENV" "which is switched to"
+    assert_eq "list" "$REQ_VIEW" "going back to the list"
+
+    # Cancelling: an empty name or the end of the input leave everything as it was.
+    before=$(find "$envdir" -type f | wc -l | tr -d ' ')
+    env_menu_new_row
+    req_nav_handle enter 3<<<"" >"$TMP/env-new-prompt.txt"
+    assert_eq "env" "$REQ_VIEW" "an empty name cancels and the menu stays"
+    assert_contains "Cancelled." "$(<"$TMP/env-new-prompt.txt")" "saying so"
+    assert_eq "default" "$REQ_ENV" "no environment changes"
+    req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "env" "$REQ_VIEW" "so does the end of the input"
+    assert_eq "$before" "$(find "$envdir" -type f | wc -l | tr -d ' ')" "and nothing is created"
+    req_nav_handle esc
+
+    # An invalid name is asked again.
+    env_menu_new_row
+    req_nav_handle enter 3<<<$'Not A Slug\nvalid-after-invalid-test' >"$TMP/env-new-prompt.txt" 2>&1
+    assert_contains "invalid name" "$(<"$TMP/env-new-prompt.txt")" "a name that is not a slug is refused with the reason"
+    assert_eq "valid-after-invalid-test" "$REQ_ENV" "and asked again until it is one"
+    [[ ! -e $envdir/Not\ A\ Slug ]]; assert_eq "0" "$?" "nothing is created for the invalid one"
+
+    # From the details of a request: back to the details.
+    req_nav_handle enter                         # api
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "a request is open"
+    env_menu_new_row
+    req_nav_handle enter 3<<<"from-details-test" >/dev/null
+    assert_eq "detail" "$REQ_VIEW" "creating from the menu goes back to the details"
+    assert_eq "from-details-test" "$REQ_ENV" "with the new environment in use"
+    req_nav_handle esc
+
+    if (( EUID != 0 )); then       # root ignores the permissions
+        env_menu_new_row
+        chmod 500 "$envdir"
+        req_nav_handle enter 3<<<"locked-test-env" >/dev/null
+        chmod 700 "$envdir"
+        assert_eq "from-details-test" "$REQ_ENV" "a file that cannot be made changes nothing"
+        assert_contains "cannot create $envdir/locked-test-env" "$REQ_NOTIFICATION_WARN" "and the warning names it with the absolute path"
+    fi
+
+    # The loop shows the new row and takes the name through the prompt: keys and answer are one stream.
+    REQ_INPUT_FD=0; unset REQ_ENV
+    out=$({ keys : e n v enter up enter; printf 'loop-test-env\n'; } | req_nav_run "$PROJ/.req" 2>&1)
+    assert_contains "+ new environment" "$out" "the loop draws + new environment"
+    assert_contains "Environment name (a slug, e.g. staging)" "$out" "and asks for the name"
+    [[ -f $envdir/loop-test-env ]]; assert_eq "0" "$?" "which creates the environment"
+    assert_contains "proj @ loop-test-env" "$out" "and the header shows it"
+    REQ_VIEW=list; unset REQ_ENV
+}
+
+test_command_env_load() {
+    echo "nav: :env loads the whole set of variables"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_project_activate "$PROJ" || return
+    local envdir statedir
+    statedir=$(req_project_state_dir "$REQ_PROJECT_ID"); envdir=$statedir/env
+    unset REQ_ENV
+    REQ_INPUT_FD=3
+    printf 'region=eu\ntoken=shared\n' >"$statedir/vars"
+    printf 'url=http://dev\ntoken=dev-token\n' >"$envdir/dev"
+    printf 'url=http://prod\nextra=only-in-prod\n' >"$envdir/prod"
+
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "dev" "$REQ_ENV" "switching to dev"
+    assert_eq "3" "${#REQ_VARS[@]}" "loads the project variables and the environment's"
+    assert_eq "dev-token" "${REQ_VARS[token]}" "the environment wins over the project variables"
+    assert_eq "eu" "${REQ_VARS[region]}" "and the shared ones are there"
+    assert_contains "environment: dev (3 variables)" "$REQ_STATUS" "the status says how many were loaded"
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "with no warning"
+
+    type_keys : e n v ' ' p r o d; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "4" "${#REQ_VARS[@]}" "another environment is another set: its own count"
+    assert_eq "http://prod" "${REQ_VARS[url]}" "with its own values"
+    assert_eq "shared" "${REQ_VARS[token]}" "and none of the previous environment's (token falls back to the project's)"
+    assert_contains "environment: prod (4 variables)" "$REQ_STATUS" "the status follows"
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "" "${REQ_VARS[extra]-}" "switching back leaves nothing of prod"
+    assert_eq "3" "${#REQ_VARS[@]}" "exactly the set of dev"
+
+    rm -f "$statedir/vars" "$envdir/prod"; printf 'only=one\n' >"$envdir/default"
+    type_keys : e n v ' ' d e f a u l t; req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "environment: default (1 variable)" "$REQ_STATUS" "one variable is not plural"
+    : >"$envdir/default"
+    type_keys : e n v ' ' d e f a u l t; req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "environment: default (no variables)" "$REQ_STATUS" "an environment with none says so"
+
+    printf 'region=eu\n' >"$statedir/vars"
+    type_keys : e n v ' ' f r e s h - t e s t; req_nav_handle enter 3<<<"" >/dev/null
+    assert_contains "environment: fresh-test, created in $envdir/fresh-test (1 variable)" "$REQ_STATUS" "a new environment loads the project variables too"
+
+    # A broken file: reported when switching, the switch stands, nothing is changed.
+    printf 'url=http://x\nthis line is not a pair\n' >"$envdir/broken-test-env"
+    type_keys : e n v ' ' b r o k e n - t e s t - e n v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "broken-test-env" "$REQ_ENV" "a broken environment file does not stop the switch"
+    assert_contains "$envdir/broken-test-env:2: expected key=value" "$REQ_NOTIFICATION_WARN" "the warning has the absolute path and the line"
+    assert_eq "0" "${#REQ_VARS[@]}" "and no variable is loaded"
+    assert_contains "environment: broken-test-env (variables not loaded)" "$REQ_STATUS" "the status says so"
+    assert_eq $'url=http://x\nthis line is not a pair' "$(<"$envdir/broken-test-env")" "the file is never fixed or overwritten"
+    printf 'url=http://x\n' >"$envdir/broken-test-env"
+    type_keys : e n v ' ' b r o k e n - t e s t - e n v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "once the file is fixed the switch is clean"
+    assert_contains "environment: broken-test-env (2 variables)" "$REQ_STATUS" "and loads it"
+
+    # A broken project variables file is reported the same way.
+    printf 'bad line in vars\n' >"$statedir/vars"
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "$statedir/vars:1: expected key=value" "$REQ_NOTIFICATION_WARN" "a broken vars file is reported at the switch too"
+    assert_eq "dev" "$REQ_ENV" "with the switch standing"
+
+    # The old secrets.json is still only a warning.
+    printf 'region=eu\n' >"$statedir/vars"
+    mkdir -p "$REQ_CONFIG_DIR/env/dev"; printf '{}' >"$REQ_CONFIG_DIR/env/dev/secrets.json"
+    type_keys : e n v ' ' d e v; req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "no longer read" "$REQ_NOTIFICATION_WARN" "the old secrets.json is warned about when switching to its environment"
+    assert_contains "environment: dev (" "$REQ_STATUS" "and the variables are loaded"
+    rm -rf "$REQ_CONFIG_DIR/env"
+    REQ_INPUT_FD=0
+    unset REQ_ENV
+}
+
+# vars_fake <dir> <name> <sh commands> - an executable fake editor, which gets the file as $1.
+vars_fake() { mkdir -p "$1"; printf '#!/bin/sh\n%s\n' "$3" >"$1/$2"; chmod +x "$1/$2"; }
+
+# shellcheck disable=SC2016  # the text of the fake editors and the ${host} placeholders are single-quoted on purpose
+test_command_vars() {
+    echo "nav: :var and :vars edit the project variables"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_project_activate "$PROJ" || return
+    local statedir file fakes=$TMP/vars-fakes tools=$TMP/vars-tools t oldpath=$PATH
+    statedir=$(req_project_state_dir "$REQ_PROJECT_ID"); file=$statedir/vars
+    unset REQ_ENV
+    REQ_INPUT_FD=3
+    mkdir -p "$tools"
+    # A PATH with only what the command needs, so "there is no vim" can be said for real.
+    for t in sh mktemp rm cat mkdir dirname; do ln -sf "$(command -v "$t")" "$tools/$t"; done
+    vars_fake "$fakes" spy 'printf "%s" "$1" >"$0.path"; cat "$1" >"$0.seen"; echo "host=https://dev.example.com" >>"$1"'
+
+    rm -f "$file"       # the config directory is shared with the tests before this one
+    [[ ! -e $file ]]; assert_eq "0" "$?" "a new project has no vars file yet"
+    type_keys : v a r s; VISUAL=$fakes/spy req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "$file" "$(<"$fakes/spy.path")" ":vars runs the editor on the vars file of the project, not on a copy"
+    assert_eq "$(req_vars_template)" "$(<"$fakes/spy.seen")" "which the editor finds made, with the commented template"
+    assert_eq "600" "$(stat -c %a "$file")" "private"
+    assert_eq "https://dev.example.com" "${REQ_VARS[host]-}" "what the editor wrote is loaded when it closes"
+    assert_eq "1" "${#REQ_VARS[@]}" "the comment lines of the template are not variables"
+    assert_contains "environment: default (1 variable)" "$REQ_STATUS" "the status says how many variables there are"
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "with no warning"
+    req_subst '${host}/users' default; assert_eq "https://dev.example.com/users" "$REQ_SUBST_OUT" "and a request uses it"
+
+    # The alias, and a file that already has content: the editor sees it as it is.
+    printf 'token=abc\n' >"$file"
+    type_keys : v a r; VISUAL=$fakes/spy req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "token=abc" "$(<"$fakes/spy.seen")" ":var is the same command, and a file with content is not touched before the editor"
+    assert_eq "2" "${#REQ_VARS[@]}" "its variables are loaded with the new one"
+    printf 'only=env-file\n' >"$statedir/env/dev"
+    REQ_ENV=dev
+    type_keys : v a r s; VISUAL=true req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "environment: dev (3 variables)" "$REQ_STATUS" "the variables loaded are those of the environment in use (the project's two plus its own)"
+    unset REQ_ENV
+
+    # The order of the editors: $VISUAL, $EDITOR, vim, nano, then the message.
+    vars_fake "$tools" vim 'echo "from-vim" >>"$1"'
+    vars_fake "$tools" nano 'echo "from-nano" >>"$1"'
+    : >"$file"
+    PATH=$tools; type_keys : v a r s; VISUAL='' EDITOR='' req_nav_handle enter 3</dev/null >/dev/null; PATH=$oldpath
+    assert_eq "from-vim" "$(<"$file")" "with no VISUAL or EDITOR vim is used, and wins over nano"
+    rm -f "$tools/vim"; : >"$file"
+    PATH=$tools; type_keys : v a r s; VISUAL='' EDITOR='' req_nav_handle enter 3</dev/null >/dev/null; PATH=$oldpath
+    assert_eq "from-nano" "$(<"$file")" "nano is used when there is no vim"
+    vars_fake "$tools" vim 'echo "from-vim" >>"$1"'; : >"$file"
+    vars_fake "$fakes" mine 'echo "from-my-editor" >>"$1"'
+    PATH=$tools; type_keys : v a r s; VISUAL='' EDITOR=$fakes/mine req_nav_handle enter 3</dev/null >/dev/null; PATH=$oldpath
+    assert_eq "from-my-editor" "$(<"$file")" "the editor of the user (EDITOR) wins over vim and nano"
+    PATH=$tools; type_keys : v a r s; VISUAL=$fakes/spy EDITOR=$fakes/mine req_nav_handle enter 3</dev/null >/dev/null; PATH=$oldpath
+    assert_eq "$file" "$(<"$fakes/spy.path")" "and VISUAL wins over EDITOR"
+
+    # No editor at all: the file is made anyway and a message says where it is and how to write it.
+    rm -f "$tools/vim" "$tools/nano" "$file"; REQ_STATUS=""
+    PATH=$tools; type_keys : v a r s; VISUAL='' EDITOR='' req_nav_handle enter 3<<<"" >"$TMP/vars-howto.txt"; PATH=$oldpath
+    assert_contains "No editor found (tried \$VISUAL, \$EDITOR, vim and nano)." "$(<"$TMP/vars-howto.txt")" "with no editor it says so"
+    assert_contains $'\n  '"$file"$'\n' "$(<"$TMP/vars-howto.txt")" "gives the whole path on a line of its own"
+    assert_contains $'\n  host=https://api.example.com\n' "$(<"$TMP/vars-howto.txt")" "shows how a variable is written"
+    assert_contains 'use it in a request as ${host}' "$(<"$TMP/vars-howto.txt")" "and used"
+    assert_contains "Press Enter to go back" "$(<"$TMP/vars-howto.txt")" "and waits for Enter"
+    [[ -f $file ]]; assert_eq "0" "$?" "the file exists, ready for the user's lines"
+    assert_eq "600" "$(stat -c %a "$file")" "private"
+    assert_eq "" "$REQ_STATUS" "nothing is loaded again, since nothing was edited"
+    assert_eq "" "$REQ_NOTIFICATION_WARN" "and it is no warning"
+
+    # A bad line is reported at once, with its path and line, and never fixed.
+    vars_fake "$fakes" breaker 'printf "ok=1\nthis line is not a pair\n" >"$1"'
+    type_keys : v a r s; VISUAL=$fakes/breaker req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "$file:2: expected key=value" "$REQ_NOTIFICATION_WARN" "a bad line is a warning with the absolute path and the line"
+    assert_contains "environment: default (variables not loaded)" "$REQ_STATUS" "and the status says nothing was loaded"
+    assert_eq $'ok=1\nthis line is not a pair' "$(<"$file")" "the file is left as the user wrote it"
+
+    # An editor that fails.
+    vars_fake "$fakes" failer 'exit 3'
+    REQ_STATUS=""
+    type_keys : v a r s; VISUAL=$fakes/failer req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "the editor failed; $file is as the editor left it" "$REQ_NOTIFICATION_WARN" "an editor that fails is a warning with the path"
+    assert_eq "" "$REQ_STATUS" "and the variables are not reported again"
+
+    # Wrong use.
+    rm -f "$fakes/spy.path"
+    type_keys : v a r s ' ' d e v; VISUAL=$fakes/spy req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "usage: :vars" "$REQ_NOTIFICATION_WARN" "an argument is a usage warning"
+    [[ ! -e $fakes/spy.path ]]; assert_eq "0" "$?" "and no editor is run"
+    REQ_PROJECT_ID=""
+    type_keys : v a r s; VISUAL=$fakes/spy req_nav_handle enter 3</dev/null >/dev/null
+    assert_contains "is not available, so there are no variables to edit" "$REQ_NOTIFICATION_WARN" "with no project state there is nothing to edit"
+    [[ ! -e $fakes/spy.path ]]; assert_eq "0" "$?" "and no editor is run"
+    assert_contains ":vars" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists :vars"
+    assert_contains "alias :var" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "and its alias"
+    REQ_INPUT_FD=0
     unset REQ_ENV
 }
 
@@ -1459,6 +1874,10 @@ test_command_rename_dir
 test_command_copy
 test_command_config
 test_command_env
+test_env_menu
+test_env_new
+test_command_env_load
+test_command_vars
 test_command_log_verbose
 test_command_remove
 test_command_remove_dir

@@ -72,17 +72,33 @@ req_check_deps() {
     req_die "missing dependencies: $(req_color orange)${missing//$'\n'/ }$(req_color reset)"
 }
 
-# req_editor - prints the external editor command, like git does: $VISUAL, then
-# $EDITOR, then vim, then vi. Fails (status 1) when none is available. $VISUAL and
-# $EDITOR may carry arguments (e.g. "code -w") and are not checked for existence.
+# req_editor [candidate...] - prints the external editor command, like git does: $VISUAL,
+# then $EDITOR, then the first candidate found in the PATH (vim, then vi, when none is
+# given). Fails (status 1) when none is available. $VISUAL and $EDITOR may carry arguments
+# (e.g. "code -w") and are not checked for existence.
 req_editor() {
     local e
+    local -a candidates=("$@")
+    (( $# )) || candidates=(vim vi)
     if [[ -n ${VISUAL-} ]]; then printf '%s' "$VISUAL"; return 0; fi
     if [[ -n ${EDITOR-} ]]; then printf '%s' "$EDITOR"; return 0; fi
-    for e in vim vi; do
+    for e in "${candidates[@]}"; do
         if command -v "$e" >/dev/null 2>&1; then printf '%s' "$e"; return 0; fi
     done
     return 1
+}
+
+# req_edit_file <file> [candidate...] - opens a file in the external editor (req_editor with
+# the given candidates), on the file itself and not on a copy, and waits for it. The editor
+# takes over the terminal; the caller hands it over first (req_nav_prompt_begin).
+# Status: 0 the editor ran and ended well, 1 the editor failed, 2 no editor available
+# (the same codes as req_edit_text).
+req_edit_file() {
+    local file=$1 editor
+    shift
+    editor=$(req_editor "$@") || return 2
+    # The shell lets $VISUAL and $EDITOR carry arguments, as git does.
+    sh -c "$editor \"\$@\"" req-editor "$file" || return 1
 }
 
 REQ_EDIT_TEXT=""    # result of req_edit_text

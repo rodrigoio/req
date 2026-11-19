@@ -10,7 +10,8 @@
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
-#   :env [name]   show the project's environments, or switch the session to one
+#   :env [name]   a menu of the project's environments (the last row creates one), or switch the session to <name>
+#                 (offering to create it when it does not exist)
 #   :log [yes|no] switch the log of requests and responses for this session
 #   :v [yes|no]   switch the verbose mode (>> and <<) for this session
 #   :config [-g] [k=v] show the settings, or set one for the project or, with -g, globally (~/.req/config)
@@ -42,7 +43,8 @@ REQ_HELP_ROWS=(
     ":rm|remove the selected request or directory, with a y/N question first"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
-    ":env [name]|show the environments of the project, or switch to one (REQ_ENV)"
+    ":env [name]|menu to pick or create one, or jump to <name>"
+    ":vars|edit the project variables in your editor (alias :var)"
     ":log [yes|no]|switch the log of requests and responses in this session (setting: log)"
     ":v [yes|no]|switch the verbose mode (>> sent, << received) in this session (REQ_VERBOSE)"
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
@@ -97,6 +99,7 @@ req_cmd_run() {
         e|edit)       req_cmd_edit ;;
         d|dup)        req_cmd_dup ;;
         env)          req_cmd_env "$arg" ;;
+        var|vars)     req_cmd_vars "$arg" ;;
         config)       req_cmd_config "$arg" ;;
         log)          req_cmd_log "$arg" ;;
         v|verbose)    req_cmd_verbose "$arg" ;;
@@ -343,35 +346,140 @@ req_cmd_verbose() {
 }
 
 # shellcheck disable=SC2034  # REQ_ENV is read by req_run_request and the header
-# req_cmd_env [name] - :env. Without an argument it lists the project's environments and
-# the one in use. With a name it switches the session to that environment (REQ_ENV, shown
-# in the header and used by the next request) when the project has a file for it
-# ("default" always works); otherwise it says which ones exist and where to create it.
-req_cmd_env() {
-    local name=$1 current=${REQ_ENV:-default} list msg
-    list=$(req_env_list | tr '\n' ' '); list=${list% }
-    if [[ -z $name ]]; then
-        if [[ -n $list ]]; then
-            REQ_STATUS="environments: ${list// /, } (in use: $current)"
-        else
-            REQ_STATUS="no environments yet (in use: $current); add a file in $(req_project_state_dir "${REQ_PROJECT_ID:-<project>}" env)"
-        fi
-        return 0
+# req_env_activate <name> [file just made] - the end of req_env_use: makes <name> the environment
+# of the session and loads its whole set of variables right away (the project's plus the
+# environment's, see req_vars_load), so a broken file is reported now and not only when a
+# request runs. The problems go to the warning bar and the switch stands, with no variables
+# loaded; nothing is fixed or overwritten. The status says how many variables were loaded and,
+# for an environment that was just made, where its file is. The variables are loaded again at
+# every request (req_run_request), so a file edited while req is open is read as it is then.
+req_env_activate() {
+    local name=$1 made=${2-} errs ok=1 note n
+    REQ_ENV=$name
+    if errs=$(mktemp 2>/dev/null); then
+        req_vars_load "$name" 2>"$errs" || ok=0
+        req_notification_warn_file "$errs"
+        rm -f "$errs"
+    else
+        req_vars_load "$name" 2>/dev/null || { ok=0; req_notification_warn "cannot load the variables of environment \"$name\""; }
     fi
+    if (( ok )); then
+        n=${#REQ_VARS[@]}
+        case $n in
+            0) note="no variables" ;;
+            1) note="1 variable" ;;
+            *) note="$n variables" ;;
+        esac
+    else
+        note="variables not loaded"
+    fi
+    REQ_STATUS="environment: $name${made:+, created in $made} ($note)"
+}
+
+# req_env_use <name> [ask|now] - switches the session to an environment (REQ_ENV, shown in the
+# header and used by the next request, req_env_activate). An environment of the project, or "default",
+# is switched to at once. One that does not exist yet is created: with "ask" (the default) after a [Y/n]
+# question, with "now" straight away (the caller has asked already). The new file is empty and
+# private, and the status says where it is. A name that is not a slug, or no project state to
+# keep the file in, is a warning and changes nothing; so is answering no or a file that cannot
+# be made. Always succeeds, like the commands.
+req_env_use() {
+    local name=$1 mode=${2:-ask} file err
     if ! req_valid_name "$name"; then
         req_notification_warn "invalid environment name \"$name\" (use a slug: lowercase letters, digits and hyphens)"
-    elif ! req_env_exists "$name"; then
-        msg="unknown environment \"$name\""
-        [[ -z $list ]] || msg+=" (known: ${list// /, })"
-        if [[ -n $REQ_PROJECT_ID ]]; then
-            msg+="; create it with a file at $(req_env_file "$REQ_PROJECT_ID" "$name")"
-        else
-            msg+="; the project state in $(req_config_dir) is not available"
-        fi
-        req_notification_warn "$msg"
-    else
-        REQ_ENV=$name
-        REQ_STATUS="environment: $name"
+        return 0
     fi
+    if req_env_exists "$name"; then
+        req_env_activate "$name"
+        return 0
+    fi
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        req_notification_warn "unknown environment \"$name\"; the project state in $(req_config_dir) is not available"
+        return 0
+    fi
+    if [[ $mode == ask ]]; then
+        req_nav_prompt_begin
+        req_confirm "Create environment \"$name\"?" y || {
+            req_nav_prompt_end
+            REQ_STATUS="environment \"$name\" not created (in use: ${REQ_ENV:-default})"
+            return 0; }
+        req_nav_prompt_end
+    fi
+    file=$(req_env_file "$REQ_PROJECT_ID" "$name")
+    if ! err=$(req_env_create "$name" 2>&1); then
+        req_notification_warn "${err#req: error: }"
+        return 0
+    fi
+    req_env_activate "$name" "$(req_abs_path "$file")"
+    return 0
+}
+
+# req_cmd_env [name] - :env. With a name it switches the session to that environment, creating
+# it when it does not exist (req_env_use). Without one it opens the environment menu (the view
+# env, see req_nav_build_env), with the selection on the one in use; the menu goes back to the view
+# it was opened from. With no project state there is no menu, only "default" can be used.
+req_cmd_env() {
+    local name=$1 current=${REQ_ENV:-default} i
+    if [[ -n $name ]]; then
+        req_env_use "$name"
+        return 0
+    fi
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        req_notification_warn "the project state in $(req_config_dir) is not available, so only the default environment can be used (in use: $current)"
+        return 0
+    fi
+    req_env_choices
+    REQ_ENV_SEL=0; REQ_ENV_TOP=0
+    for i in "${!REQ_ENV_CHOICES[@]}"; do
+        [[ ${REQ_ENV_CHOICES[i]} == "$current" ]] && REQ_ENV_SEL=$i
+    done
+    REQ_ENV_BACK=$REQ_VIEW; REQ_VIEW="env"
+    return 0
+}
+
+# shellcheck disable=SC2016  # the $-words in the quotes are text for the user, not expansions
+# req_vars_howto <abs path> - what the user sees when there is no editor for :vars: where the
+# project variables are and how to write them, whole and on their own lines, so the path can be
+# copied. It waits for Enter, between req_nav_prompt_begin and _end.
+req_vars_howto() {
+    printf 'No editor found (tried $VISUAL, $EDITOR, vim and nano).\n'
+    printf 'The variables of the project, shared by every environment, are in:\n\n  %s\n\n' "$1"
+    printf 'Add one per line, as key=value, for example:\n\n  host=https://api.example.com\n\n'
+    printf 'and use it in a request as ${host}. Set $EDITOR, or install vim or nano, to edit them with :vars.\n\n'
+    req_prompt "Press Enter to go back" "" || true
+}
+
+# req_cmd_vars [arg] - :var and :vars. Opens the project variables (projects/<id>/vars, shared by
+# every environment) in the editor of the user: $VISUAL, then $EDITOR, then vim, then nano. The
+# file is made first when it is missing (req_vars_create: private, with comment lines that show the
+# format), and edited in place. When the editor closes, the variables of the environment in use are
+# loaded again (req_env_activate), so a bad line is reported at once, with its path and line, and
+# the status says how many variables there are; nothing is fixed. With no editor at all the file is
+# still made and req_vars_howto says where it is and how to write the variables. An argument, or no
+# project state to keep the file in, is a warning. Always succeeds, like the commands.
+req_cmd_vars() {
+    local file abs err status
+    if [[ -n $1 ]]; then
+        req_notification_warn "usage: :vars (no argument: it opens the variables shared by every environment)"
+        return 0
+    fi
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        req_notification_warn "the project state in $(req_config_dir) is not available, so there are no variables to edit"
+        return 0
+    fi
+    if ! err=$(req_vars_create 2>&1); then
+        req_notification_warn "${err#req: error: }"
+        return 0
+    fi
+    file=$(req_vars_file "$REQ_PROJECT_ID")
+    abs=$(req_abs_path "$file")
+    req_nav_prompt_begin
+    req_edit_file "$file" vim nano; status=$?
+    (( status == 2 )) && req_vars_howto "$abs"
+    req_nav_prompt_end
+    case $status in
+        0) req_env_activate "${REQ_ENV:-default}" ;;
+        1) req_notification_warn "the editor failed; $abs is as the editor left it" ;;
+    esac
     return 0
 }

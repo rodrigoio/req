@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Edit the variables of the project from inside `req` with `:vars` (or `:var`), instead of looking for the
+  file in `~/.req` and creating it by hand. It opens `vars` in `$VISUAL`, `$EDITOR`, `vim` or `nano`, in that
+  order, making the file first with commented examples of the format (comments are never variables). When the
+  editor closes it loads the variables again and reports a bad line with its path and line. With no editor it
+  makes the file anyway and says where it is and how to fill it.
+
+## [0.5.1] - 2026-11-18
+
+### Fixed
+
+- Make the `env/` folder and the `default` environment file of a project when `req` opens it, instead of
+  leaving them for you to create by hand. A project you already had gets them the next time it is opened.
+- Offer to create the environment when `:env <name>` names one that does not exist (`Create environment
+  "<name>"? [Y/n]`), instead of telling you to create its file yourself. The new file is empty and private,
+  and the message says where it is.
+- Load the whole set of variables of an environment when you switch to it with `:env`, and report a broken
+  file right then (with its path and line) instead of only when a request runs. The status line says how
+  many variables were loaded.
+- Choose the environment from a menu: `:env` with no name lists the environments of the project, with the
+  one in use marked (up and down, Enter to switch, Esc to leave), instead of printing a line of text. Its
+  last row, `+ new environment`, asks for a name and creates the environment, switching to it.
+
 ## [0.5.0] - 2026-11-18
 
 ### Added
@@ -82,7 +106,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the verbose mode (`:v`).
 - Show the installed version with `req --version`.
 
-[unreleased]: https://github.com/rodrigoio/req/compare/v0.5.0...HEAD
+[unreleased]: https://github.com/rodrigoio/req/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/rodrigoio/req/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/rodrigoio/req/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rodrigoio/req/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/rodrigoio/req/compare/v0.2.0...v0.3.0
