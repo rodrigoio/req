@@ -7,6 +7,7 @@
 #
 # Keys: up/down move the selection, Enter opens/runs, Esc goes back (does nothing at the root),
 # Ctrl-L clears the screen, v shows the last response in a pager, ":" enters command mode (see cmd.sh).
+# The environment menu (:env) is a view of its own with its own keys: up/down, Enter, Esc.
 
 REQ_RAW_MAX_LINES=15    # lines of raw_data shown on the details screen
 REQ_PROBLEMS_MAX_LINES=10   # problems listed on the details of an invalid request
@@ -24,9 +25,12 @@ REQ_NAV_ROOT=""         # the menu root: the workspace of the project (set only 
 REQ_CUR_DIR=""          # directory being shown ("" = project root)
 REQ_STACK_DIR=()        # navigation stack: previous directories and selections
 REQ_STACK_SEL=()
-REQ_VIEW=list           # list | detail | help | config
+REQ_VIEW=list           # list | detail | help | config | env
 REQ_DETAIL_FILE=""
 REQ_DETAIL_VALID=0
+REQ_ENV_SEL=0           # selected row of the environment menu, an index of REQ_ENV_CHOICES
+REQ_ENV_TOP=0           # first row of the environment menu that is shown
+REQ_ENV_BACK=list       # the view the environment menu returns to (list or detail)
 
 REQ_ITEM_KIND=()        # d | r, per item of the current list
 REQ_ITEM_LABEL=()
@@ -385,6 +389,55 @@ req_nav_build_config() {
     REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value (:config -g key=value for the global file)   Press any key to go back${c_reset}")
 }
 
+# req_nav_build_env - builds REQ_SCREEN_LINES with the environment menu (:env): the environments
+# of REQ_ENV_CHOICES (req_env_choices), the one in use marked, and the selected row highlighted
+# like the list's. The rows scroll in a window sized like the list's.
+req_nav_build_env() {
+    local n=${#REQ_ENV_CHOICES[@]} cols rows visible i end width label inuse current=${REQ_ENV:-default}
+    local c_dim c_bold c_reset c_sel arrows hint
+    cols=$(req_term_cols); rows=$(req_term_rows)
+    c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
+    c_sel=$(req_color sel)
+    REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
+    REQ_SCREEN_LINES+=("${c_bold}req${c_reset} environments${c_dim}$(req_trunc "  $REQ_NAV_PROJECT  (in use: $current)" $(( cols - 16 )))${c_reset}")
+
+    visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+    (( n < visible )) && visible=$n
+    (( REQ_ENV_SEL < REQ_ENV_TOP )) && REQ_ENV_TOP=$REQ_ENV_SEL
+    (( REQ_ENV_SEL >= REQ_ENV_TOP + visible )) && REQ_ENV_TOP=$(( REQ_ENV_SEL - visible + 1 ))
+    end=$(( REQ_ENV_TOP + visible ))
+    width=$(( cols - 16 ))
+    for (( i = REQ_ENV_TOP; i < end; i++ )); do
+        label=$(req_trunc "${REQ_ENV_CHOICES[i]}" "$width")
+        inuse=""; [[ ${REQ_ENV_CHOICES[i]} == "$current" ]] && inuse=" (in use)"
+        if (( i == REQ_ENV_SEL )); then
+            REQ_SCREEN_LINES+=("${c_sel}$(req_marker) ${label}${inuse}${c_reset}")
+        else
+            REQ_SCREEN_LINES+=("  ${label}${c_dim}${inuse}${c_reset}")
+        fi
+    done
+
+    if req_utf8; then arrows="↑↓"; else arrows="up/down"; fi
+    hint="$arrows move   Enter choose   Esc cancel"
+    REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $(( cols - 1 )))${c_reset}")
+}
+
+# req_nav_env_key <key> - a key on the environment menu: up and down move the selection (wrapping
+# around), Enter switches to the environment under it and goes back to the view the menu was
+# opened from, Esc goes back changing nothing. Nothing else does anything here.
+req_nav_env_key() {
+    local n=${#REQ_ENV_CHOICES[@]}
+    case $1 in
+        up)    (( n > 0 )) && REQ_ENV_SEL=$(( (REQ_ENV_SEL + n - 1) % n )) ;;
+        down)  (( n > 0 )) && REQ_ENV_SEL=$(( (REQ_ENV_SEL + 1) % n )) ;;
+        esc)   REQ_VIEW=$REQ_ENV_BACK ;;
+        enter)
+            REQ_VIEW=$REQ_ENV_BACK
+            (( n > 0 )) && req_env_use "${REQ_ENV_CHOICES[REQ_ENV_SEL]}" now ;;
+    esac
+    return 0
+}
+
 # req_nav_detail_section <title> <width> [line...]
 # Appends the title and the given lines; does nothing if there are no lines.
 req_nav_detail_section() {
@@ -468,6 +521,10 @@ req_nav_handle() {
         REQ_VIEW=$REQ_HELP_BACK     # any key closes the help and the settings
         return 0
     fi
+    if [[ $REQ_VIEW == env ]]; then
+        req_nav_env_key "$key"      # the environment menu has its own keys, and ":" is not one of them
+        return 0
+    fi
     if [[ $key == : ]]; then
         REQ_CMD_ACTIVE=1; REQ_CMD_BUF=""
         REQ_NAV_DIRTY=0
@@ -518,6 +575,7 @@ req_nav_run() {
                 detail) req_nav_build_detail ;;
                 help)   req_nav_build_help ;;
                 config) req_nav_build_config ;;
+                env)    req_nav_build_env ;;
                 *)      req_nav_build_list ;;
             esac
             REQ_BASE_LINES=("${REQ_SCREEN_LINES[@]}"); REQ_BASE_EXTRA=$REQ_SCREEN_EXTRA

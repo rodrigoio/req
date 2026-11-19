@@ -10,7 +10,7 @@
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
-#   :env [name]   show the project's environments, or switch the session to one (offering to create it)
+#   :env [name]   a menu of the project's environments, or switch the session to <name> (offering to create it)
 #   :log [yes|no] switch the log of requests and responses for this session
 #   :v [yes|no]   switch the verbose mode (>> and <<) for this session
 #   :config [-g] [k=v] show the settings, or set one for the project or, with -g, globally (~/.req/config)
@@ -42,7 +42,7 @@ REQ_HELP_ROWS=(
     ":rm|remove the selected request or directory, with a y/N question first"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
-    ":env [name]|list the environments, or switch to one (asks to create a new one)"
+    ":env [name]|pick one from a menu, or jump to <name> (asks to create)"
     ":log [yes|no]|switch the log of requests and responses in this session (setting: log)"
     ":v [yes|no]|switch the verbose mode (>> sent, << received) in this session (REQ_VERBOSE)"
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
@@ -412,21 +412,24 @@ req_env_use() {
 }
 
 # req_cmd_env [name] - :env. With a name it switches the session to that environment, creating
-# it when it does not exist (req_env_use). Without one it lists the project's environments and
-# the one in use.
+# it when it does not exist (req_env_use). Without one it opens the environment menu (the view
+# env, see req_nav_build_env), with the selection on the one in use; the menu goes back to the view
+# it was opened from. With no project state there is no menu, only "default" can be used.
 req_cmd_env() {
-    local name=$1 current=${REQ_ENV:-default} list
+    local name=$1 current=${REQ_ENV:-default} i
     if [[ -n $name ]]; then
         req_env_use "$name"
         return 0
     fi
-    list=$(req_env_list | tr '\n' ' '); list=${list% }
-    if [[ -n $list ]]; then
-        REQ_STATUS="environments: ${list// /, } (in use: $current)"
-    elif [[ -n $REQ_PROJECT_ID ]]; then
-        REQ_STATUS="no environments yet (in use: $current); :env <name> creates one"
-    else
-        REQ_STATUS="no environments yet (in use: $current); the project state in $(req_config_dir) is not available"
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        req_notification_warn "the project state in $(req_config_dir) is not available, so only the default environment can be used (in use: $current)"
+        return 0
     fi
+    req_env_choices
+    REQ_ENV_SEL=0; REQ_ENV_TOP=0
+    for i in "${!REQ_ENV_CHOICES[@]}"; do
+        [[ ${REQ_ENV_CHOICES[i]} == "$current" ]] && REQ_ENV_SEL=$i
+    done
+    REQ_ENV_BACK=$REQ_VIEW; REQ_VIEW="env"
     return 0
 }
