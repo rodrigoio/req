@@ -16,10 +16,11 @@ req_cancelled() {
     return 1
 }
 
-# req_ask_name <default> [what] - asks for a slug; empty cancels (without default).
+# req_ask_name <default> [what] [example] - asks for a slug; empty cancels (without default). The
+# prompt gives an example of a slug, "list-users" unless another is given.
 req_ask_name() {
-    local def=${1-} what=${2:-Name} label
-    label="$what (a slug, e.g. list-users)"
+    local def=${1-} what=${2:-Name} example=${3:-list-users} label
+    label="$what (a slug, e.g. $example)"
     [[ -z $def ]] && label+=" - empty to cancel"
     while :; do
         req_prompt "$label" "$def" || return 1

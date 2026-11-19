@@ -10,7 +10,8 @@
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
-#   :env [name]   a menu of the project's environments, or switch the session to <name> (offering to create it)
+#   :env [name]   a menu of the project's environments (the last row creates one), or switch the session to <name>
+#                 (offering to create it when it does not exist)
 #   :log [yes|no] switch the log of requests and responses for this session
 #   :v [yes|no]   switch the verbose mode (>> and <<) for this session
 #   :config [-g] [k=v] show the settings, or set one for the project or, with -g, globally (~/.req/config)
@@ -42,7 +43,7 @@ REQ_HELP_ROWS=(
     ":rm|remove the selected request or directory, with a y/N question first"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
-    ":env [name]|pick one from a menu, or jump to <name> (asks to create)"
+    ":env [name]|menu to pick or create one, or jump to <name>"
     ":log [yes|no]|switch the log of requests and responses in this session (setting: log)"
     ":v [yes|no]|switch the verbose mode (>> sent, << received) in this session (REQ_VERBOSE)"
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"

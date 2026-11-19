@@ -1089,12 +1089,16 @@ test_env_menu() {
     assert_not_contains "dev (in use)" "$out" "only the one in use is marked"
     assert_contains "Enter choose" "$out" "the hint line says what the keys do"
     assert_contains "Esc cancel" "$out" "and how to leave"
-    assert_eq "5" "${#REQ_SCREEN_LINES[@]}" "the header, three rows and the hint"
+    assert_eq "6" "${#REQ_SCREEN_LINES[@]}" "the header, three environments, the new one and the hint"
+    assert_eq "  + new environment" "${REQ_SCREEN_LINES[4]}" "the last row is + new environment"
 
     req_nav_handle down; assert_eq "1" "$REQ_ENV_SEL" "down moves the selection"
     req_nav_handle down; req_nav_handle down
-    assert_eq "0" "$REQ_ENV_SEL" "and wraps around at the end"
-    req_nav_handle up; assert_eq "2" "$REQ_ENV_SEL" "up wraps around at the start"
+    assert_eq "3" "$REQ_ENV_SEL" "down reaches + new environment, after the last one"
+    req_nav_build_env; assert_eq "> + new environment" "${REQ_SCREEN_LINES[4]}" "which is highlighted like the others"
+    req_nav_handle down; assert_eq "0" "$REQ_ENV_SEL" "and wraps around at the end"
+    req_nav_handle up; assert_eq "3" "$REQ_ENV_SEL" "up wraps around at the start, to + new environment"
+    req_nav_handle up; assert_eq "2" "$REQ_ENV_SEL" "and goes on up from there"
     for k in v : x n; do req_nav_handle "$k"; done
     assert_eq "env" "$REQ_VIEW" "other keys do nothing: the menu stays"
     assert_eq "0" "$REQ_CMD_ACTIVE" "and : does not open command mode"
@@ -1153,6 +1157,102 @@ test_env_menu() {
     assert_contains "req environments" "$out" "the loop draws the menu"
     assert_contains "Enter choose" "$out" "with its hint"
     assert_contains "environment: dev" "$out" "and the choice is made through it"
+    REQ_VIEW=list; unset REQ_ENV
+}
+
+# env_menu_new_row - opens the environment menu and moves down to its last row, + new environment,
+# wherever the selection starts (it starts on the environment in use).
+env_menu_new_row() {
+    type_keys : e n v enter
+    while (( REQ_ENV_SEL < ${#REQ_ENV_CHOICES[@]} )); do req_nav_handle down; done
+}
+
+test_env_new() {
+    echo "nav: + new environment"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_project_activate "$PROJ" || return
+    local envdir statedir i before out
+    statedir=$(req_project_state_dir "$REQ_PROJECT_ID"); envdir=$statedir/env
+    rm -rf "$envdir" "$statedir/vars"; req_env_create default       # the central directory is shared with the other tests
+    printf 'k=kept-by-the-test\n' >"$envdir/dev"
+    unset REQ_ENV
+    REQ_INPUT_FD=3
+
+    type_keys : e n v enter; req_nav_handle up
+    assert_eq "2" "$REQ_ENV_SEL" "up from the top selects + new environment"
+    req_nav_handle enter 3<<<"new-test-env" >"$TMP/env-new-prompt.txt"
+    assert_contains "Environment name (a slug, e.g. staging) - empty to cancel:" "$(<"$TMP/env-new-prompt.txt")" "Enter on it asks for the name, with an example"
+    [[ -f $envdir/new-test-env ]]; assert_eq "0" "$?" "the environment is created"
+    assert_eq "600" "$(stat -c %a "$envdir/new-test-env")" "private"
+    assert_eq "new-test-env" "$REQ_ENV" "and switched to"
+    assert_eq "list" "$REQ_VIEW" "going back to the list"
+    assert_contains "environment: new-test-env, created in $envdir/new-test-env (no variables)" "$REQ_STATUS" "the status says where it is and that it is empty"
+    type_keys : e n v enter
+    assert_eq "default dev new-test-env" "${REQ_ENV_CHOICES[*]}" "the menu lists it now"
+    assert_eq "2" "$REQ_ENV_SEL" "and opens on it"
+    req_nav_handle esc
+
+    # A name that exists is only switched to.
+    env_menu_new_row
+    assert_eq "3" "$REQ_ENV_SEL" "(the new row, with one more environment now)"
+    req_nav_handle enter 3<<<"dev" >/dev/null
+    assert_eq "dev" "$REQ_ENV" "the name of an existing environment switches to it"
+    assert_eq "k=kept-by-the-test" "$(<"$envdir/dev")" "leaving it as it is"
+    assert_not_contains "created" "$REQ_STATUS" "and saying nothing about creating"
+    assert_contains "environment: dev (1 variable)" "$REQ_STATUS" "with its variables loaded"
+    env_menu_new_row
+    req_nav_handle enter 3<<<"default" >"$TMP/env-new-prompt.txt"
+    assert_contains "Environment name" "$(<"$TMP/env-new-prompt.txt")" "so does default, typed at the prompt"
+    assert_eq "default" "$REQ_ENV" "which is switched to"
+    assert_eq "list" "$REQ_VIEW" "going back to the list"
+
+    # Cancelling: an empty name or the end of the input leave everything as it was.
+    before=$(find "$envdir" -type f | wc -l | tr -d ' ')
+    env_menu_new_row
+    req_nav_handle enter 3<<<"" >"$TMP/env-new-prompt.txt"
+    assert_eq "env" "$REQ_VIEW" "an empty name cancels and the menu stays"
+    assert_contains "Cancelled." "$(<"$TMP/env-new-prompt.txt")" "saying so"
+    assert_eq "default" "$REQ_ENV" "no environment changes"
+    req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "env" "$REQ_VIEW" "so does the end of the input"
+    assert_eq "$before" "$(find "$envdir" -type f | wc -l | tr -d ' ')" "and nothing is created"
+    req_nav_handle esc
+
+    # An invalid name is asked again.
+    env_menu_new_row
+    req_nav_handle enter 3<<<$'Not A Slug\nvalid-after-invalid-test' >"$TMP/env-new-prompt.txt" 2>&1
+    assert_contains "invalid name" "$(<"$TMP/env-new-prompt.txt")" "a name that is not a slug is refused with the reason"
+    assert_eq "valid-after-invalid-test" "$REQ_ENV" "and asked again until it is one"
+    [[ ! -e $envdir/Not\ A\ Slug ]]; assert_eq "0" "$?" "nothing is created for the invalid one"
+
+    # From the details of a request: back to the details.
+    req_nav_handle enter                         # api
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "a request is open"
+    env_menu_new_row
+    req_nav_handle enter 3<<<"from-details-test" >/dev/null
+    assert_eq "detail" "$REQ_VIEW" "creating from the menu goes back to the details"
+    assert_eq "from-details-test" "$REQ_ENV" "with the new environment in use"
+    req_nav_handle esc
+
+    if (( EUID != 0 )); then       # root ignores the permissions
+        env_menu_new_row
+        chmod 500 "$envdir"
+        req_nav_handle enter 3<<<"locked-test-env" >/dev/null
+        chmod 700 "$envdir"
+        assert_eq "from-details-test" "$REQ_ENV" "a file that cannot be made changes nothing"
+        assert_contains "cannot create $envdir/locked-test-env" "$REQ_NOTIFICATION_WARN" "and the warning names it with the absolute path"
+    fi
+
+    # The loop shows the new row and takes the name through the prompt: keys and answer are one stream.
+    REQ_INPUT_FD=0; unset REQ_ENV
+    out=$({ keys : e n v enter up enter; printf 'loop-test-env\n'; } | req_nav_run "$PROJ/.req" 2>&1)
+    assert_contains "+ new environment" "$out" "the loop draws + new environment"
+    assert_contains "Environment name (a slug, e.g. staging)" "$out" "and asks for the name"
+    [[ -f $envdir/loop-test-env ]]; assert_eq "0" "$?" "which creates the environment"
+    assert_contains "proj @ loop-test-env" "$out" "and the header shows it"
     REQ_VIEW=list; unset REQ_ENV
 }
 
@@ -1676,6 +1776,7 @@ test_command_copy
 test_command_config
 test_command_env
 test_env_menu
+test_env_new
 test_command_env_load
 test_command_log_verbose
 test_command_remove

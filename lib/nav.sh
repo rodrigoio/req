@@ -31,6 +31,7 @@ REQ_DETAIL_VALID=0
 REQ_ENV_SEL=0           # selected row of the environment menu, an index of REQ_ENV_CHOICES
 REQ_ENV_TOP=0           # first row of the environment menu that is shown
 REQ_ENV_BACK=list       # the view the environment menu returns to (list or detail)
+REQ_ENV_NEW_LABEL="+ new environment"     # the last row of the environment menu
 
 REQ_ITEM_KIND=()        # d | r, per item of the current list
 REQ_ITEM_LABEL=()
@@ -390,10 +391,11 @@ req_nav_build_config() {
 }
 
 # req_nav_build_env - builds REQ_SCREEN_LINES with the environment menu (:env): the environments
-# of REQ_ENV_CHOICES (req_env_choices), the one in use marked, and the selected row highlighted
-# like the list's. The rows scroll in a window sized like the list's.
+# of REQ_ENV_CHOICES (req_env_choices), the one in use marked, and "+ new environment" as the last
+# row; the selected row is highlighted like the list's. The rows scroll in a window sized like
+# the list's.
 req_nav_build_env() {
-    local n=${#REQ_ENV_CHOICES[@]} cols rows visible i end width label inuse current=${REQ_ENV:-default}
+    local total=$(( ${#REQ_ENV_CHOICES[@]} + 1 )) cols rows visible i end width label inuse current=${REQ_ENV:-default}
     local c_dim c_bold c_reset c_sel arrows hint
     cols=$(req_term_cols); rows=$(req_term_rows)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
@@ -402,16 +404,23 @@ req_nav_build_env() {
     REQ_SCREEN_LINES+=("${c_bold}req${c_reset} environments${c_dim}$(req_trunc "  $REQ_NAV_PROJECT  (in use: $current)" $(( cols - 16 )))${c_reset}")
 
     visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
-    (( n < visible )) && visible=$n
+    (( total < visible )) && visible=$total
     (( REQ_ENV_SEL < REQ_ENV_TOP )) && REQ_ENV_TOP=$REQ_ENV_SEL
     (( REQ_ENV_SEL >= REQ_ENV_TOP + visible )) && REQ_ENV_TOP=$(( REQ_ENV_SEL - visible + 1 ))
     end=$(( REQ_ENV_TOP + visible ))
     width=$(( cols - 16 ))
     for (( i = REQ_ENV_TOP; i < end; i++ )); do
-        label=$(req_trunc "${REQ_ENV_CHOICES[i]}" "$width")
-        inuse=""; [[ ${REQ_ENV_CHOICES[i]} == "$current" ]] && inuse=" (in use)"
+        inuse=""
+        if (( i < total - 1 )); then
+            label=$(req_trunc "${REQ_ENV_CHOICES[i]}" "$width")
+            [[ ${REQ_ENV_CHOICES[i]} == "$current" ]] && inuse=" (in use)"
+        else
+            label=$REQ_ENV_NEW_LABEL
+        fi
         if (( i == REQ_ENV_SEL )); then
             REQ_SCREEN_LINES+=("${c_sel}$(req_marker) ${label}${inuse}${c_reset}")
+        elif (( i == total - 1 )); then
+            REQ_SCREEN_LINES+=("  ${c_dim}${label}${c_reset}")
         else
             REQ_SCREEN_LINES+=("  ${label}${c_dim}${inuse}${c_reset}")
         fi
@@ -423,19 +432,43 @@ req_nav_build_env() {
 }
 
 # req_nav_env_key <key> - a key on the environment menu: up and down move the selection (wrapping
-# around), Enter switches to the environment under it and goes back to the view the menu was
-# opened from, Esc goes back changing nothing. Nothing else does anything here.
+# around, the last row being "+ new environment"), Enter acts on the row under it (req_nav_env_enter),
+# Esc goes back to the view the menu was opened from changing nothing. Nothing else does anything here.
 req_nav_env_key() {
-    local n=${#REQ_ENV_CHOICES[@]}
+    local total=$(( ${#REQ_ENV_CHOICES[@]} + 1 ))
     case $1 in
-        up)    (( n > 0 )) && REQ_ENV_SEL=$(( (REQ_ENV_SEL + n - 1) % n )) ;;
-        down)  (( n > 0 )) && REQ_ENV_SEL=$(( (REQ_ENV_SEL + 1) % n )) ;;
+        up)    REQ_ENV_SEL=$(( (REQ_ENV_SEL + total - 1) % total )) ;;
+        down)  REQ_ENV_SEL=$(( (REQ_ENV_SEL + 1) % total )) ;;
         esc)   REQ_VIEW=$REQ_ENV_BACK ;;
-        enter)
-            REQ_VIEW=$REQ_ENV_BACK
-            (( n > 0 )) && req_env_use "${REQ_ENV_CHOICES[REQ_ENV_SEL]}" now ;;
+        enter) req_nav_env_enter ;;
     esac
     return 0
+}
+
+# req_nav_env_enter - Enter on the environment menu. On an environment: switches to it (req_env_use)
+# and goes back to the view the menu came from. On "+ new environment": req_nav_env_new.
+req_nav_env_enter() {
+    if (( REQ_ENV_SEL < ${#REQ_ENV_CHOICES[@]} )); then
+        REQ_VIEW=$REQ_ENV_BACK
+        req_env_use "${REQ_ENV_CHOICES[REQ_ENV_SEL]}" now
+    else
+        req_nav_env_new
+    fi
+}
+
+# req_nav_env_new - "+ new environment": asks for the name (a slug; empty or end of input cancels
+# and the menu stays as it was), then creates the environment if it does not exist, switches to it
+# and loads its variables (req_env_use ... now: the user has just asked for it), going back to the
+# view the menu came from. A name that already exists is only switched to.
+req_nav_env_new() {
+    req_nav_prompt_begin
+    if req_ask_name "" "Environment name" "staging"; then
+        REQ_VIEW=$REQ_ENV_BACK
+        req_env_use "$REQ_REPLY" now
+    else
+        req_cancelled
+    fi
+    req_nav_prompt_end
 }
 
 # req_nav_detail_section <title> <width> [line...]
