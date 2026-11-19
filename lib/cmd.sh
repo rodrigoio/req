@@ -44,6 +44,7 @@ REQ_HELP_ROWS=(
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
     ":env [name]|menu to pick or create one, or jump to <name>"
+    ":vars|edit the project variables in your editor (alias :var)"
     ":log [yes|no]|switch the log of requests and responses in this session (setting: log)"
     ":v [yes|no]|switch the verbose mode (>> sent, << received) in this session (REQ_VERBOSE)"
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
@@ -98,6 +99,7 @@ req_cmd_run() {
         e|edit)       req_cmd_edit ;;
         d|dup)        req_cmd_dup ;;
         env)          req_cmd_env "$arg" ;;
+        var|vars)     req_cmd_vars "$arg" ;;
         config)       req_cmd_config "$arg" ;;
         log)          req_cmd_log "$arg" ;;
         v|verbose)    req_cmd_verbose "$arg" ;;
@@ -432,5 +434,52 @@ req_cmd_env() {
         [[ ${REQ_ENV_CHOICES[i]} == "$current" ]] && REQ_ENV_SEL=$i
     done
     REQ_ENV_BACK=$REQ_VIEW; REQ_VIEW="env"
+    return 0
+}
+
+# shellcheck disable=SC2016  # the $-words in the quotes are text for the user, not expansions
+# req_vars_howto <abs path> - what the user sees when there is no editor for :vars: where the
+# project variables are and how to write them, whole and on their own lines, so the path can be
+# copied. It waits for Enter, between req_nav_prompt_begin and _end.
+req_vars_howto() {
+    printf 'No editor found (tried $VISUAL, $EDITOR, vim and nano).\n'
+    printf 'The variables of the project, shared by every environment, are in:\n\n  %s\n\n' "$1"
+    printf 'Add one per line, as key=value, for example:\n\n  host=https://api.example.com\n\n'
+    printf 'and use it in a request as ${host}. Set $EDITOR, or install vim or nano, to edit them with :vars.\n\n'
+    req_prompt "Press Enter to go back" "" || true
+}
+
+# req_cmd_vars [arg] - :var and :vars. Opens the project variables (projects/<id>/vars, shared by
+# every environment) in the editor of the user: $VISUAL, then $EDITOR, then vim, then nano. The
+# file is made first when it is missing (req_vars_create: private, with comment lines that show the
+# format), and edited in place. When the editor closes, the variables of the environment in use are
+# loaded again (req_env_activate), so a bad line is reported at once, with its path and line, and
+# the status says how many variables there are; nothing is fixed. With no editor at all the file is
+# still made and req_vars_howto says where it is and how to write the variables. An argument, or no
+# project state to keep the file in, is a warning. Always succeeds, like the commands.
+req_cmd_vars() {
+    local file abs err status
+    if [[ -n $1 ]]; then
+        req_notification_warn "usage: :vars (no argument: it opens the variables shared by every environment)"
+        return 0
+    fi
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        req_notification_warn "the project state in $(req_config_dir) is not available, so there are no variables to edit"
+        return 0
+    fi
+    if ! err=$(req_vars_create 2>&1); then
+        req_notification_warn "${err#req: error: }"
+        return 0
+    fi
+    file=$(req_vars_file "$REQ_PROJECT_ID")
+    abs=$(req_abs_path "$file")
+    req_nav_prompt_begin
+    req_edit_file "$file" vim nano; status=$?
+    (( status == 2 )) && req_vars_howto "$abs"
+    req_nav_prompt_end
+    case $status in
+        0) req_env_activate "${REQ_ENV:-default}" ;;
+        1) req_notification_warn "the editor failed; $abs is as the editor left it" ;;
+    esac
     return 0
 }

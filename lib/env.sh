@@ -246,16 +246,18 @@ req_env_create() {
     (umask 077; set -o noclobber; : >"$file") 2>/dev/null || { req_err "cannot create $abs"; return 1; }
 }
 
+# shellcheck disable=SC2016  # the ${key} and ${host} in the quotes are text for the user, not expansions
 # req_vars_template - prints the text a new project `vars` file starts with: comment lines that
 # show the format, which the loader ignores (req_kv_parse_line), so a new file has no variables.
+# Quoted strings and not a heredoc: the single-file build drops full-line comments, and a line
+# of a heredoc that starts with # would look like one to the test that checks the built file.
 req_vars_template() {
-    cat <<'EOF'
-# Variables of this project, shared by every environment (the file of an environment wins).
-# One per line, key=value: the key uses letters, digits and underscores; the value is the rest of the line.
-# Lines that start with # are comments. A request uses a variable as ${key}, for example ${host}/users.
-#
-# host=https://api.example.com
-EOF
+    printf '%s\n' \
+        '# Variables of this project, shared by every environment (the file of an environment wins).' \
+        '# One per line, key=value: the key uses letters, digits and underscores; the value is the rest of the line.' \
+        '# Lines that start with # are comments. A request uses a variable as ${key}, for example ${host}/users.' \
+        '#' \
+        '# host=https://api.example.com'
 }
 
 # req_vars_create [project id] - makes the project's `vars` file when it is missing: private

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Edit the variables of the project from inside `req` with `:vars` (or `:var`), instead of looking for the
+  file in `~/.req` and creating it by hand. It opens `vars` in `$VISUAL`, `$EDITOR`, `vim` or `nano`, in that
+  order, making the file first with commented examples of the format (comments are never variables). When the
+  editor closes it loads the variables again and reports a bad line with its path and line. With no editor it
+  makes the file anyway and says where it is and how to fill it.
+
 ## [0.5.1] - 2026-11-18
 
 ### Fixed

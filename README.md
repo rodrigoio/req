@@ -97,6 +97,7 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 | `:cp [name]` | copy the directory (with everything inside, symbolic links copied as links) or the request under the cursor, or the one open on the details screen. It asks for the new name (default `<name>-copy`) and does not open the edit menu |
 | `:rm` | remove the selected request (or the one open on the details screen), after a `[y/N]` confirmation; Enter keeps it. It also works on an invalid request. On a directory it removes the directory and everything inside it, after a red warning with the full path and the number of files and subdirectories and the same `[y/N]` question. Only directories inside the workspace are ever deleted, and never a symbolic link |
 | `:env [name]` | without an argument, opens a menu of the project's environments to choose from, with a last row to create a new one; with a name, switches the session to it, asking to create it when it does not exist (see "Environments and variables") |
+| `:var` / `:vars` | opens the project's variables (`vars`, shared by every environment) in your editor: `$VISUAL`, then `$EDITOR`, then `vim`, then `nano`. It makes the file first when it does not exist, and when the editor closes it loads the variables again and reports a bad line (see "Editing the variables"). With no editor it makes the file anyway and says where it is and how to write the variables |
 | `:log [yes\|no]` | switch the log of requests and responses for this session (see "Log") |
 | `:v [yes\|no]` | switch the verbose mode for this session (alias `:verbose`; see "Verbose") |
 | `:config [-g] [key=value]` | without an argument, shows the settings: every known key with its effective value, its default and `project` when the project sets it. With `key=value` (for example `:config time_stats=no`) it checks the key and the value and writes them to the project's file; with `-g` (`:config -g time_stats=no`) it writes the global `~/.req/config` instead. An unknown key or a wrong value is explained and nothing is written |
@@ -128,7 +129,7 @@ lib/store.sh   request persistence and the .req project file
 lib/http.sh    curl command building, execution, display, timing profile and the pager view of the last response
 lib/nav.sh     interactive menu: list, details and keys
 lib/notification.sh  the bars at the top of the menu (persistent notifications and the warning)
-lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :env :config :h :q) and its help table
+lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :env :vars :config :h :q) and its help table
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
 lib/log.sh     the project's log of the requests sent (`req.log`) and `req log`, which follows it
 lib/config.sh  settings (global `~/.req/config` and the project's `config`) and their table of keys
@@ -217,7 +218,7 @@ Everything `req` keeps outside your repository lives in `~/.req` (or `REQ_CONFIG
     req.log               the log of requests and responses (only with log=yes)
 ```
 
-`<id>` is a slug made from the folder's name (`my-api`, then `my-api-2` for another folder with the same name). Every file is `key=value`, one per line, with blank lines and `#` comments allowed. `req` creates `project`, `cursor`, the `env/` folder and the `default` environment (`env/default`, empty) itself, when it opens the project; you create `vars` (or `:config` makes `config`) when you need them.
+`<id>` is a slug made from the folder's name (`my-api`, then `my-api-2` for another folder with the same name). Every file is `key=value`, one per line, with blank lines and `#` comments allowed. `req` creates `project`, `cursor`, the `env/` folder and the `default` environment (`env/default`, empty) itself, when it opens the project; `:vars` makes `vars` when you edit it for the first time (and `:config` makes `config`).
 
 ## Verbose
 
@@ -258,7 +259,19 @@ url=https://api.example.com
 token=abc123
 ```
 
-`req` makes the `env/` folder and the `default` environment itself when it opens the project, and `:env` makes the others (see "Choosing the environment"); you only fill the files with `key=value` lines. `vars` is yours to create. Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. The environment wins over the project variables. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
+`req` makes the `env/` folder and the `default` environment itself when it opens the project, and `:env` makes the others (see "Choosing the environment"); you only fill the files with `key=value` lines. `:vars` opens `vars` for you (see "Editing the variables"); the files of the environments you edit with your own editor. Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. The environment wins over the project variables. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
+
+### Editing the variables
+
+`:vars` (or `:var`, the same command) opens the variables of the project, the `vars` file that every environment shares, in your editor, so there is no need to know where it is:
+
+1. the editor is `$VISUAL`, then `$EDITOR` (both may carry arguments, as in `code -w`), then `vim`, then `nano`;
+2. when `vars` does not exist yet, `req` makes it first, private (0600), with a few comment lines that show the format, for example `# host=https://api.example.com`. Remove the `#` and it is a variable, used in a request as `${host}`. Comment lines (`#` as the first character of the line, blank space before it allowed) are never variables, so the examples cost nothing. A `#` after a value is part of the value: there are no comments at the end of a line;
+3. the file is edited where it is, not through a copy, and the editor takes over the terminal until it closes;
+4. when the editor closes, `req` loads the variables of the environment in use again and says how many there are (`environment: dev (3 variables)`). A bad line is reported at once, with the path and the line, and the file is never fixed for you;
+5. with no editor at all, `req` still makes the file and shows where it is and how to write the variables (`key=value`, one per line, for example `host=https://api.example.com`), so you can fill it any other way. Set `$EDITOR`, or install `vim` or `nano`, to use `:vars`.
+
+`:vars` takes no argument and does not edit the files of the environments (`env/<env>`); those are filled by hand, with the path `:env` shows when it makes one. It needs a project whose state `req` can keep in `~/.req`; without one it warns.
 
 ### Placeholders
 
