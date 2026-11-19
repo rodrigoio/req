@@ -66,12 +66,21 @@ req_check_deps() {
 
 req_editor() {
     local e
+    local -a candidates=("$@")
+    (( $# )) || candidates=(vim vi)
     if [[ -n ${VISUAL-} ]]; then printf '%s' "$VISUAL"; return 0; fi
     if [[ -n ${EDITOR-} ]]; then printf '%s' "$EDITOR"; return 0; fi
-    for e in vim vi; do
+    for e in "${candidates[@]}"; do
         if command -v "$e" >/dev/null 2>&1; then printf '%s' "$e"; return 0; fi
     done
     return 1
+}
+
+req_edit_file() {
+    local file=$1 editor
+    shift
+    editor=$(req_editor "$@") || return 2
+    sh -c "$editor \"\$@\"" req-editor "$file" || return 1
 }
 
 REQ_EDIT_TEXT=""    # result of req_edit_text
@@ -1944,6 +1953,7 @@ REQ_HELP_ROWS=(
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
     ":env [name]|menu to pick or create one, or jump to <name>"
+    ":vars|edit the project variables in your editor (alias :var)"
     ":log [yes|no]|switch the log of requests and responses in this session (setting: log)"
     ":v [yes|no]|switch the verbose mode (>> sent, << received) in this session (REQ_VERBOSE)"
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
@@ -1996,6 +2006,7 @@ req_cmd_run() {
         e|edit)       req_cmd_edit ;;
         d|dup)        req_cmd_dup ;;
         env)          req_cmd_env "$arg" ;;
+        var|vars)     req_cmd_vars "$arg" ;;
         config)       req_cmd_config "$arg" ;;
         log)          req_cmd_log "$arg" ;;
         v|verbose)    req_cmd_verbose "$arg" ;;
@@ -2293,6 +2304,41 @@ req_cmd_env() {
     return 0
 }
 
+req_vars_howto() {
+    printf 'No editor found (tried $VISUAL, $EDITOR, vim and nano).\n'
+    printf 'The variables of the project, shared by every environment, are in:\n\n  %s\n\n' "$1"
+    printf 'Add one per line, as key=value, for example:\n\n  host=https://api.example.com\n\n'
+    printf 'and use it in a request as ${host}. Set $EDITOR, or install vim or nano, to edit them with :vars.\n\n'
+    req_prompt "Press Enter to go back" "" || true
+}
+
+req_cmd_vars() {
+    local file abs err status
+    if [[ -n $1 ]]; then
+        req_notification_warn "usage: :vars (no argument: it opens the variables shared by every environment)"
+        return 0
+    fi
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        req_notification_warn "the project state in $(req_config_dir) is not available, so there are no variables to edit"
+        return 0
+    fi
+    if ! err=$(req_vars_create 2>&1); then
+        req_notification_warn "${err#req: error: }"
+        return 0
+    fi
+    file=$(req_vars_file "$REQ_PROJECT_ID")
+    abs=$(req_abs_path "$file")
+    req_nav_prompt_begin
+    req_edit_file "$file" vim nano; status=$?
+    (( status == 2 )) && req_vars_howto "$abs"
+    req_nav_prompt_end
+    case $status in
+        0) req_env_activate "${REQ_ENV:-default}" ;;
+        1) req_notification_warn "the editor failed; $abs is as the editor left it" ;;
+    esac
+    return 0
+}
+
 # ==== lib/env.sh
 
 declare -gA REQ_VARS=()      # variables of the last loaded environment (key -> value)
@@ -2476,6 +2522,28 @@ req_env_create() {
     [[ -f $file ]] && return 0
     [[ ! -e $file && ! -L $file ]] || { req_err "$abs exists and is not a file"; return 1; }
     (umask 077; set -o noclobber; : >"$file") 2>/dev/null || { req_err "cannot create $abs"; return 1; }
+}
+
+req_vars_template() {
+    printf '%s\n' \
+        '# Variables of this project, shared by every environment (the file of an environment wins).' \
+        '# One per line, key=value: the key uses letters, digits and underscores; the value is the rest of the line.' \
+        '# Lines that start with # are comments. A request uses a variable as ${key}, for example ${host}/users.' \
+        '#' \
+        '# host=https://api.example.com' \
+        ''
+}
+
+req_vars_create() {
+    local id=${1-$REQ_PROJECT_ID} file abs
+    [[ -n $id ]] || { req_err "no project is open, so there are no variables to make"; return 1; }
+    req_valid_name "$id" || { req_err "invalid project id: \"$id\""; return 1; }
+    file=$(req_vars_file "$id")
+    abs=$(req_abs_path "$file")
+    [[ -f $file ]] && return 0
+    [[ ! -e $file && ! -L $file ]] || { req_err "$abs exists and is not a file"; return 1; }
+    (umask 077; mkdir -p "${file%/*}"; set -o noclobber; req_vars_template >"$file") 2>/dev/null ||
+        { req_err "cannot create $abs"; return 1; }
 }
 
 declare -ga REQ_ENV_CHOICES=()      # the environments to choose from (req_env_choices)
