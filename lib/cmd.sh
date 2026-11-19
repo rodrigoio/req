@@ -10,7 +10,7 @@
 #   :e            edit the selected request (alias :edit)
 #   :d            duplicate the selected request and edit the copy (alias :dup)
 #   :q            quit without asking (alias :quit)
-#   :env [name]   show the project's environments, or switch the session to one
+#   :env [name]   show the project's environments, or switch the session to one (offering to create it)
 #   :log [yes|no] switch the log of requests and responses for this session
 #   :v [yes|no]   switch the verbose mode (>> and <<) for this session
 #   :config [-g] [k=v] show the settings, or set one for the project or, with -g, globally (~/.req/config)
@@ -42,7 +42,7 @@ REQ_HELP_ROWS=(
     ":rm|remove the selected request or directory, with a y/N question first"
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
-    ":env [name]|show the environments of the project, or switch to one (REQ_ENV)"
+    ":env [name]|list the environments, or switch to one (asks to create a new one)"
     ":log [yes|no]|switch the log of requests and responses in this session (setting: log)"
     ":v [yes|no]|switch the verbose mode (>> sent, << received) in this session (REQ_VERBOSE)"
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
@@ -343,35 +343,62 @@ req_cmd_verbose() {
 }
 
 # shellcheck disable=SC2034  # REQ_ENV is read by req_run_request and the header
-# req_cmd_env [name] - :env. Without an argument it lists the project's environments and
-# the one in use. With a name it switches the session to that environment (REQ_ENV, shown
-# in the header and used by the next request) when the project has a file for it
-# ("default" always works); otherwise it says which ones exist and where to create it.
-req_cmd_env() {
-    local name=$1 current=${REQ_ENV:-default} list msg
-    list=$(req_env_list | tr '\n' ' '); list=${list% }
-    if [[ -z $name ]]; then
-        if [[ -n $list ]]; then
-            REQ_STATUS="environments: ${list// /, } (in use: $current)"
-        else
-            REQ_STATUS="no environments yet (in use: $current); add a file in $(req_project_state_dir "${REQ_PROJECT_ID:-<project>}" env)"
-        fi
-        return 0
-    fi
+# req_env_use <name> [ask|now] - switches the session to an environment (REQ_ENV, shown in the
+# header and used by the next request). An environment of the project, or "default", is switched
+# to at once. One that does not exist yet is created: with "ask" (the default) after a [Y/n]
+# question, with "now" straight away (the caller has asked already). The new file is empty and
+# private, and the status says where it is. A name that is not a slug, or no project state to
+# keep the file in, is a warning and changes nothing; so is answering no or a file that cannot
+# be made. Always succeeds, like the commands.
+req_env_use() {
+    local name=$1 mode=${2:-ask} file err
     if ! req_valid_name "$name"; then
         req_notification_warn "invalid environment name \"$name\" (use a slug: lowercase letters, digits and hyphens)"
-    elif ! req_env_exists "$name"; then
-        msg="unknown environment \"$name\""
-        [[ -z $list ]] || msg+=" (known: ${list// /, })"
-        if [[ -n $REQ_PROJECT_ID ]]; then
-            msg+="; create it with a file at $(req_env_file "$REQ_PROJECT_ID" "$name")"
-        else
-            msg+="; the project state in $(req_config_dir) is not available"
-        fi
-        req_notification_warn "$msg"
-    else
+        return 0
+    fi
+    if req_env_exists "$name"; then
         REQ_ENV=$name
         REQ_STATUS="environment: $name"
+        return 0
+    fi
+    if [[ -z $REQ_PROJECT_ID ]]; then
+        req_notification_warn "unknown environment \"$name\"; the project state in $(req_config_dir) is not available"
+        return 0
+    fi
+    if [[ $mode == ask ]]; then
+        req_nav_prompt_begin
+        req_confirm "Create environment \"$name\"?" y || {
+            req_nav_prompt_end
+            REQ_STATUS="environment \"$name\" not created (in use: ${REQ_ENV:-default})"
+            return 0; }
+        req_nav_prompt_end
+    fi
+    file=$(req_env_file "$REQ_PROJECT_ID" "$name")
+    if ! err=$(req_env_create "$name" 2>&1); then
+        req_notification_warn "${err#req: error: }"
+        return 0
+    fi
+    REQ_ENV=$name
+    REQ_STATUS="environment: $name, created in $(req_abs_path "$file")"
+    return 0
+}
+
+# req_cmd_env [name] - :env. With a name it switches the session to that environment, creating
+# it when it does not exist (req_env_use). Without one it lists the project's environments and
+# the one in use.
+req_cmd_env() {
+    local name=$1 current=${REQ_ENV:-default} list
+    if [[ -n $name ]]; then
+        req_env_use "$name"
+        return 0
+    fi
+    list=$(req_env_list | tr '\n' ' '); list=${list% }
+    if [[ -n $list ]]; then
+        REQ_STATUS="environments: ${list// /, } (in use: $current)"
+    elif [[ -n $REQ_PROJECT_ID ]]; then
+        REQ_STATUS="no environments yet (in use: $current); :env <name> creates one"
+    else
+        REQ_STATUS="no environments yet (in use: $current); the project state in $(req_config_dir) is not available"
     fi
     return 0
 }
