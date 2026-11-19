@@ -234,6 +234,89 @@ test_env_list() {
     REQ_PROJECT_ID=""
 }
 
+test_env_create() {
+    echo "env: creating environments"
+    local cfg=$REQ_CONFIG_DIR out dir f empty_loads=0
+    mkdir -p "$cfg/projects/creator"
+    dir=$cfg/projects/creator/env
+
+    req_env_ensure_dir creator; assert_eq "0" "$?" "the folder of the environments is made"
+    [[ -d $dir ]]; assert_eq "0" "$?" "and it is there"
+    assert_eq "700" "$(stat -c %a "$dir")" "private, like the rest of the central directory"
+    req_env_ensure_dir creator; assert_eq "0" "$?" "making it again is not an error"
+    out=$(req_env_ensure_dir 2>&1); assert_eq "1" "$?" "without a project there is no folder"
+    assert_contains "no project is open" "$out" "and the error says why"
+    out=$(req_env_ensure_dir "Bad_Id" 2>&1); assert_eq "1" "$?" "a project id that is not a slug is refused"
+    assert_contains 'invalid project id: "Bad_Id"' "$out" "and named"
+
+    rmdir "$dir"
+    req_env_create staging-test-env creator; assert_eq "0" "$?" "an environment is created"
+    [[ -d $dir && -f $dir/staging-test-env ]]; assert_eq "0" "$?" "the folder is made with it when it is missing"
+    assert_eq "600" "$(stat -c %a "$dir/staging-test-env")" "the file is private"
+    assert_eq "700" "$(stat -c %a "$dir")" "and so is the folder"
+    assert_eq "0" "$(wc -c <"$dir/staging-test-env" | tr -d ' ')" "the file is empty"
+    req_vars_load staging-test-env creator && empty_loads=1
+    assert_eq "1" "$empty_loads" "an empty environment file is valid for the loader"
+
+    printf 'token=kept\n' >"$dir/staging-test-env"
+    req_env_create staging-test-env creator; assert_eq "0" "$?" "creating one that exists is not an error"
+    assert_eq "token=kept" "$(<"$dir/staging-test-env")" "and leaves its content alone"
+    chmod 640 "$dir/staging-test-env"
+    req_env_create staging-test-env creator
+    assert_eq "640" "$(stat -c %a "$dir/staging-test-env")" "and its mode"
+
+    REQ_PROJECT_ID=creator
+    req_env_create default-by-id-test; assert_eq "0" "$?" "the project defaults to REQ_PROJECT_ID"
+    [[ -f $dir/default-by-id-test ]]; assert_eq "0" "$?" "and the file is made in it"
+    REQ_PROJECT_ID=""
+
+    out=$(req_env_create "../invalid-name-test" creator 2>&1); assert_eq "1" "$?" "a name that is not a slug is refused"
+    assert_contains 'invalid environment name: "../invalid-name-test"' "$out" "and named in the error"
+    [[ ! -e $cfg/projects/creator/invalid-name-test ]]; assert_eq "0" "$?" "and nothing is written outside the folder"
+    out=$(req_env_create staging-test-env 2>&1); assert_eq "1" "$?" "without a project nothing is created"
+
+    mkdir "$dir/folder-in-the-way-test"
+    out=$(req_env_create folder-in-the-way-test creator 2>&1); assert_eq "1" "$?" "a folder where the file goes is refused"
+    assert_contains "$dir/folder-in-the-way-test exists and is not a file" "$out" "with the absolute path"
+    ln -s "$TMP/nowhere" "$dir/dangling-link-test"
+    out=$(req_env_create dangling-link-test creator 2>&1); assert_eq "1" "$?" "so is a link, even one that points nowhere"
+    [[ ! -e $TMP/nowhere ]]; assert_eq "0" "$?" "and the target of the link is not created"
+
+    if (( EUID != 0 )); then       # root ignores the permissions
+        mkdir -p "$cfg/projects/locked-test"; chmod 500 "$cfg/projects/locked-test"
+        out=$(req_env_create env-in-locked-test locked-test 2>&1); f=$?
+        chmod 700 "$cfg/projects/locked-test"
+        assert_eq "1" "$f" "a folder that cannot be written fails"
+        assert_contains "req: error: cannot create $cfg/projects/locked-test/env" "$out" "with the absolute path of the folder"
+        chmod 500 "$dir"
+        out=$(req_env_create read-only-folder-test creator 2>&1); f=$?
+        chmod 700 "$dir"
+        assert_eq "1" "$f" "an environment folder that cannot be written fails"
+        assert_contains "cannot create $dir/read-only-folder-test" "$out" "naming the file"
+    fi
+}
+
+test_env_choices() {
+    echo "env: the choices of the environment menu"
+    local cfg=$REQ_CONFIG_DIR dir
+    dir=$cfg/projects/chooser/env
+    req_env_choices chooser; assert_eq "default" "${REQ_ENV_CHOICES[*]}" "a project with no environment has only default"
+    assert_eq "1" "${#REQ_ENV_CHOICES[@]}" "which is always offered, with or without a file"
+    req_env_choices ""; assert_eq "default" "${REQ_ENV_CHOICES[*]}" "so does no project at all"
+
+    mkdir -p "$dir"; : >"$dir/prod"; : >"$dir/dev"; : >"$dir/Bad_Name"
+    req_env_choices chooser
+    assert_eq "default dev prod" "${REQ_ENV_CHOICES[*]}" "default comes first, then the files in order; a name that is not a slug is left out"
+    : >"$dir/default"; : >"$dir/aaa"
+    req_env_choices chooser
+    assert_eq "default aaa dev prod" "${REQ_ENV_CHOICES[*]}" "default is first and listed once even with a file of its own"
+    REQ_PROJECT_ID=chooser; req_env_choices
+    assert_eq "default aaa dev prod" "${REQ_ENV_CHOICES[*]}" "the project defaults to REQ_PROJECT_ID"
+    REQ_PROJECT_ID=""
+    req_env_choices chooser; req_env_choices ""
+    assert_eq "default" "${REQ_ENV_CHOICES[*]}" "the list of the last call replaces the one before"
+}
+
 test_paths
 test_load
 test_invalid
@@ -242,4 +325,6 @@ test_resolve
 test_subst
 test_subst_json
 test_env_list
+test_env_create
+test_env_choices
 test_summary
