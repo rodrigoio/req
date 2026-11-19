@@ -217,7 +217,7 @@ Everything `req` keeps outside your repository lives in `~/.req` (or `REQ_CONFIG
     req.log               the log of requests and responses (only with log=yes)
 ```
 
-`<id>` is a slug made from the folder's name (`my-api`, then `my-api-2` for another folder with the same name). Every file is `key=value`, one per line, with blank lines and `#` comments allowed. `req` creates `project` and `cursor` itself; you create `config`, `vars` and `env/<env>` (or `:config` does it) when you need them.
+`<id>` is a slug made from the folder's name (`my-api`, then `my-api-2` for another folder with the same name). Every file is `key=value`, one per line, with blank lines and `#` comments allowed. `req` creates `project`, `cursor`, the `env/` folder and the `default` environment (`env/default`, empty) itself, when it opens the project; you create `vars` (or `:config` makes `config`) when you need them.
 
 ## Verbose
 

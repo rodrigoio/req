@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Make the `env/` folder and the `default` environment file of a project when `req` opens it, instead of
+  leaving them for you to create by hand. A project you already had gets them the next time it is opened.
+
 ## [0.5.0] - 2026-11-18
 
 ### Added

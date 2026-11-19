@@ -229,9 +229,13 @@ REQ_PROJECT_ID=""       # id of the project opened by req_project_activate
 
 # shellcheck disable=SC2034  # REQ_PROJECT_ID is read by the environment and cursor code
 # req_project_activate <project dir> - registers the project in ~/.req when it is not
-# there yet and makes it the one in use. Sets REQ_PROJECT_ID. When ~/.req cannot be
-# written, one warning is printed, REQ_PROJECT_ID stays empty, nothing else is affected
-# (the menu works without saved state) and the status is 1.
+# there yet and makes it the one in use. Sets REQ_PROJECT_ID. It also makes sure the project
+# has its environment folder and the "default" environment (req_env_create), so the user never
+# has to make them: it runs at every opening and leaves what is there alone, so projects
+# registered by older versions get them too; if that fails it is one more warning and the
+# project is still active. When ~/.req cannot be written, one warning is printed,
+# REQ_PROJECT_ID stays empty, nothing else is affected (the menu works without saved state)
+# and the status is 1.
 req_project_activate() {
     local dir=$1 id problem
     REQ_PROJECT_ID=""
@@ -248,6 +252,8 @@ req_project_activate() {
         return 1
     fi
     REQ_PROJECT_ID=$id
+    problem=$(req_env_create default "$id" 2>&1) || req_warn "${problem#req: error: }"
+    return 0
 }
 
 # req_cursor_file <id> - the file where a project keeps the last position of its menu.
