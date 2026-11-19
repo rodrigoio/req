@@ -309,6 +309,7 @@ test_vars_create() {
     assert_eq "600" "$(stat -c %a "$file")" "private, since it may hold credentials"
     assert_eq "$(req_vars_template)" "$(<"$file")" "it starts with the template"
     req_kv_check "$file"; assert_eq "0" "$?" "which is a valid file"
+    assert_eq "" "$(tail -n 1 "$file")" "and ends with a blank line, so a line opened after it in vim does not continue a comment"
     req_vars_load default varsmaker
     assert_eq "0" "${#REQ_VARS[@]}" "its comment lines are not variables, the commented example included"
     printf 'host=https://dev.example.com\n' >>"$file"

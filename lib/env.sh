@@ -249,6 +249,8 @@ req_env_create() {
 # shellcheck disable=SC2016  # the ${key} and ${host} in the quotes are text for the user, not expansions
 # req_vars_template - prints the text a new project `vars` file starts with: comment lines that
 # show the format, which the loader ignores (req_kv_parse_line), so a new file has no variables.
+# It ends with a blank line: in vim a line opened right after a comment line (`o`) continues the comment,
+# so a variable typed there would be a comment without the user noticing.
 # Quoted strings and not a heredoc: the single-file build drops full-line comments, and a line
 # of a heredoc that starts with # would look like one to the test that checks the built file.
 req_vars_template() {
@@ -257,7 +259,8 @@ req_vars_template() {
         '# One per line, key=value: the key uses letters, digits and underscores; the value is the rest of the line.' \
         '# Lines that start with # are comments. A request uses a variable as ${key}, for example ${host}/users.' \
         '#' \
-        '# host=https://api.example.com'
+        '# host=https://api.example.com' \
+        ''
 }
 
 # req_vars_create [project id] - makes the project's `vars` file when it is missing: private
