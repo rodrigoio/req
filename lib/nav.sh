@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # nav.sh - interactive navigation: directory and request menu, details screen.
 #
-# The menu is redrawn in place (the cursor moves up and erases the previous
-# block) without clearing the screen. A request's result stays visible and the
-# menu is redrawn right below it. Outside a terminal nothing is erased (used by tests).
-#
-# Keys: up/down move the selection, Enter opens/runs, Esc goes back (does nothing at the root),
-# Ctrl-L clears the screen, v shows the last response in a pager, ":" enters command mode (see cmd.sh).
-# The environment menu (:env) is a view of its own with its own keys: up/down, Enter, Esc.
+# The menu is redrawn in place (the cursor moves up and erases the previous block) without clearing the screen: a
+# request's result stays visible and the menu is redrawn right below it. Outside a terminal nothing is erased (tests).
+# Keys: up/down move the selection, Enter opens/runs, Esc goes back (nothing at the root), Ctrl-L clears the screen, v
+# shows the last response in a pager, ":" enters command mode (cmd.sh). The environment menu (:env) is a view of its
+# own with its own keys: up/down, Enter, Esc.
 
 REQ_RAW_MAX_LINES=15    # lines of raw_data shown on the details screen
 REQ_PROBLEMS_MAX_LINES=10   # problems listed on the details of an invalid request
@@ -66,7 +64,6 @@ req_read_key() {
 
 # --- screen ------------------------------------------------------------------
 
-# req_screen_erase - erases the last drawn block (terminal only).
 req_screen_erase() {
     if [[ -t 1 && $REQ_SCREEN_DRAWN -gt 0 ]]; then
         printf '\033[%dA\r\033[J' "$REQ_SCREEN_DRAWN"
@@ -74,17 +71,15 @@ req_screen_erase() {
     REQ_SCREEN_DRAWN=0
 }
 
-# req_nav_clear_screen - Ctrl-L: clears the terminal (cursor to the top, visible screen cleared; the
-# scrollback is kept, as Ctrl-L does in a shell), so the results of the requests already made go away
-# and the next draw puts the menu at the top. REQ_SCREEN_DRAWN goes to 0 because the rows the erase
-# would move up over are gone. Outside a terminal nothing is printed, like the erase.
+# req_nav_clear_screen - Ctrl-L: clears the visible screen (the scrollback is kept, as in a shell), so the
+# next draw puts the menu at the top. REQ_SCREEN_DRAWN goes to 0: the rows the erase would move up over are
+# gone. Nothing is printed outside a terminal.
 req_nav_clear_screen() {
     [[ -t 1 ]] && printf '\033[H\033[2J'
     REQ_SCREEN_DRAWN=0
     return 0
 }
 
-# req_screen_draw - replaces the previous block with REQ_SCREEN_LINES.
 req_screen_draw() {
     req_screen_erase
     printf '%s\n' "${REQ_SCREEN_LINES[@]}"
@@ -92,8 +87,8 @@ req_screen_draw() {
     return 0
 }
 
-# req_screen_add_long <text> - appends a line that is never truncated (so it can be
-# copied whole). If it wraps, the extra terminal rows are counted for the redraw.
+# req_screen_add_long <text> - appends a line that is never truncated (so it can be copied whole); the extra
+# terminal rows of a wrap are counted for the redraw.
 req_screen_add_long() {
     local cols
     cols=$(req_term_cols)
@@ -102,27 +97,23 @@ req_screen_add_long() {
     return 0
 }
 
-# req_marker - selection indicator.
 req_marker() {
     if req_utf8; then printf '▸'; else printf '>'; fi
 }
 
 # --- data -----------------------------------------------------------------
 
-# req_nav_rel <path> - path relative to the menu root (the workspace), when possible.
 req_nav_rel() {
     printf '%s' "${1#"$REQ_NAV_ROOT"/}"
 }
 
-# req_nav_root <.req file> - decides the directory the menu starts in and never leaves:
-# the project's workspace (REQ_NAV_ROOT). The single place that knows where the root is.
-# Fails, with the reason already printed, when the workspace is not valid.
+# req_nav_root <.req file> - sets REQ_NAV_ROOT, the workspace: the directory the menu starts in and never
+# leaves, and the single place that knows where the root is. Fails, with the reason already printed, when
+# the workspace is not valid.
 req_nav_root() {
     REQ_NAV_ROOT=$(req_project_workspace "$1") || { REQ_NAV_ROOT=""; return 1; }
 }
 
-# req_nav_load - loads the items of the current directory; at the root ("") they are
-# the items of the workspace: its directories and its requests.
 req_nav_load() {
     local kind a b c
     REQ_ITEM_KIND=(); REQ_ITEM_LABEL=(); REQ_ITEM_METHOD=(); REQ_ITEM_PATH=()
@@ -138,7 +129,6 @@ req_nav_load() {
     REQ_TOP=0
 }
 
-# req_nav_init <.req file> - sets the state up at the project root.
 req_nav_init() {
     local pfile=$1
     [[ -f $pfile ]] || { req_err "project file not found: $pfile"; return 1; }
@@ -151,9 +141,9 @@ req_nav_init() {
     req_nav_load
 }
 
-# req_nav_save_cursor - saves where the menu is (directory and selected item, relative
-# to the workspace) in the project's cursor file. Does nothing without a registered
-# project; a write that fails is ignored, since the cursor is only a convenience.
+# req_nav_save_cursor - saves the menu position (directory and selected item, relative to the workspace) in
+# the project's cursor file. Nothing without a registered project; a write that fails is ignored, the cursor
+# is only a convenience.
 req_nav_save_cursor() {
     local dir="" item=""
     [[ -n $REQ_PROJECT_ID && -n $REQ_NAV_ROOT ]] || return 0
@@ -163,9 +153,8 @@ req_nav_save_cursor() {
     return 0
 }
 
-# req_nav_cursor_path_ok <relative path> - succeeds for "" or a plain relative path
-# (no leading or trailing slash, no empty, "." or ".." component), so a hand-edited
-# cursor file cannot lead outside the workspace.
+# req_nav_cursor_path_ok <relative path> - succeeds for "" or a plain relative path (no leading or trailing
+# slash, no empty, "." or ".." component), so a hand-edited cursor file cannot lead outside the workspace.
 req_nav_cursor_path_ok() {
     local parts comp
     [[ -z $1 ]] && return 0
@@ -176,11 +165,10 @@ req_nav_cursor_path_ok() {
     done
 }
 
-# req_nav_restore_cursor - puts the menu where the project's cursor file says: the
-# directory (the Esc stack is rebuilt on the way down) and the selected item. A directory
-# that is gone leads to its nearest existing ancestor, an item that is gone to the first
-# one; a missing or invalid file, no project or restore_cursor=no leave the root. Never
-# an error. Call it right after req_nav_init.
+# req_nav_restore_cursor - puts the menu where the cursor file says (the Esc stack is rebuilt on the way
+# down). A directory that is gone leads to its nearest existing ancestor, an item that is gone to the first
+# one; a missing or invalid file, no project or restore_cursor=no leave the root. Never an error. Call it
+# right after req_nav_init.
 req_nav_restore_cursor() {
     local file dir item path comp i found parts
     [[ -n $REQ_PROJECT_ID && -n $REQ_NAV_ROOT ]] || return 0
@@ -213,8 +201,6 @@ req_nav_restore_cursor() {
     return 0
 }
 
-# req_nav_refresh <path> - reloads the current directory (or the project root) and
-# selects <path> in it, if present.
 req_nav_refresh() {
     local want=$1 i
     req_nav_load
@@ -225,12 +211,10 @@ req_nav_refresh() {
 
 # --- screen building --------------------------------------------------
 
-# req_nav_crumb - current path ("/" at the root).
 req_nav_crumb() {
     if [[ -z $REQ_CUR_DIR ]]; then printf '/'; else printf '/%s' "$(req_nav_rel "$REQ_CUR_DIR")"; fi
 }
 
-# req_nav_build_list - builds REQ_SCREEN_LINES with the current directory's list.
 req_nav_build_list() {
     local n=${#REQ_ITEM_KIND[@]} cols rows visible i end width pos
     local c_dim c_bold c_reset c_sel arrows hint tag label tail="" room
@@ -283,8 +267,8 @@ req_nav_build_list() {
     REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $((cols - 1)))${c_reset}")
 }
 
-# req_nav_build_detail - builds REQ_SCREEN_LINES with the open request's details.
-# Invalid requests show their problems instead of the fields and do not run.
+# req_nav_build_detail - the open request's details; an invalid request shows its problems instead of the
+# fields and does not run.
 req_nav_build_detail() {
     local f=$REQ_DETAIL_FILE abs cols width c_dim c_bold c_reset problems line i
     local -a plist=()
@@ -351,7 +335,6 @@ req_nav_build_detail() {
     REQ_SCREEN_LINES+=("${c_dim}${hint}${c_reset}")
 }
 
-# req_nav_build_help - builds REQ_SCREEN_LINES with the help screen, from REQ_HELP_ROWS.
 req_nav_build_help() {
     local cols row keys w=0 c_dim c_bold c_reset
     cols=$(req_term_cols)
@@ -372,8 +355,8 @@ req_nav_build_help() {
     REQ_SCREEN_LINES+=("${c_dim}Press any key to go back${c_reset}")
 }
 
-# req_nav_build_config - the settings screen (:config): every known key with its effective
-# value, its default and what it does; "project" marks the values set by the project's file, which wins over the global one.
+# req_nav_build_config - the settings screen (:config): every known key with its effective value, default
+# and description; "project" marks the values set by the project's file.
 req_nav_build_config() {
     local cols key w=0 value def src c_dim c_bold c_reset
     cols=$(req_term_cols)
@@ -390,10 +373,9 @@ req_nav_build_config() {
     REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value (:config -g key=value for the global file)   Press any key to go back${c_reset}")
 }
 
-# req_nav_build_env - builds REQ_SCREEN_LINES with the environment menu (:env): the environments
-# of REQ_ENV_CHOICES (req_env_choices), the one in use marked, and "+ new environment" as the last
-# row; the selected row is highlighted like the list's. The rows scroll in a window sized like
-# the list's.
+# req_nav_build_env - the environment menu (:env): the environments of REQ_ENV_CHOICES with the one in use
+# marked, and "+ new environment" as the last row; the selected row is highlighted like the list's and the
+# rows scroll in a window sized like the list's.
 req_nav_build_env() {
     local total=$(( ${#REQ_ENV_CHOICES[@]} + 1 )) cols rows visible i end width label inuse current=${REQ_ENV:-default}
     local c_dim c_bold c_reset c_sel arrows hint
@@ -431,9 +413,9 @@ req_nav_build_env() {
     REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $(( cols - 1 )))${c_reset}")
 }
 
-# req_nav_env_key <key> - a key on the environment menu: up and down move the selection (wrapping
-# around, the last row being "+ new environment"), Enter acts on the row under it (req_nav_env_enter),
-# Esc goes back to the view the menu was opened from changing nothing. Nothing else does anything here.
+# req_nav_env_key <key> - a key on the environment menu: up and down move the selection (wrapping around,
+# the last row being "+ new environment"), Enter acts on the row (req_nav_env_enter), Esc goes back to the
+# view the menu was opened from changing nothing.
 req_nav_env_key() {
     local total=$(( ${#REQ_ENV_CHOICES[@]} + 1 ))
     case $1 in
@@ -445,8 +427,8 @@ req_nav_env_key() {
     return 0
 }
 
-# req_nav_env_enter - Enter on the environment menu. On an environment: switches to it (req_env_use)
-# and goes back to the view the menu came from. On "+ new environment": req_nav_env_new.
+# req_nav_env_enter - Enter on the environment menu: on an environment it switches to it (req_env_use ...
+# now) and goes back; on "+ new environment" it is req_nav_env_new.
 req_nav_env_enter() {
     if (( REQ_ENV_SEL < ${#REQ_ENV_CHOICES[@]} )); then
         REQ_VIEW=$REQ_ENV_BACK
@@ -456,10 +438,9 @@ req_nav_env_enter() {
     fi
 }
 
-# req_nav_env_new - "+ new environment": asks for the name (a slug; empty or end of input cancels
-# and the menu stays as it was), then creates the environment if it does not exist, switches to it
-# and loads its variables (req_env_use ... now: the user has just asked for it), going back to the
-# view the menu came from. A name that already exists is only switched to.
+# req_nav_env_new - "+ new environment": asks for the name (a slug; empty or end of input cancels and the
+# menu stays), then creates the environment if it does not exist, switches to it and loads its variables
+# (req_env_use ... now). A name that already exists is only switched to.
 req_nav_env_new() {
     req_nav_prompt_begin
     if req_ask_name "" "Environment name" "staging"; then
@@ -471,8 +452,7 @@ req_nav_env_new() {
     req_nav_prompt_end
 }
 
-# req_nav_detail_section <title> <width> [line...]
-# Appends the title and the given lines; does nothing if there are no lines.
+# req_nav_detail_section <title> <width> [line...] - appends the title and the lines; nothing without lines.
 req_nav_detail_section() {
     local title=$1 width=$2 line
     shift 2
@@ -486,7 +466,6 @@ req_nav_detail_section() {
 
 # --- state transitions --------------------------------------------------
 
-# req_nav_open - Enter on the list: enters the directory or opens the request's details.
 req_nav_open() {
     local i=$REQ_SEL
     if [[ ${REQ_ITEM_KIND[i]} == d ]]; then
@@ -499,7 +478,6 @@ req_nav_open() {
     fi
 }
 
-# req_nav_back - Esc on the list: goes up one directory; does nothing at the root.
 req_nav_back() {
     local last=$(( ${#REQ_STACK_DIR[@]} - 1 )) sel
     (( last >= 0 )) || return 0
@@ -510,8 +488,7 @@ req_nav_back() {
     REQ_SEL=$sel
 }
 
-# req_nav_execute - Enter on the details: erases the menu, runs and leaves the result on screen
-# (the failures go to the warning bar).
+# req_nav_execute - Enter on the details: erases the menu, runs and leaves the result on screen.
 req_nav_execute() {
     local errs=""
     req_screen_erase
@@ -528,8 +505,8 @@ req_nav_execute() {
     return 0
 }
 
-# req_nav_view_result - "v": the last response in the pager, full screen. The menu is erased first and
-# drawn again when the pager returns (what goes wrong is a warning, see req_result_check and view).
+# req_nav_view_result - "v": the last response in the pager, full screen. The menu is erased first and drawn
+# again when the pager returns.
 req_nav_view_result() {
     req_result_check || return 0
     req_nav_prompt_begin
@@ -538,7 +515,6 @@ req_nav_view_result() {
     return 0
 }
 
-# req_nav_handle <key> - applies a key to the current state.
 req_nav_handle() {
     local key=$1 n=${#REQ_ITEM_KIND[@]}
     REQ_NAV_DIRTY=1
@@ -581,7 +557,6 @@ req_nav_handle() {
     return 0
 }
 
-# req_nav_overlay - puts the command prompt and the one-shot status on the screen.
 req_nav_overlay() {
     local last=$(( ${#REQ_SCREEN_LINES[@]} - 1 )) cursor='_'
     req_utf8 && cursor='█'
@@ -592,8 +567,8 @@ req_nav_overlay() {
     fi
 }
 
-# req_nav_run <.req file> - main loop; ends at end of input or on :q. The menu position
-# is saved in the project's cursor file when the loop ends or the process is signaled.
+# req_nav_run <.req file> - the main loop; ends at end of input or on :q, saving the menu position (also
+# when the process is signaled).
 # shellcheck disable=SC2034  # REQ_EXIT_HOOK is read by req_on_exit (core.sh)
 req_nav_run() {
     req_nav_init "$1" || return 1
@@ -629,8 +604,8 @@ req_nav_run() {
     return 0
 }
 
-# req_nav_start - interactive entry point: uses the .req of the current directory.
-# Without one, offers to initialize a project right here.
+# req_nav_start - interactive entry point: the .req of the current directory; without one it offers to
+# initialize a project right here.
 req_nav_start() {
     local pfile status
     [[ -t 0 && -t 1 ]] || req_die "interactive mode needs a terminal (use 'req run <file>' in scripts)"

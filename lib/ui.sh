@@ -10,9 +10,9 @@ req_colors_enabled() {
     [[ $REQ_COLORS == 1 ]]
 }
 
-# req_color <get|post|put|patch|delete|ok|warn|err|orange|sel|notification|reset|bold|dim> - emits the ANSI sequence.
-# `sel` is the menu selection highlight: bold bright green. `notification` is a bar at the top
-# of the menu: black letters (256-color 16, true black in any theme) on the same orange as `orange`.
+# req_color <name> - the ANSI sequence for: get post put patch delete ok warn err orange sel notification bold dim reset.
+# `sel` is the menu highlight (bold bright green); `notification` is the bar at the top of the menu: black letters
+# (256-color 16, true black in any theme) on the same orange as `orange`.
 req_color() {
     req_colors_enabled || return 0
     case ${1,,} in
@@ -33,21 +33,18 @@ req_color() {
     esac
 }
 
-# req_method_color <METHOD> - the method's color; unknown methods get none.
 req_method_color() {
     case ${1,,} in
         get|post|put|patch|delete) req_color "$1" ;;
     esac
 }
 
-# req_paint_method <METHOD> - prints the colored method (no newline).
 req_paint_method() {
     req_method_color "$1"
     printf '%s' "${1^^}"
     req_color reset
 }
 
-# req_paint_status <HTTP code> - prints the code colored by class (no newline).
 req_paint_status() {
     case $1 in
         2*) req_color ok ;;
@@ -58,7 +55,6 @@ req_paint_status() {
     req_color reset
 }
 
-# req_utf8 - succeeds if the current locale is UTF-8.
 req_utf8() {
     case ${LC_ALL:-${LC_CTYPE:-${LANG-}}} in
         *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) return 0 ;;
@@ -81,7 +77,6 @@ req_term_rows() {
     printf '%s' "$r"
 }
 
-# req_trunc <text> <width> - cuts the text to fit, marking the cut with … (or ~).
 req_trunc() {
     local t=$1 max=$2 ell='…'
     req_utf8 || ell='~'
@@ -93,16 +88,14 @@ req_trunc() {
     fi
 }
 
-# req_rule [char] - horizontal line as wide as the terminal (default: =).
 req_rule() {
     local ch=${1:-=} line
     printf -v line '%*s' "$(req_term_cols)" ''
     printf '%s\n' "${line// /$ch}"
 }
 
-# req_confirm <question> [y|n] - asks "[Y/n]" (or "[y/N]" when the default is n) and
-# succeeds on yes. Enter picks the default; end of input means no. Reads from
-# REQ_INPUT_FD (default: stdin).
+# req_confirm <question> [y|n] - asks "[Y/n]" ("[y/N]" when the default is n); status 0 on yes. Enter picks
+# the default, end of input means no. Reads REQ_INPUT_FD.
 req_confirm() {
     local def=${2:-y} hint answer
     if [[ $def == n ]]; then hint='[y/N]'; else hint='[Y/n]'; fi
@@ -117,9 +110,8 @@ req_confirm() {
     done
 }
 
-# req_prompt <label> [default] - asks for one line and leaves it in REQ_REPLY
-# (the default when the answer is empty). Fails at end of input. Uses readline
-# editing when reading from a terminal.
+# req_prompt <label> [default] - asks for one line into REQ_REPLY (the default when empty); status 1 at end
+# of input. Readline editing when reading from a terminal.
 REQ_REPLY=""
 # shellcheck disable=SC2034  # REQ_REPLY is read by the callers
 req_prompt() {

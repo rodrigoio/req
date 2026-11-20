@@ -1,23 +1,20 @@
 #!/usr/bin/env bash
-# wizard.sh - interactive prompts to create, edit and duplicate requests and directories.
-# All answers come from REQ_INPUT_FD, so the flows can be driven by tests.
-#
-# Conventions: an empty name (or end of input) cancels a flow; any other prompt
-# accepts its default with Enter.
+# wizard.sh - interactive prompts to create, edit and copy requests and directories. All answers come from
+# REQ_INPUT_FD, so the flows can be driven by tests. An empty name (or end of input) cancels a flow; any other
+# prompt accepts its default with Enter.
 
 REQ_REPLY_JSON="{}"     # last object built by req_ask_pairs / req_ask_preset
 REQ_PRESET=none         # format chosen by the last req_ask_preset: json, text, html or none
 REQ_LAST_FILE=""        # last request file written by a wizard
 REQ_LAST_DIR=""         # last directory created by a wizard
 
-# req_cancelled - prints the cancellation notice and fails.
 req_cancelled() {
     printf 'Cancelled.\n'
     return 1
 }
 
-# req_ask_name <default> [what] [example] - asks for a slug; empty cancels (without default). The
-# prompt gives an example of a slug, "list-users" unless another is given.
+# req_ask_name <default> [what] [example] - asks for a slug; empty cancels (only without a default). The
+# prompt gives an example slug, "list-users" unless another is given.
 req_ask_name() {
     local def=${1-} what=${2:-Name} example=${3:-list-users} label
     label="$what (a slug, e.g. $example)"
@@ -30,7 +27,6 @@ req_ask_name() {
     done
 }
 
-# req_ask_method [default] - asks for an HTTP method.
 req_ask_method() {
     local def=${1:-GET}
     while :; do
@@ -43,7 +39,6 @@ req_ask_method() {
     done
 }
 
-# req_ask_url [default] - asks for the url; it cannot be empty.
 req_ask_url() {
     while :; do
         req_prompt "URL" "${1-}" || return 1
@@ -52,7 +47,6 @@ req_ask_url() {
     done
 }
 
-# req_preset_headers <json|text|html|none> - prints the headers object of a format preset.
 req_preset_headers() {
     local ct
     case $1 in
@@ -64,8 +58,8 @@ req_preset_headers() {
     jq -cn --arg ct "$ct" '{"Content-Type": $ct, "Accept": $ct}'
 }
 
-# req_ask_preset - asks for a popular format (json, text, html); the matching
-# headers object ends up in REQ_REPLY_JSON and the choice in REQ_PRESET.
+# req_ask_preset - asks for json, text, html or none; the headers object goes to REQ_REPLY_JSON and the
+# choice to REQ_PRESET.
 req_ask_preset() {
     local choice
     while :; do
@@ -83,9 +77,8 @@ req_ask_preset() {
     done
 }
 
-# req_ask_pairs <title> <separator> <json> - edits an object of simple values.
-# One "key<separator>value" per line sets an entry, "-key" removes it, an empty
-# line finishes. The resulting object ends up in REQ_REPLY_JSON.
+# req_ask_pairs <title> <separator> <json> - edits an object of simple values: "key<separator>value" sets an
+# entry, "-key" removes it, an empty line finishes. The result goes to REQ_REPLY_JSON.
 req_ask_pairs() {
     local title=$1 sep=$2 json=${3:-"{}"} line key val
     printf '%s: key%svalue per line, "-key" removes, empty line to finish\n' "$title" "$sep"
@@ -113,20 +106,18 @@ req_ask_pairs() {
     REQ_REPLY_JSON=$json
 }
 
-# req_raw_text <json value> - prints raw_data as editable text: indented JSON for an
-# object or list, the string itself otherwise ("" when there is no value).
+# req_raw_text <json value> - raw_data as editable text: indented JSON for an object or list, the string
+# itself otherwise.
 req_raw_text() {
     [[ -n ${1-} ]] || return 0
     if [[ $(jq -r type <<<"$1") == string ]]; then jq -r . <<<"$1"; else jq . <<<"$1"; fi
 }
 
-# req_ask_raw_data <current> [ask] - edits the raw body (raw_data). <current> is the
-# JSON value now stored ("" when none). The text is edited in the external editor
-# (req_edit_text), or on one prompt line when there is no editor. An empty result
-# clears raw_data. An object or list is stored as native JSON; any other text is
-# stored as a string, but when [ask] is 1 (the default) the user is first offered to
-# edit it again, since it was probably meant to be JSON. On success REQ_REPLY_JSON
-# holds the new JSON value ("" = clear) and the status is 0; status 1 keeps it as is.
+# req_ask_raw_data <current> [ask] - edits the raw body (<current> is the JSON value stored, "" when none)
+# in the external editor, or on one prompt line without one. An empty result clears it. An object or list is
+# stored as native JSON, any other text as a string, but with [ask] 1 (the default) the user is first
+# offered to edit it again, since it was probably meant as JSON. Status 0 with REQ_REPLY_JSON holding the
+# new value ("" clears); status 1 keeps it as is.
 req_ask_raw_data() {
     local text native status ask=${2:-1}
     text=$(req_raw_text "${1-}")
@@ -159,7 +150,6 @@ req_ask_raw_data() {
     done
 }
 
-# req_wizard_new <directory> - creates a request in the directory.
 req_wizard_new() {
     local dir=$1 name method url desc="" headers="{}" query="{}" params="{}" raw="" json target
     req_ask_name "" || { req_cancelled; return 1; }
@@ -200,7 +190,6 @@ req_wizard_new() {
     printf 'Created %s\n' "$REQ_LAST_FILE"
 }
 
-# req_edit_show <json> - prints the numbered fields of the request being edited.
 req_edit_show() {
     jq -r '
         def count: length | if . == 1 then "1 entry" else "\(.) entries" end;
@@ -217,8 +206,8 @@ req_edit_show() {
                               else "JSON object, \(length) keys" end)"' <<<"$1"
 }
 
-# req_wizard_edit <file> - field menu for a request. Changing the name or the
-# method renames the file. Returns 0 after saving and 1 when cancelled.
+# req_wizard_edit <file> - field menu for a request; changing the name or the method renames the file.
+# Status 0 after saving, 1 when cancelled.
 req_wizard_edit() {
     local file=$1 dir json name method url target fields newfile cur ask
     dir=$(dirname "$file")
@@ -311,16 +300,16 @@ req_wizard_copy_request() {
     printf 'Created %s\n' "$REQ_LAST_FILE"
 }
 
-# req_wizard_duplicate <file> - copies a request under a new name, then opens the
-# edit menu on the copy. Cancelling the edit keeps the copy.
+# req_wizard_duplicate <file> - copies a request under a new name, then opens the edit menu on the copy;
+# cancelling the edit keeps the copy.
 req_wizard_duplicate() {
     req_wizard_copy_request "$1" || return 1
     req_wizard_edit "$REQ_LAST_FILE"
     return 0
 }
 
-# req_wizard_mkdir <parent> [name] - creates a directory inside <parent> (the workspace at
-# the menu root). The name is asked for unless given. REQ_LAST_DIR is the new directory.
+# req_wizard_mkdir <parent> [name] - creates a directory inside <parent>; the name is asked for unless
+# given. REQ_LAST_DIR is the new directory.
 req_wizard_mkdir() {
     local parent=$1 name=${2-}
     if [[ -z $name ]]; then
@@ -336,9 +325,8 @@ req_wizard_mkdir() {
     printf 'Created directory %s\n' "$REQ_LAST_DIR"
 }
 
-# req_wizard_rename_dir <directory> [name] - renames a directory (the last component of
-# its path); the new name is asked for unless given. Returns 0 after renaming;
-# REQ_LAST_DIR is the new path. An unchanged name returns 1 without touching anything.
+# req_wizard_rename_dir <directory> [name] - renames a directory; the name is asked for unless given. Status
+# 0 after renaming, REQ_LAST_DIR is the new path. An unchanged name returns 1 without touching anything.
 req_wizard_rename_dir() {
     local dir=${1%/} name=${2-} target
     [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
@@ -361,9 +349,9 @@ req_wizard_rename_dir() {
     printf 'Renamed %s to %s\n' "$dir" "$target"
 }
 
-# req_wizard_copy_dir <directory> [name] - copies a directory with everything inside it,
-# next to the original. The name of the copy is asked for (default <name>-copy) unless
-# given. Returns 0 after copying; REQ_LAST_DIR is the copy.
+# req_wizard_copy_dir <directory> [name] - copies a directory with everything inside it, next to the
+# original; the name is asked for (default <name>-copy) unless given. Status 0 after copying, REQ_LAST_DIR
+# is the copy.
 req_wizard_copy_dir() {
     local dir=${1%/} name=${2-} target
     [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }
@@ -387,9 +375,8 @@ req_wizard_copy_dir() {
     printf 'Copied %s to %s\n' "$dir" "$target"
 }
 
-# req_wizard_remove_request <file> - asks "[y/N]" and removes the request file. It
-# works for invalid requests too (only the file name matters). Returns 0 after
-# removing; REQ_LAST_FILE is the removed path. Anything but "y" keeps the file.
+# req_wizard_remove_request <file> - asks "[y/N]" and removes the file; works for invalid requests too.
+# Anything but "y" keeps it. Status 0 after removing, REQ_LAST_FILE is the removed path.
 req_wizard_remove_request() {
     local file=$1
     [[ -f $file ]] || { req_err "request not found: $file"; return 1; }
@@ -403,11 +390,11 @@ req_wizard_remove_request() {
     printf 'Removed %s\n' "$file"
 }
 
-# req_wizard_remove_dir <directory> <workspace> - removes a directory and everything inside
-# it, after a red warning with the full path and the size of the contents and a "[y/N]"
-# question (default no). Only a directory strictly inside the workspace (physical path) is
-# ever deleted, and never a symbolic link: the workspace itself, its parents, anything
-# outside it and links are refused. Returns 0 after removing; REQ_LAST_DIR is the directory.
+# req_wizard_remove_dir <directory> <workspace> - removes a directory and everything in it, after a red
+# warning with the full path and the size of the contents and a "[y/N]" (default no). Only a directory
+# strictly inside the workspace (physical path) is ever deleted, and never a link: the workspace, its
+# parents, anything outside it and links are refused. Status 0 after removing, REQ_LAST_DIR is the
+# directory.
 req_wizard_remove_dir() {
     local dir=${1%/} root abs files dirs red reset
     [[ -d $dir ]] || { req_err "directory does not exist: $dir"; return 1; }

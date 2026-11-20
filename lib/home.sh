@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# home.sh - the user's central directory (~/.req): projects, configuration, cursor.
+# home.sh - the user's central directory (~/.req, or $REQ_CONFIG_DIR when set; the tests use it): projects, config, cursor.
 #
-# Layout (one directory per project; see TASKS.md in the req_context repository, "Central project control"):
+# Layout (one directory per project):
 #   ~/.req/current                 project=<id>: the project in use
 #   ~/.req/config                  global configuration
 #   ~/.req/projects/<id>/project   name=<folder name> and path=<absolute path of the project>
@@ -9,30 +9,25 @@
 #   ~/.req/projects/<id>/vars      project variables
 #   ~/.req/projects/<id>/env/<e>   variables of environment <e>
 #   ~/.req/projects/<id>/cursor    last position in the menu
-# The directory is $REQ_CONFIG_DIR when set (tests use it), otherwise ~/.req.
 #
-# The first part below holds the "key=value" text files everything in there is made of
-# (project settings, variables, environments, configuration, cursor). Format:
+# Everything in there is a "key=value" text file, handled by the first part below:
 #   - one "key=value" per line; the key matches [A-Za-z_][A-Za-z0-9_]*;
 #   - blank lines and lines starting with "#" are ignored;
-#   - spaces around the key and around the value are not significant, the value is
-#     everything after the first "=" (so it may contain "=") and has one line;
-#   - no quotes or escapes: the value is the text as it is.
-# When a key appears twice, the first line wins; req_kv_set keeps only that one.
-# Writing keeps comments, blank lines and the order of the other lines, and the file
-# is rewritten in place (mode and symlinks are kept). New files and directories are
-# private (0600 and 0700), since they may hold credentials.
+#   - spaces around the key and the value are not significant; the value is everything after the first "=" (so it
+#     may contain "=") and has one line; no quotes or escapes;
+#   - when a key appears twice the first line wins; req_kv_set keeps only that one.
+# Writing keeps comments, blank lines and the order of the other lines, and rewrites the file in place (mode and
+# symlinks are kept). New files and directories are private (0600 and 0700), since they may hold credentials.
 
 REQ_KV_KEY=""       # set by req_kv_parse_line
 REQ_KV_VALUE=""
 
-# req_kv_valid_key <key> - succeeds for a valid key name.
 req_kv_valid_key() {
     [[ $1 =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
 }
 
-# req_kv_parse_line <line> - puts the key and value of a line in REQ_KV_KEY and
-# REQ_KV_VALUE. Fails for blank lines, comments and lines that are not "key=value".
+# req_kv_parse_line <line> - puts the key and value in REQ_KV_KEY and REQ_KV_VALUE; fails for blank lines,
+# comments and anything that is not "key=value".
 req_kv_parse_line() {
     local line=${1%$'\r'} key value
     line=${line#"${line%%[![:space:]]*}"}
@@ -47,8 +42,7 @@ req_kv_parse_line() {
     REQ_KV_VALUE=$value
 }
 
-# req_kv_get <file> <key> - prints the value of a key. Fails (status 1) when the
-# file or the key does not exist.
+# req_kv_get <file> <key> - prints the value; status 1 when the file or the key is missing.
 req_kv_get() {
     local line
     [[ -f $1 ]] || return 1
@@ -61,8 +55,7 @@ req_kv_get() {
     return 1
 }
 
-# req_kv_list <file> - prints every "key=value" in file order, normalized. A missing
-# file lists nothing.
+# req_kv_list <file> - prints every "key=value" in file order, trimmed; a missing file lists nothing.
 req_kv_list() {
     local line
     [[ -f $1 ]] || return 0
@@ -72,9 +65,8 @@ req_kv_list() {
     return 0
 }
 
-# req_kv_check <file> - reports, with the absolute path and the line number, every
-# line that is neither blank, a comment nor a valid "key=value". Fails when there is
-# any. A missing file is fine.
+# req_kv_check <file> - reports, with the absolute path and the line number, every line that is not blank, a
+# comment or a valid "key=value"; fails when there is any. A missing file is fine.
 req_kv_check() {
     local file=$1 line n=0 abs status=0
     [[ -f $file ]] || return 0
@@ -91,9 +83,8 @@ req_kv_check() {
     return "$status"
 }
 
-# req_kv_rewrite <file> <set|unset> <key> [value] - the engine of set and unset: the
-# first line of the key is replaced (set) and the other lines of that key are dropped;
-# unset drops them all. Fails with status 1 when unset finds nothing to remove.
+# req_kv_rewrite <file> <set|unset> <key> [value] - the engine of set and unset: the first line of the key
+# is replaced (set) and its other lines dropped; unset drops them all and fails (1) when there is none.
 req_kv_rewrite() {
     local file=$1 mode=$2 key=$3 value=${4-} tmp line found=0
     tmp=$(mktemp "${file}.XXXXXX") || { req_err "cannot write to $file"; return 1; }
@@ -113,8 +104,8 @@ req_kv_rewrite() {
     rm -f "$tmp"
 }
 
-# req_kv_set <file> <key> <value> - sets a key, creating the file (and its directory)
-# when needed. The key must be valid and the value must be a single line.
+# req_kv_set <file> <key> <value> - sets a key, creating the file and its directory when needed; the key
+# must be valid and the value one line.
 req_kv_set() {
     local file=$1 key=$2 value=$3
     req_kv_valid_key "$key" || {
@@ -130,7 +121,6 @@ req_kv_set() {
     req_kv_rewrite "$file" set "$key" "$value"
 }
 
-# req_kv_unset <file> <key> - removes a key. Fails when the file or the key does not exist.
 req_kv_unset() {
     [[ -f $1 ]] || return 1
     req_kv_rewrite "$1" unset "$2"
@@ -138,24 +128,20 @@ req_kv_unset() {
 
 # --- central directory and projects --------------------------------------------
 
-# req_config_dir - the central directory (default: ~/.req).
 req_config_dir() {
     printf '%s' "${REQ_CONFIG_DIR:-$HOME/.req}"
 }
 
-# req_projects_dir - the directory holding one directory per project.
 req_projects_dir() {
     printf '%s/projects' "$(req_config_dir)"
 }
 
-# req_project_state_dir <id> [subpath] - where a project keeps its files in ~/.req.
 req_project_state_dir() {
     printf '%s/%s' "$(req_projects_dir)" "$1"
     [[ -z ${2-} ]] || printf '/%s' "$2"
 }
 
-# req_project_slug <folder> - a slug made from the folder's name (lowercase letters,
-# digits and hyphens); "project" when nothing is left of it.
+# req_project_slug <folder> - a slug made from the folder's name; "project" when nothing is left of it.
 req_project_slug() {
     local name=${1%/} slug
     name=${name##*/}
@@ -164,8 +150,8 @@ req_project_slug() {
     printf '%s' "${slug:-project}"
 }
 
-# req_project_find_id <project dir> - prints the id of the project registered for that
-# directory (matched by the absolute path in its "project" file). Fails when none.
+# req_project_find_id <project dir> - the id of the project registered for that directory (matched by the
+# path in its "project" file); fails when none.
 req_project_find_id() {
     local abs dir id
     abs=$(req_abs_path "$1")
@@ -178,8 +164,8 @@ req_project_find_id() {
     return 1
 }
 
-# req_project_new_id <project dir> - prints a free id for a new project: the folder's
-# slug, with -2, -3... added when another project already uses it.
+# req_project_new_id <project dir> - a free id: the folder's slug, with -2, -3... when another project has
+# it.
 req_project_new_id() {
     local slug id n=1
     slug=$(req_project_slug "$1")
@@ -190,9 +176,8 @@ req_project_new_id() {
     printf '%s\n' "$id"
 }
 
-# req_project_create <project dir> - creates the control directory of a project and its
-# "project" file (name and path), and prints the new id. Does not check whether the
-# directory is already registered (req_project_find_id does).
+# req_project_create <project dir> - makes the control directory and the "project" file (name and path) and
+# prints the new id. Does not check for an existing registration (req_project_find_id does).
 req_project_create() {
     local abs id file
     [[ -d $1 ]] || { req_err "directory does not exist: $1"; return 1; }
@@ -207,8 +192,8 @@ req_project_create() {
     printf '%s\n' "$id"
 }
 
-# req_current_get - prints the id of the project in use (from ~/.req/current). Fails
-# when there is none or the project's directory is gone.
+# req_current_get - the id of the project in use (~/.req/current); fails when there is none or its directory
+# is gone.
 req_current_get() {
     local id
     id=$(req_kv_get "$(req_config_dir)/current" project) || return 1
@@ -216,7 +201,6 @@ req_current_get() {
     printf '%s\n' "$id"
 }
 
-# req_current_set <id> - makes a registered project the one in use.
 req_current_set() {
     if ! { req_valid_name "$1" && [[ -d $(req_project_state_dir "$1") ]]; }; then
         req_err "unknown project: $1"
@@ -228,14 +212,11 @@ req_current_set() {
 REQ_PROJECT_ID=""       # id of the project opened by req_project_activate
 
 # shellcheck disable=SC2034  # REQ_PROJECT_ID is read by the environment and cursor code
-# req_project_activate <project dir> - registers the project in ~/.req when it is not
-# there yet and makes it the one in use. Sets REQ_PROJECT_ID. It also makes sure the project
-# has its environment folder and the "default" environment (req_env_create), so the user never
-# has to make them: it runs at every opening and leaves what is there alone, so projects
-# registered by older versions get them too; if that fails it is one more warning and the
-# project is still active. When ~/.req cannot be written, one warning is printed,
-# REQ_PROJECT_ID stays empty, nothing else is affected (the menu works without saved state)
-# and the status is 1.
+# req_project_activate <project dir> - registers the project in ~/.req when new, makes it the one in use and
+# sets REQ_PROJECT_ID. It also makes sure the project has its env folder and the "default" environment
+# (req_env_create), at every opening, so projects of older versions get them too. When ~/.req cannot be
+# written it is one warning, REQ_PROJECT_ID stays empty and the status is 1; the menu still works, without
+# saved state.
 req_project_activate() {
     local dir=$1 id problem
     REQ_PROJECT_ID=""
@@ -256,14 +237,13 @@ req_project_activate() {
     return 0
 }
 
-# req_cursor_file <id> - the file where a project keeps the last position of its menu.
 req_cursor_file() {
     req_project_state_dir "$1" cursor
 }
 
-# req_cursor_save <id> <dir> <item> - writes the position: the directory shown and the
-# item selected in it, both relative to the workspace ("" is the workspace itself, or no
-# item). Fails when the file cannot be written.
+# req_cursor_save <id> <dir> <item> - writes the menu position: the directory shown and the item selected in
+# it, both relative to the workspace ("" is the workspace itself, or no item). Fails when the file cannot be
+# written.
 req_cursor_save() {
     local file
     file=$(req_cursor_file "$1")
@@ -272,16 +252,11 @@ req_cursor_save() {
 
 # --- the .req file: workspace ---------------------------------------------------
 
-# req_project_workspace <.req file> - prints the absolute path of the project's workspace,
-# the only directory req looks at. It comes from the "workspace" key of the .req (a
-# key=value file): a path relative to the folder of the .req, or "." (the default, also
-# used when the key is absent) for that folder. Lines of the .req that are not key=value,
-# like the old one-directory-per-line entries, are ignored.
-# The path must be relative, exist, be a real directory inside the project folder and
-# have no symbolic link in it (links of any kind are refused; a directory cannot be hard
-# linked, so a component that is not a plain directory is refused). Every component is
-# checked in order, including those a later ".." cancels, so "link/../x" is refused too.
-# On a problem it prints the reason with the absolute path of the .req and fails.
+# req_project_workspace <.req file> - the absolute path of the project's workspace, the only directory req
+# looks at: the "workspace" key of the .req (default "."), relative to the folder of the .req. It must
+# exist, be a real directory inside the project folder and have no symbolic link in it; every component is
+# checked in order, even those a later ".." cancels, so "link/../x" is refused. Other lines of the .req (old
+# formats) are ignored. On a problem it prints the reason with the absolute path of the .req and fails.
 req_project_workspace() {
     local pfile=$1 base abs value comp cur
     local -a parts

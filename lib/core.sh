@@ -5,14 +5,12 @@
 REQ_REQUIRED_BASH_MAJOR=4
 REQ_REQUIRED_CMDS=(curl jq)
 
-# req_err <message> - prints an error to stderr without exiting.
 req_err() {
     printf 'req: error: %s\n' "$*" >&2
 }
 
-# req_warn <message> - prints a warning to stderr without exiting. While the menu is open
-# (REQ_NOTIFICATION_ACTIVE=1, see notification.sh) it goes to the warning bar at the top instead,
-# so a configuration problem does not fill the terminal.
+# req_warn <message> - a warning on stderr; while the menu is open (REQ_NOTIFICATION_ACTIVE=1) it goes to
+# the warning bar instead (notification.sh), so a configuration problem does not fill the terminal.
 req_warn() {
     if [[ ${REQ_NOTIFICATION_ACTIVE-0} == 1 ]]; then
         req_notification_warn "$*"
@@ -21,7 +19,6 @@ req_warn() {
     fi
 }
 
-# req_trim <text> - prints the text without leading and trailing whitespace.
 req_trim() {
     local s=$1
     s=${s#"${s%%[![:space:]]*}"}
@@ -29,9 +26,8 @@ req_trim() {
     printf '%s' "$s"
 }
 
-# req_abs_path <path> - prints the absolute (physical) path of a file or directory.
-# The file itself does not need to exist; its directory does, otherwise the path
-# is printed as given.
+# req_abs_path <path> - the absolute (physical) path of a file or directory. The file need not exist, its
+# directory must; otherwise the path is printed as given.
 req_abs_path() {
     local p=$1 dir
     if [[ -d $p ]]; then
@@ -42,20 +38,17 @@ req_abs_path() {
     printf '%s/%s' "$dir" "${p##*/}"
 }
 
-# req_die <message> - prints an error to stderr and exits with status 1.
 req_die() {
     req_err "$@"
     exit 1
 }
 
-# req_check_bash - requires bash >= REQ_REQUIRED_BASH_MAJOR.
 req_check_bash() {
     if (( BASH_VERSINFO[0] < REQ_REQUIRED_BASH_MAJOR )); then
         req_die "bash ${REQ_REQUIRED_BASH_MAJOR}+ is required (found: ${BASH_VERSION})."
     fi
 }
 
-# req_missing_deps - lists, one per line, the dependencies missing from PATH.
 req_missing_deps() {
     local cmd
     for cmd in "${REQ_REQUIRED_CMDS[@]}"; do
@@ -63,8 +56,7 @@ req_missing_deps() {
     done
 }
 
-# req_check_deps - exits with an error naming the missing dependencies (in orange),
-# without install commands.
+# req_check_deps - dies naming the missing dependencies (in orange), never with install commands.
 req_check_deps() {
     local missing
     missing=$(req_missing_deps)
@@ -72,10 +64,9 @@ req_check_deps() {
     req_die "missing dependencies: $(req_color orange)${missing//$'\n'/ }$(req_color reset)"
 }
 
-# req_editor [candidate...] - prints the external editor command, like git does: $VISUAL,
-# then $EDITOR, then the first candidate found in the PATH (vim, then vi, when none is
-# given). Fails (status 1) when none is available. $VISUAL and $EDITOR may carry arguments
-# (e.g. "code -w") and are not checked for existence.
+# req_editor [candidate...] - the external editor command, like git: $VISUAL, then $EDITOR, then the first
+# candidate found in PATH (vim, then vi, when none is given). Status 1 when none. $VISUAL and $EDITOR may
+# carry arguments ("code -w") and are not checked for existence.
 req_editor() {
     local e
     local -a candidates=("$@")
@@ -88,34 +79,28 @@ req_editor() {
     return 1
 }
 
-# req_edit_file <file> [candidate...] - opens a file in the external editor (req_editor with
-# the given candidates), on the file itself and not on a copy, and waits for it. The editor
-# takes over the terminal; the caller hands it over first (req_nav_prompt_begin).
-# Status: 0 the editor ran and ended well, 1 the editor failed, 2 no editor available
-# (the same codes as req_edit_text).
+# req_edit_file <file> [candidate...] - edits the file itself (not a copy) in req_editor and waits. Status:
+# 0 the editor ended well, 1 it failed, 2 no editor (the same codes as req_edit_text). The caller hands the
+# terminal over first (req_nav_prompt_begin).
 req_edit_file() {
     local file=$1 editor
     shift
     editor=$(req_editor "$@") || return 2
-    # The shell lets $VISUAL and $EDITOR carry arguments, as git does.
     sh -c "$editor \"\$@\"" req-editor "$file" || return 1
 }
 
 REQ_EDIT_TEXT=""    # result of req_edit_text
 
-# req_edit_text <text> [suffix] - opens the text in the external editor, in a temporary
-# file named raw_data<suffix> (e.g. ".json", so the editor picks the syntax), and puts
-# the edited text in REQ_EDIT_TEXT without trailing line breaks. The editor takes over
-# the terminal; the caller hands it over first (req_nav_prompt_begin).
-# Status: 0 edited, 1 the editor failed (REQ_EDIT_TEXT keeps the original text),
-# 2 no editor available (the caller falls back to a prompt).
+# req_edit_text <text> [suffix] - edits the text in a temporary file named raw_data<suffix> (".json" makes
+# the editor pick the syntax) and leaves the result in REQ_EDIT_TEXT without trailing line breaks. Status: 0
+# edited, 1 the editor failed (REQ_EDIT_TEXT keeps the original), 2 no editor (the caller falls back to a
+# prompt).
 req_edit_text() {
     local editor dir file status
     editor=$(req_editor) || return 2
     dir=$(mktemp -d "${TMPDIR:-/tmp}/req-edit.XXXXXX") || return 1
     file=$dir/raw_data${2-}
     printf '%s\n' "$1" >"$file"
-    # The shell lets $VISUAL and $EDITOR carry arguments, as git does.
     sh -c "$editor \"\$@\"" req-editor "$file"
     status=$?
     if (( status == 0 )) && [[ -f $file ]]; then
@@ -128,7 +113,6 @@ req_edit_text() {
     return "$status"
 }
 
-# req_restore_terminal - puts the terminal back to normal (cursor, echo, colors).
 req_restore_terminal() {
     [[ -t 1 ]] || return 0
     printf '\033[0m\033[?25h'
@@ -138,7 +122,6 @@ req_restore_terminal() {
 
 REQ_EXIT_HOOK=""        # function to run first when the process exits (the menu saves its cursor)
 
-# req_on_exit - the EXIT trap: runs the hook, if any, then restores the terminal.
 req_on_exit() {
     [[ -z $REQ_EXIT_HOOK ]] || "$REQ_EXIT_HOOK"
     req_restore_terminal
@@ -150,7 +133,6 @@ req_trap_int_exit() {
     trap 'exit 130' INT
 }
 
-# req_setup_traps - restores the terminal on normal exit, error or signal.
 req_setup_traps() {
     trap req_on_exit EXIT
     req_trap_int_exit
