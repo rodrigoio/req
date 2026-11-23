@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Go back with `q` as well as with Esc: on the list (up one directory), on the details of a request and on the
+  `:env` menu. At the root of the list `q` quits `req`, saving the position as `:q` does; Esc still does nothing
+  there, so it never closes the program by accident.
+
 ### Changed
 
 - Clear the screen when the menu starts, so you can see at once that `req` is running. Only the menu does it:

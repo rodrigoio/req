@@ -65,7 +65,7 @@ Central state: the first time `req` opens a project (or `req init` creates one) 
 |---|---|
 | Up / Down | move the selection (wraps around at the ends) |
 | Enter | on a directory, enter it; on a request, open its details; on the details, run it |
-| Esc | go back (details → list → parent directory); does nothing at the root |
+| Esc / q | go back (details → list → parent directory, and out of the `:env` menu); at the root Esc does nothing and `q` quits `req` |
 | v | show the last response of this session in full screen, in a pager: JSON indented by `jq`, anything else as it came (see "Viewing the response") |
 | Ctrl-L | clear the screen: the results of the requests already made go away and the menu is drawn again at the top, with the same selection. It works in every screen, also while you type a command (the text stays) |
 | Ctrl-C | quit |
@@ -289,7 +289,7 @@ The environment is the `REQ_ENV` variable, `default` when it is not set. If a ke
 
 The environment of a session is chosen with `:env`:
 
-- `:env` alone opens a menu of the project's environments (the files in `env/`). The one in use is marked; up and down move (wrapping around), Enter switches to the one under the selection and Esc leaves things as they were, going back to where you were: the list or the details of a request.
+- `:env` alone opens a menu of the project's environments (the files in `env/`). The one in use is marked; up and down move (wrapping around), Enter switches to the one under the selection and Esc (or `q`) leaves things as they were, going back to where you were: the list or the details of a request.
 - The last row of the menu, `+ new environment`, asks for a name (a slug; an empty name cancels), makes the environment and switches to it. The name of one that already exists just switches to it.
 - `:env <name>` switches straight to the environment, with no menu. If the project has no environment with that name, `req` asks `Create environment "<name>"? [Y/n]`: Enter makes the empty, private file `env/<name>` and says where it is, ready for your `key=value` lines; `n` changes nothing.
 - `default` is always offered and accepted, even if its file is gone.
