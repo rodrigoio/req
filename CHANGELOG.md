@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-23
+
 ### Fixed
 
 - Type headers as `key=value` in `:n` and `:e`, the same as query and parameters, instead of `key: value`. A
@@ -109,7 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the verbose mode (`:v`).
 - Show the installed version with `req --version`.
 
-[unreleased]: https://github.com/rodrigoio/req/compare/v0.5.1...HEAD
+[unreleased]: https://github.com/rodrigoio/req/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/rodrigoio/req/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/rodrigoio/req/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/rodrigoio/req/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rodrigoio/req/compare/v0.3.0...v0.4.0
