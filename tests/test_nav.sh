@@ -189,14 +189,14 @@ test_list_screen() {
     req_nav_init "$PROJ/.req"
     local out
     screen list; out=$OUT
-    assert_contains "req /" "$out" "header at the root"
+    assert_contains "{>} Req /" "$out" "header at the root, with the logo first"
     assert_contains "(1/2)" "$out" "position in the list"
     assert_contains "(1/2)  proj @ default" "$out" "the header names the project and the default environment"
     REQ_ENV=prod screen list
     assert_contains "proj @ prod" "$OUT" "REQ_ENV chooses the environment shown"
     COLUMNS=20 screen list
     [[ $OUT != *"@"* ]]; assert_eq "0" "$?" "on a narrow terminal the project and environment are dropped"
-    assert_contains "req /" "$OUT" "and the path stays"
+    assert_contains "{>} Req /" "$OUT" "and the logo and the path stay"
     REQ_NAV_PROJECT=""; screen list
     [[ $OUT != *"@"* ]]; assert_eq "0" "$?" "without a project name there is nothing to show"
     req_nav_init "$PROJ/.req"; screen list; out=$OUT
@@ -448,13 +448,12 @@ test_notification_bars() {
     req_request_write "$p" ping GET "http://127.0.0.1:1/x" >/dev/null
 
     out=$(keys enter | req_nav_run "$p/.req" 2>&1)
-    assert_eq "{>} Req" "$(head -n 1 <<<"$out")" "the first row of the screen is the logo"
-    assert_eq "req" "$(sed -n 2p <<<"$out" | cut -c1-3)" "with no producer defined the header comes right under it"
+    assert_eq "{>} Req /" "$(head -n 1 <<<"$out" | cut -c1-9)" "with no producer defined the first row of the screen is the header, which starts with the logo"
 
     REQ_NOTIFICATION_PRODUCERS=(nav_test_producer_bar)
     out=$(keys enter | req_nav_run "$p/.req" 2>&1)
-    assert_eq "$first" "$(sed -n 2p <<<"$out")" "a bar is the line under the logo"
-    assert_contains "${first}${nl}req " "$out" "the list header comes right below it"
+    assert_eq "$first" "$(head -n 1 <<<"$out")" "a bar is the first row of the screen"
+    assert_contains "${first}${nl}{>} Req " "$out" "the list header, with the logo, comes right below it"
     assert_contains "${first}${nl}GET    ping" "$out" "the details screen has the bar too"
     assert_eq "2" "$(grep -c -F "$first" <<<"$out")" "one bar per draw: the list and the details"
 
@@ -465,7 +464,7 @@ test_notification_bars() {
     local warn="! a warning made up for the test"
     req_notification_warn "a warning made up for the test"
     out=$(keys enter | req_nav_run "$p/.req" 2>&1)
-    assert_eq "$warn" "$(sed -n 2p <<<"$out")" "a warning waiting when the menu opens is the bar of the first draw, under the logo"
+    assert_eq "$warn" "$(head -n 1 <<<"$out")" "a warning waiting when the menu opens is the bar of the first draw, on the first row"
     assert_eq "1" "$(grep -c -F "$warn" <<<"$out")" "and it is printed once: the details drawn next have none"
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
 }
@@ -484,7 +483,7 @@ test_root_notice() {
     # shellcheck disable=SC2317  # called by the library, not from this file
     req_notification_is_root() { return 0; }
     out=$(keys enter | req_nav_run "$p/.req" 2>&1)
-    assert_eq "$notice" "$(sed -n 2p <<<"$out")" "root sees it right under the logo"
+    assert_eq "$notice" "$(head -n 1 <<<"$out")" "root sees it on the first row"
     assert_eq "2" "$(grep -c -F "$notice" <<<"$out")" "at every draw: the list and the details"
     out=$(keys : h enter | req_nav_run "$p/.req" 2>&1)
     assert_contains "${notice}"$'\n'"req help" "$out" "also on the help screen"
@@ -570,62 +569,72 @@ test_legacy_layout_in_the_bar() {
     REQ_PROJECT_ID=""
 }
 
-# logo_block - the block of the current view as the loop draws it: the view, the prompt, the bars, the logo.
-logo_block() { req_nav_overlay; req_notification_overlay; req_nav_logo_overlay; }
+# screen_block - the block of the current view as the loop draws it: the view, the prompt, the bars.
+screen_block() { req_nav_overlay; req_notification_overlay; }
 
-test_logo_row() {
-    echo "nav: the logo is the first row of every screen"
+test_logo_in_list_header() {
+    echo "nav: the logo is in the header of the list, and only there"
     make_project
     req_nav_init "$PROJ/.req"
-    local p out i
+    local p out i cols
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0; REQ_NOTIFICATION_LINES=()
-    req_nav_build_list; logo_block
-    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "the logo is the first row of the list"
-    assert_contains "req / (1/2)" "${REQ_SCREEN_LINES[1]}" "and the header comes right under it"
+    req_nav_build_list; screen_block
+    assert_eq "{>} Req /" "${REQ_SCREEN_LINES[0]:0:9}" "the first row of the list is its header, and it starts with the logo"
+    assert_contains "{>} Req / (1/2)" "${REQ_SCREEN_LINES[0]}" "with the path and the position after it"
 
     REQ_NOTIFICATION_WARN="a warning made up for the test"
     req_notification_collect
-    req_nav_build_list; logo_block
-    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "a bar does not take the first row from it"
-    assert_eq "! a warning made up for the test" "${REQ_SCREEN_LINES[1]}" "the bar is under the logo"
-    assert_contains "req / (1/2)" "${REQ_SCREEN_LINES[2]}" "and the header under the bar"
+    req_nav_build_list; screen_block
+    assert_eq "! a warning made up for the test" "${REQ_SCREEN_LINES[0]}" "a bar goes above the header"
+    assert_eq "{>} Req /" "${REQ_SCREEN_LINES[1]:0:9}" "and the header under the bar still starts with the logo"
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_LINES=()
 
-    req_nav_build_help; logo_block
-    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "the help starts with it"
-    assert_contains "req" "${REQ_SCREEN_LINES[1]}" "and its own first line follows"
-    req_nav_build_config; logo_block
-    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "so does the settings screen"
-    assert_contains "settings" "${REQ_SCREEN_LINES[1]}" "and its own first line follows"
+    req_nav_build_help; screen_block
+    assert_not_contains "{>} Req" "${REQ_SCREEN_LINES[*]}" "the help has no logo"
+    assert_contains "req help" "${REQ_SCREEN_LINES[0]}" "its own first line is the first row"
+    req_nav_build_config; screen_block
+    assert_not_contains "{>} Req" "${REQ_SCREEN_LINES[*]}" "the settings screen has no logo"
+    assert_contains "settings" "${REQ_SCREEN_LINES[0]}" "its own first line is the first row"
 
     # the environment menu needs the state of the project
     req_project_activate "$PROJ" || return
     unset REQ_ENV
     type_keys : e n v enter
-    req_nav_build_env; logo_block
-    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "so does the environment menu"
-    assert_contains "environments" "${REQ_SCREEN_LINES[1]}" "and its own first line follows"
+    req_nav_build_env; screen_block
+    assert_not_contains "{>} Req" "${REQ_SCREEN_LINES[*]}" "the environment menu has no logo"
+    assert_contains "environments" "${REQ_SCREEN_LINES[0]}" "its own first line is the first row"
     req_nav_handle esc
     REQ_PROJECT_ID=""
 
-    # the real loop: the list and the details of a request, each draw with the logo above
+    # the real loop: the list and the details of a request
     p=$TMP/logo-loop; rm -rf "$p"; mkdir -p "$p"; : >"$p/.req"
     req_request_write "$p" ping GET "http://127.0.0.1:1/x" >/dev/null
     out=$(keys enter | req_nav_run "$p/.req" 2>&1)
-    assert_eq "{>} Req" "$(head -n 1 <<<"$out")" "the loop draws it first"
-    assert_eq "2" "$(grep -c '^{>} Req$' <<<"$out")" "once for the list and once for the details, never twice in one block"
+    assert_eq "{>} Req /" "$(head -n 1 <<<"$out" | cut -c1-9)" "the loop draws the list first, with the logo in its header"
+    assert_eq "1" "$(grep -c '^{>} Req' <<<"$out")" "once for the list, none for the details"
     out=$(keys h | req_nav_run "$p/.req" 2>&1)
-    assert_eq "2" "$(grep -c '^{>} Req$' <<<"$out")" "and once for the help"
+    assert_eq "1" "$(grep -c '^{>} Req' <<<"$out")" "and none for the help"
 
-    # the block still fits the terminal: the logo, two bars, the header, the list and the command prompt
+    # the header is cut so that the logo never makes it reach the width of the terminal (the last column stays free)
+    p=$TMP/logo-wide; rm -rf "$p"; mkdir -p "$p/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/eeeeeeeeee"; : >"$p/.req"
+    : >"$p/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/eeeeeeeeee/r.get.json"
+    req_nav_init "$p/.req"
+    REQ_CUR_DIR=$REQ_NAV_ROOT/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/eeeeeeeeee
+    for cols in 30 40 60; do
+        COLUMNS=$cols req_nav_build_list
+        assert_eq "1" "$(( ${#REQ_SCREEN_LINES[0]} < cols ? 1 : 0 ))" "at $cols columns the header of a long path, logo included, stays under the width"
+    done
+    REQ_CUR_DIR=""
+
+    # the block still fits the terminal: two bars, the header, the list and the command prompt
     p=$TMP/logo-many; rm -rf "$p"; mkdir -p "$p"; : >"$p/.req"
     for i in $(seq -w 1 30); do : >"$p/r$i.get.json"; done
     req_nav_init "$p/.req"
     REQ_NOTIFICATION_LINES=("! one" "! two"); REQ_CMD_ACTIVE=1; REQ_CMD_BUF="n"
-    LINES=12 req_nav_build_list; logo_block
+    LINES=12 req_nav_build_list; screen_block
     assert_eq "11" "${#REQ_SCREEN_LINES[@]}" "with many items and the command prompt open the block leaves one of the 12 rows spare"
     REQ_CMD_ACTIVE=0
-    LINES=12 req_nav_build_list; logo_block
+    LINES=12 req_nav_build_list; screen_block
     assert_eq "10" "${#REQ_SCREEN_LINES[@]}" "and two rows spare without the prompt"
     REQ_CMD_BUF=""; REQ_NOTIFICATION_LINES=()
     REQ_VIEW=list
@@ -651,7 +660,7 @@ test_status_in_the_bar() {
     assert_eq "1" "$(grep -c 'verbose on for this session' <<<"$out")" "the message of :v is drawn once"
     line=$(grep -n 'verbose on for this session' <<<"$out" | cut -d: -f1)
     assert_contains "! verbose on for this session" "$(sed -n "${line}p" <<<"$out")" "in the bar"
-    assert_contains "req / (1/2)" "$(sed -n "$(( line + 1 ))p" <<<"$out")" "and the line under it is the header of the list"
+    assert_contains "{>} Req / (1/2)" "$(sed -n "$(( line + 1 ))p" <<<"$out")" "and the line under it is the header of the list, with the logo"
 }
 
 test_end_to_end() {
@@ -869,7 +878,7 @@ test_clear_screen() {
     assert_contains "Ctrl-L|clear the screen" "$out" "the help lists Ctrl-L"
     out=$(keys down clear enter | req_nav_run "$PROJ/.req" 2>&1)
     assert_eq "2" "$(grep -c '(2/2)' <<<"$out")" "in the loop, the key draws the list again with the same selection"
-    assert_contains "req /auth" "$out" "and the Enter after it opens that selection"
+    assert_contains "Req /auth" "$out" "and the Enter after it opens that selection"
 }
 
 test_view_key() {
@@ -1786,7 +1795,7 @@ test_dynamic_root() {
     assert_eq "d d r" "${REQ_ITEM_KIND[*]}" "with their types"
     assert_eq "  GET" "${REQ_ITEM_METHOD[2]:+  }${REQ_ITEM_METHOD[2]}" "a request at the root has its method"
     assert_eq "$p" "$REQ_NAV_ROOT" "the root is the workspace (here the project folder)"
-    screen list; assert_contains "req /" "$OUT" "the header shows the root"
+    screen list; assert_contains "{>} Req /" "$OUT" "the header shows the logo and the root"
     assert_contains "dir    alpha/" "$OUT" "directories show as dir"
     assert_contains "GET    at-root" "$OUT" "requests show their method"
     [[ $OUT != *notes* && $OUT != *hidden* && $OUT != *old-entry* ]]
@@ -1862,7 +1871,7 @@ test_command_flow() {
     [[ -f $p/svc/ping.get.json ]]; assert_eq "0" "$?" "the request exists"
     assert_eq "0" "$(req_request_check "$p/svc/ping.get.json" 2>/dev/null; echo $?)" "and is valid"
     out=$({ keys : q enter; keys enter; } | req_nav_run "$p/.req" 2>&1)
-    [[ $out != *"req /svc"* ]]; assert_eq "0" "$?" ":q ends the loop (a later Enter is never handled)"
+    [[ $out != *"Req /svc"* ]]; assert_eq "0" "$?" ":q ends the loop (a later Enter is never handled)"
 }
 
 test_review_flow() {
@@ -2050,8 +2059,8 @@ test_review2_flow() {
     assert_eq "$id" "$REQ_PROJECT_ID" "reopening finds the same project"
     assert_eq "no" "$(req_config_get time_stats)" "the setting is still in effect"
     out=$({ keys : q enter; } | req_nav_run "$p/.req" 2>&1)
-    assert_contains "req /api" "$out" "the menu reopens in the saved directory"
-    assert_contains "req /api (3/3)" "$out" "with the third item (the saved request) selected"
+    assert_contains "Req /api" "$out" "the menu reopens in the saved directory"
+    assert_contains "Req /api (3/3)" "$out" "with the third item (the saved request) selected"
     assert_eq $'dir=api\nitem=api/status.get.json' "$(<"$(req_cursor_file "$id")")" "and leaving again keeps the place"
 
     REQ_CONFIG_DIR=$cfg; REQ_CONFIG=()
@@ -2115,6 +2124,6 @@ test_config_warnings_in_the_bar
 test_run_failures_in_the_bar
 test_legacy_layout_in_the_bar
 test_status_in_the_bar
-test_logo_row
+test_logo_in_list_header
 test_end_to_end
 test_summary

@@ -1074,19 +1074,18 @@ req_nav_build_list() {
 
     pos=""
     (( n > 0 )) && pos=" ($((REQ_SEL + 1))/$n)"
-    room=$(( cols - 5 - ${#pos} ))
+    room=$(( cols - 9 - ${#pos} ))
     if [[ -n $REQ_NAV_PROJECT ]]; then
         tail="  $REQ_NAV_PROJECT @ ${REQ_ENV:-default}"
         if (( room - ${#tail} >= 12 )); then room=$(( room - ${#tail} )); else tail=""; fi
     fi
-
     [[ -n $REQ_LOGO ]] || req_logo
     REQ_SCREEN_LINES+=("${REQ_LOGO} $(req_trunc "$(req_nav_crumb)" "$room")${c_dim}${pos}${tail}${c_reset}")
 
     if (( n == 0 )); then
         REQ_SCREEN_LINES+=("  ${c_dim}(empty)${c_reset}")
     else
-        visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+        visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
         (( n < visible )) && visible=$n
         (( REQ_SEL < REQ_TOP )) && REQ_TOP=$REQ_SEL
         (( REQ_SEL >= REQ_TOP + visible )) && REQ_TOP=$(( REQ_SEL - visible + 1 ))
@@ -1220,7 +1219,7 @@ req_nav_build_env() {
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
     REQ_SCREEN_LINES+=("${c_bold}req${c_reset} environments${c_dim}$(req_trunc "  $REQ_NAV_PROJECT  (in use: $current)" $(( cols - 16 )))${c_reset}")
 
-    visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+    visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
     (( total < visible )) && visible=$total
     (( REQ_ENV_SEL < REQ_ENV_TOP )) && REQ_ENV_TOP=$REQ_ENV_SEL
     (( REQ_ENV_SEL >= REQ_ENV_TOP + visible )) && REQ_ENV_TOP=$(( REQ_ENV_SEL - visible + 1 ))
@@ -1379,11 +1378,6 @@ req_nav_overlay() {
     local cursor='_'
     req_utf8 && cursor='█'
     (( REQ_CMD_ACTIVE )) && REQ_SCREEN_LINES+=(":${REQ_CMD_BUF}${cursor}")
-}
-
-req_nav_logo_overlay() {
-    [[ -n $REQ_LOGO ]] || req_logo
-    REQ_SCREEN_LINES=("$REQ_LOGO" "${REQ_SCREEN_LINES[@]}")
 }
 
 req_nav_run() {

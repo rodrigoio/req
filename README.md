@@ -1,6 +1,6 @@
-# req
-
 ![Req Logotype](img/req-logo-dark.png)
+
+# req
 
 The interactive request tool for your terminal. A bash + curl utility to register, browse and fire HTTP requests, with persistence in plain JSON files.
 
@@ -82,9 +82,9 @@ The screens have no line of hints at the bottom: press `h` (or type `:h`) to see
 
 ### The header and the notification bars
 
-The first row of every screen of the menu is the logo of the project, `{❯} Req`: the braces in cyan, the arrow in green and `Req` in bold, or plain text without colors (`NO_COLOR`), with `>` in place of `❯` when the terminal is not UTF-8. It is drawn by the menu only: `req run`, `req init`, `req log`, `--version` and `--help` do not print it. Under it (and under the bars, if there are any) the first line of the list shows the path inside the workspace, the position (`3/5`) and, when the terminal is wide enough, the project (the folder of the `.req`) and the environment in use: `req /api (3/5)  shop @ dev`. The environment is `REQ_ENV`, `default` when it is not set.
+The first line of the list, its header, starts with the logo of the project, `{❯} Req`: the braces in cyan, the arrow in green and `Req` in bold, or plain text without colors (`NO_COLOR`), with `>` in place of `❯` when the terminal is not UTF-8. After the logo the header shows the path inside the workspace, the position (`3/5`) and, when the terminal is wide enough, the project (the folder of the `.req`) and the environment in use: `{❯} Req /api (3/5)  shop @ dev`. The environment is `REQ_ENV`, `default` when it is not set. The logo is on the list only: the details of a request, the help and the `:env` and `:config` screens do not have it. It is drawn by the menu only: `req run`, `req init`, `req log`, `--version` and `--help` do not print it.
 
-Under the logo the screen carries two kinds of bar: orange with black letters, or, without colors (`NO_COLOR`), plain text that starts with `! `. When both are there, the persistent one is on top.
+Above the header (at the top of the screen) there are two kinds of bar: orange with black letters, or, without colors (`NO_COLOR`), plain text that starts with `! `. When both are there, the persistent one is on top.
 
 - A **warning** is shown once, above the header, and is gone at the next key. It says that a command was incorrect (an unknown command, nothing selected, a wrong usage, an invalid setting or environment); that a run failed (a variable with no value, a file that cannot be read, a failure of `curl`), with the first line of the error and what follows it as far as it fits, instead of text in the terminal; or that something is wrong with your configuration (a bad line in a settings file, a setting or the log that cannot be written) or with a `url` (see below). When several come at once, the bar shows the first and `(+N more)`. What a command did (`created ...`, `saved ...`, `renamed ...`, the environment you switched to, `:log` and `:v`) is said once in an orange bar of its own, right below the warning bar if there is one, so a warning and a message of the same command are both read; there is no line under the menu any more, and a long message is cut at the width of the terminal. `req run` is not affected: it still writes its warnings and errors to stderr.
 - A **persistent** notification is reprinted at every screen for as long as its condition holds, and it cannot be dismissed. The first one is for the root user: when `req` runs as root, a bar warns that the files you create or edit may end up owned by root, which can upset the owner and the permissions of your project's files. Run `req` as the user who owns the project instead.
