@@ -3,7 +3,7 @@
 
 # ==== version.sh
 
-REQ_VERSION="0.5.2"
+REQ_VERSION="0.6.0"
 
 # ==== lib/core.sh
 
@@ -984,7 +984,8 @@ req_nav_init() {
     REQ_NAV_PROJECT=$(req_abs_path "$(dirname "$pfile")"); REQ_NAV_PROJECT=${REQ_NAV_PROJECT##*/}
     REQ_CUR_DIR=""; REQ_STACK_DIR=(); REQ_STACK_SEL=()
     REQ_VIEW=list; REQ_DETAIL_FILE=""; REQ_DETAIL_VALID=0
-    REQ_CMD_ACTIVE=0; REQ_CMD_BUF=""; REQ_STATUS=""; REQ_QUIT=0; REQ_NAV_DIRTY=1
+    REQ_CMD_ACTIVE=0; REQ_CMD_BUF=""; REQ_QUIT=0; REQ_NAV_DIRTY=1
+    REQ_STATUS=""
     req_notification_register root req_notification_root_check     # a persistent notice, only for root
     req_nav_load
 }
@@ -1054,7 +1055,7 @@ req_nav_crumb() {
 
 req_nav_build_list() {
     local n=${#REQ_ITEM_KIND[@]} cols rows visible i end width pos
-    local c_dim c_bold c_reset c_sel arrows hint tag label tail="" room
+    local c_dim c_bold c_reset c_sel tag label tail="" room
     cols=$(req_term_cols); rows=$(req_term_rows)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     c_sel=$(req_color sel)
@@ -1072,7 +1073,7 @@ req_nav_build_list() {
     if (( n == 0 )); then
         REQ_SCREEN_LINES+=("  ${c_dim}(empty)${c_reset}")
     else
-        visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+        visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
         (( n < visible )) && visible=$n
         (( REQ_SEL < REQ_TOP )) && REQ_TOP=$REQ_SEL
         (( REQ_SEL >= REQ_TOP + visible )) && REQ_TOP=$(( REQ_SEL - visible + 1 ))
@@ -1093,12 +1094,6 @@ req_nav_build_list() {
             fi
         done
     fi
-
-    if req_utf8; then arrows="↑↓"; else arrows="up/down"; fi
-    hint="$arrows move   Enter open   : commands   :h help"
-    [[ ${#REQ_STACK_DIR[@]} -gt 0 ]] && hint+="   Esc back"
-    [[ ${REQ_RESULT-} == ok ]] && hint+="   v response"
-    REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $((cols - 1)))${c_reset}")
 }
 
 req_nav_build_detail() {
@@ -1124,7 +1119,7 @@ req_nav_build_detail() {
         done
         (( ${#plist[@]} > REQ_PROBLEMS_MAX_LINES )) &&
             REQ_SCREEN_LINES+=("  ... ($(( ${#plist[@]} - REQ_PROBLEMS_MAX_LINES )) more)")
-        REQ_SCREEN_LINES+=("${c_dim}Fix the file and open it again.   Esc back${c_reset}")
+        REQ_SCREEN_LINES+=("${c_dim}Fix the file and open it again.${c_reset}")
         return 0
     fi
 
@@ -1159,30 +1154,32 @@ req_nav_build_detail() {
         fi
         req_nav_detail_section "$raw_title" "$width" "${raw_lines[@]}"
     fi
-
-    hint="Enter run   : commands   :h help   Esc back"
-    [[ ${REQ_RESULT-} == ok ]] && hint+="   v response"
-    REQ_SCREEN_LINES+=("${c_dim}${hint}${c_reset}")
 }
 
 req_nav_build_help() {
-    local cols row keys w=0 c_dim c_bold c_reset
+    local cols row keys sec=0 c_dim c_bold c_reset
+    local -a keyw=(0)
     cols=$(req_term_cols)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
     for row in "${REQ_HELP_ROWS[@]}"; do
-        [[ $row == *'|'* ]] && { keys=${row%%|*}; (( ${#keys} > w )) && w=${#keys}; }
+        if [[ $row == *'|'* ]]; then
+            keys=${row%%|*}; (( ${#keys} > keyw[sec] )) && keyw[sec]=${#keys}
+        else
+            (( sec++ )); keyw[sec]=0
+        fi
     done
+    sec=0
     REQ_SCREEN_LINES+=("${c_bold}req${c_reset} help")
     for row in "${REQ_HELP_ROWS[@]}"; do
         if [[ $row == *'|'* ]]; then
-            keys=$(printf '%-*s' "$w" "${row%%|*}")
+            keys=$(printf '%-*s' "${keyw[sec]}" "${row%%|*}")
             REQ_SCREEN_LINES+=("  $(req_trunc "$keys  ${row#*|}" $((cols - 3)))")
         else
+            (( sec++ ))
             REQ_SCREEN_LINES+=("${c_dim}${row}${c_reset}")
         fi
     done
-    REQ_SCREEN_LINES+=("${c_dim}Press any key to go back${c_reset}")
 }
 
 req_nav_build_config() {
@@ -1198,19 +1195,19 @@ req_nav_build_config() {
         src=""; [[ -z ${REQ_CONFIG_LOCAL[$key]+x} ]] || src="project"
         REQ_SCREEN_LINES+=("  $(req_trunc "$(printf '%-*s  %-4s  default %-4s  %-7s  %s' "$w" "$key" "$value" "$def" "$src" "${REQ_CONFIG_DESC[$key]}")" $((cols - 3)))")
     done
-    REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value (:config -g key=value for the global file)   Press any key to go back${c_reset}")
+    REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value (:config -g key=value for the global file)${c_reset}")
 }
 
 req_nav_build_env() {
     local total=$(( ${#REQ_ENV_CHOICES[@]} + 1 )) cols rows visible i end width label inuse current=${REQ_ENV:-default}
-    local c_dim c_bold c_reset c_sel arrows hint
+    local c_dim c_bold c_reset c_sel
     cols=$(req_term_cols); rows=$(req_term_rows)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     c_sel=$(req_color sel)
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
     REQ_SCREEN_LINES+=("${c_bold}req${c_reset} environments${c_dim}$(req_trunc "  $REQ_NAV_PROJECT  (in use: $current)" $(( cols - 16 )))${c_reset}")
 
-    visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+    visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
     (( total < visible )) && visible=$total
     (( REQ_ENV_SEL < REQ_ENV_TOP )) && REQ_ENV_TOP=$REQ_ENV_SEL
     (( REQ_ENV_SEL >= REQ_ENV_TOP + visible )) && REQ_ENV_TOP=$(( REQ_ENV_SEL - visible + 1 ))
@@ -1232,10 +1229,6 @@ req_nav_build_env() {
             REQ_SCREEN_LINES+=("  ${label}${c_dim}${inuse}${c_reset}")
         fi
     done
-
-    if req_utf8; then arrows="↑↓"; else arrows="up/down"; fi
-    hint="$arrows move   Enter choose   Esc cancel"
-    REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $(( cols - 1 )))${c_reset}")
 }
 
 req_nav_env_key() {
@@ -1243,7 +1236,7 @@ req_nav_env_key() {
     case $1 in
         up)    REQ_ENV_SEL=$(( (REQ_ENV_SEL + total - 1) % total )) ;;
         down)  REQ_ENV_SEL=$(( (REQ_ENV_SEL + 1) % total )) ;;
-        esc)   REQ_VIEW=$REQ_ENV_BACK ;;
+        esc|q) REQ_VIEW=$REQ_ENV_BACK ;;
         enter) req_nav_env_enter ;;
     esac
     return 0
@@ -1351,7 +1344,8 @@ req_nav_handle() {
     if [[ $REQ_VIEW == detail ]]; then
         case $key in
             enter) (( REQ_DETAIL_VALID )) && req_nav_execute ;;
-            esc)   REQ_VIEW=list ;;
+            esc|q) REQ_VIEW=list ;;
+            h)     req_nav_help ;;
             v)     req_nav_view_result ;;
         esac
     else
@@ -1360,6 +1354,8 @@ req_nav_handle() {
             down)  (( n > 0 )) && REQ_SEL=$(( (REQ_SEL + 1) % n )) ;;
             enter) (( n > 0 )) && req_nav_open ;;
             esc)   req_nav_back ;;
+            q)     if (( ${#REQ_STACK_DIR[@]} > 0 )); then req_nav_back; else REQ_QUIT=1; fi ;;
+            h)     req_nav_help ;;
             v)     req_nav_view_result ;;
         esac
     fi
@@ -1367,13 +1363,9 @@ req_nav_handle() {
 }
 
 req_nav_overlay() {
-    local last=$(( ${#REQ_SCREEN_LINES[@]} - 1 )) cursor='_'
+    local cursor='_'
     req_utf8 && cursor='█'
-    (( REQ_CMD_ACTIVE )) && REQ_SCREEN_LINES[last]=":${REQ_CMD_BUF}${cursor}"
-    if [[ -n $REQ_STATUS ]]; then
-        REQ_SCREEN_LINES+=("$(req_color dim)${REQ_STATUS}$(req_color reset)")
-        REQ_STATUS=""
-    fi
+    (( REQ_CMD_ACTIVE )) && REQ_SCREEN_LINES+=(":${REQ_CMD_BUF}${cursor}")
 }
 
 req_nav_run() {
@@ -1413,6 +1405,7 @@ req_nav_run() {
 req_nav_start() {
     local pfile status
     [[ -t 0 && -t 1 ]] || req_die "interactive mode needs a terminal (use 'req run <file>' in scripts)"
+    req_nav_clear_screen
     if ! pfile=$(req_project_find .); then
         printf 'No %s file found in %s.\n' "$REQ_PROJECT_FILE" "$PWD"
         if ! req_confirm "Initialize a req project here?"; then
@@ -1440,7 +1433,7 @@ REQ_NOTIFICATION_TEXT=""       # what a check that has something to say puts in 
 REQ_NOTIFICATION_ACTIVE=0      # 1 while the menu is open: req_warn then goes through the warning bar
 REQ_NOTIFICATION_WARN=""       # the warning that waits for the next draw ("" when there is none)
 REQ_NOTIFICATION_WARN_MORE=0   # how many more came after it before that draw
-REQ_NOTIFICATION_PRODUCERS=(req_notification_persistent_lines req_notification_warn_lines)
+REQ_NOTIFICATION_PRODUCERS=(req_notification_persistent_lines req_notification_warn_lines req_notification_status_lines)
 
 req_notification_bar() {
     local cols room text pad
@@ -1532,6 +1525,14 @@ req_notification_warn_lines() {
     text=$(req_notification_more "$REQ_NOTIFICATION_WARN" "$REQ_NOTIFICATION_WARN_MORE")
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
     REQ_NOTIFICATION_LINES+=("$(req_notification_bar "$text")")
+    return 0
+}
+
+req_notification_status_lines() {
+    local text=${REQ_STATUS-}
+    [[ -n $text ]] || return 0
+    REQ_STATUS=""
+    REQ_NOTIFICATION_LINES+=("$(req_notification_bar "${text//$'\n'/ }")")
     return 0
 }
 
@@ -1933,17 +1934,20 @@ req_wizard_remove_dir() {
 
 REQ_CMD_ACTIVE=0        # 1 while a command is being typed
 REQ_CMD_BUF=""          # the command typed so far
-REQ_STATUS=""           # one-shot message shown under the menu (confirmations; warnings go to req_notification_warn)
+REQ_STATUS=""           # one-shot message of a command (a confirmation); req_notification_status_lines draws it in a bar
 REQ_QUIT=0              # set by :q, ends the main loop
 
 REQ_HELP_ROWS=(
     "Keys"
     "up/down|move the selection (wraps around)"
-    "Enter|open a directory or request; on the details, run it"
-    "Esc|go back (details, then list, then parent directory)"
-    "v|show the last response in full screen (JSON indented; PAGER, else less; q leaves it)"
-    "Ctrl-L|clear the screen: old results go away and the menu is drawn at the top"
+    "Enter|open a directory or request; run it on the details; pick in :env"
+    "Esc / q|go back one level; at the root q quits, Esc does nothing"
+    "h|this help (same as :h)"
+    "v|show the last response in a pager; q leaves it (Esc does not)"
+    "Ctrl-L|clear the screen; the menu is drawn again at the top"
+    "Ctrl-C|quit"
     ":|command mode (Esc cancels)"
+    "any key|closes this help and the settings screen (:config)"
     "Commands"
     ":n|new request in the current directory"
     ":nd [name]|new directory (alias :mkdir)"
@@ -1963,6 +1967,11 @@ REQ_HELP_ROWS=(
     "req log|follow the project's log from another terminal (tail -F)"
 )
 REQ_HELP_BACK=list      # view to return to when the help screen closes
+
+req_nav_help() {
+    REQ_HELP_BACK=$REQ_VIEW
+    REQ_VIEW=help
+}
 
 req_cmd_key() {
     local key=$1 line
@@ -2010,7 +2019,7 @@ req_cmd_run() {
         config)       req_cmd_config "$arg" ;;
         log)          req_cmd_log "$arg" ;;
         v|verbose)    req_cmd_verbose "$arg" ;;
-        h|help)       REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=help ;;
+        h|help)       req_nav_help ;;
         *)            req_notification_warn "unknown command :$cmd (:h lists the commands)" ;;
     esac
     return 0
