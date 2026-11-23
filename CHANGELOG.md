@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-23
+
 ### Added
 
 - Go back with `q` as well as with Esc: on the list (up one directory), on the details of a request and on the
@@ -130,7 +132,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the verbose mode (`:v`).
 - Show the installed version with `req --version`.
 
-[unreleased]: https://github.com/rodrigoio/req/compare/v0.5.2...HEAD
+[unreleased]: https://github.com/rodrigoio/req/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/rodrigoio/req/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/rodrigoio/req/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/rodrigoio/req/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/rodrigoio/req/compare/v0.4.0...v0.5.0
