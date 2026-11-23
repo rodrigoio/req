@@ -137,7 +137,9 @@ req_nav_init() {
     REQ_NAV_PROJECT=$(req_abs_path "$(dirname "$pfile")"); REQ_NAV_PROJECT=${REQ_NAV_PROJECT##*/}
     REQ_CUR_DIR=""; REQ_STACK_DIR=(); REQ_STACK_SEL=()
     REQ_VIEW=list; REQ_DETAIL_FILE=""; REQ_DETAIL_VALID=0
-    REQ_CMD_ACTIVE=0; REQ_CMD_BUF=""; REQ_STATUS=""; REQ_QUIT=0; REQ_NAV_DIRTY=1
+    REQ_CMD_ACTIVE=0; REQ_CMD_BUF=""; REQ_QUIT=0; REQ_NAV_DIRTY=1
+    # shellcheck disable=SC2034  # REQ_STATUS is read by req_notification_status_lines (notification.sh)
+    REQ_STATUS=""
     req_notification_register root req_notification_root_check     # a persistent notice, only for root
     req_nav_load
 }
@@ -557,15 +559,11 @@ req_nav_handle() {
 }
 
 # req_nav_overlay - what goes under the screen at each draw: the command prompt while a command is typed (one more
-# line, the list keeps a row free for it), then the one-shot status.
+# line, the list keeps a row free for it).
 req_nav_overlay() {
     local cursor='_'
     req_utf8 && cursor='█'
     (( REQ_CMD_ACTIVE )) && REQ_SCREEN_LINES+=(":${REQ_CMD_BUF}${cursor}")
-    if [[ -n $REQ_STATUS ]]; then
-        REQ_SCREEN_LINES+=("$(req_color dim)${REQ_STATUS}$(req_color reset)")
-        REQ_STATUS=""
-    fi
 }
 
 # req_nav_run <.req file> - the main loop; ends at end of input or on :q, saving the menu position (also

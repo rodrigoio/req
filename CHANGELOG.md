@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "Press any key" line of the help and the settings: press `h` for the help, which now lists every key (Ctrl-C and
   "any key" included), in a column that no longer squeezes their descriptions. The command you type shows under the
   screen without hiding a row of the list.
+- Say what a command did (created, saved, renamed, copied, removed, the environment you switched to, the log and the
+  verbose mode) in the orange bar at the top, once, like the warnings, instead of in a dim line under the menu. A
+  message longer than the terminal is cut at its width.
 
 ## [0.5.2] - 2026-11-23
 

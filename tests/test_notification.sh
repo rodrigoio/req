@@ -300,6 +300,42 @@ test_warn_routing() {
     rm -f "$errfile"
 }
 
+test_status() {
+    echo "notification: what a command says, printed once"
+    local COLUMNS=40
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=(); REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    REQ_STATUS=""
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "nothing said, no bar"
+
+    REQ_STATUS="created a.get.json"
+    req_notification_collect
+    assert_eq "1" "${#REQ_NOTIFICATION_LINES[@]}" "a message of a command shows in a bar"
+    assert_eq "! created a.get.json" "${REQ_NOTIFICATION_LINES[0]}" "with its text, as the others"
+    assert_eq "" "$REQ_STATUS" "and it is spent"
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "so the draw after it has no bar"
+
+    REQ_STATUS=$'two\nlines'
+    req_notification_collect
+    assert_eq "! two lines" "${REQ_NOTIFICATION_LINES[0]}" "a message is one line: a line break becomes a space"
+
+    REQ_STATUS="a message that is longer than the terminal is cut at its width"
+    req_notification_collect
+    assert_eq "1" "$(( ${#REQ_NOTIFICATION_LINES[0]} <= 39 ))" "a long message is cut to the width of the terminal"
+
+    # a warning and the message of the same command are both read: two bars, the warning on top
+    req_notification_register test-first notification_test_check_first
+    req_notification_warn "bad line in a file"
+    REQ_STATUS="environment: x (variables not loaded)"
+    req_notification_collect
+    assert_eq "3" "${#REQ_NOTIFICATION_LINES[@]}" "a persistent bar, a warning and a message"
+    assert_contains "! first persistent notice" "${REQ_NOTIFICATION_LINES[0]}" "the persistent one is on top"
+    assert_eq "! bad line in a file" "${REQ_NOTIFICATION_LINES[1]}" "the warning below it"
+    assert_eq "! environment: x (variables not loaded)" "${REQ_NOTIFICATION_LINES[2]}" "and the message below the warning, not (+1 more)"
+    REQ_NOTIFICATION_IDS=(); REQ_NOTIFICATION_CHECKS=()
+}
+
 test_more() {
     echo "notification: the text of a bar that is one of several"
     local COLUMNS=30
@@ -344,6 +380,7 @@ test_bar_without_colors
 test_collect
 test_persistent
 test_warning
+test_status
 test_more
 test_root_notice
 test_warn_routing

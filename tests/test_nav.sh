@@ -548,6 +548,29 @@ test_run_failures_in_the_bar() {
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
 }
 
+test_status_in_the_bar() {
+    echo "nav: what a command says goes to the bar at the top"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local out line
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    REQ_STATUS="created x.get.json"
+    req_notification_collect
+    req_nav_build_list; req_nav_overlay; req_notification_overlay
+    assert_eq "! created x.get.json" "${REQ_SCREEN_LINES[0]}" "the message of a command is the bar above the header"
+    assert_not_contains "created x.get.json" "${REQ_SCREEN_LINES[*]:1}" "and nowhere under it"
+    assert_eq "" "$REQ_STATUS" "it is spent: drawn once"
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "at the next draw it is gone"
+
+    # in the main loop, with a real command: drawn once, and the bar is right above the header
+    out=$({ keys : "v yes" enter; keys : q enter; } | req_nav_run "$PROJ/.req" 2>&1)
+    assert_eq "1" "$(grep -c 'verbose on for this session' <<<"$out")" "the message of :v is drawn once"
+    line=$(grep -n 'verbose on for this session' <<<"$out" | cut -d: -f1)
+    assert_contains "! verbose on for this session" "$(sed -n "${line}p" <<<"$out")" "in the bar"
+    assert_contains "req / (1/2)" "$(sed -n "$(( line + 1 ))p" <<<"$out")" "and the line under it is the header of the list"
+}
+
 test_end_to_end() {
     echo "nav: full flow (local mock)"
     command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
@@ -1995,5 +2018,6 @@ test_notification_bars
 test_root_notice
 test_config_warnings_in_the_bar
 test_run_failures_in_the_bar
+test_status_in_the_bar
 test_end_to_end
 test_summary
