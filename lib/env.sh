@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # env.sh - environments and variables.
 #
-# A project keeps its variables in the central directory (home.sh), as "key=value" files:
-#   $REQ_CONFIG_DIR/projects/<id>/vars              shared by every environment
-#   $REQ_CONFIG_DIR/projects/<id>/env/<env>/vars    one environment's, which wins over vars
+# A project keeps the variables of each environment in the central directory (home.sh), as a "key=value" file
+# in a folder of the environment: $REQ_CONFIG_DIR/projects/<id>/env/<env>/vars. Nothing is shared between
+# environments.
 # An invalid file is only reported, never fixed or overwritten. The old format ($REQ_CONFIG_DIR/env/<env>/secrets.json)
 # is not read and not migrated.
 
@@ -17,22 +17,18 @@ req_env_file() {
     req_project_state_dir "$1" "env/$2/vars"
 }
 
-req_vars_file() {
-    req_project_state_dir "$1" vars
-}
-
 req_env_legacy_file() {
     printf '%s/env/%s/secrets.json' "$(req_config_dir)" "$1"
 }
 
 # shellcheck disable=SC2034  # REQ_VARS is read by the callers
-# req_vars_load <env> [project id] - loads the project's variables (default: REQ_PROJECT_ID) and then the
-# environment's, which win, into REQ_VARS. A missing file is fine; without a project nothing is loaded. An
-# invalid file reports every problem with its absolute path, leaves REQ_VARS empty and returns 1. A leftover
-# secrets.json gets a warning that says where the variables live now.
+# req_vars_load <env> [project id] - loads the variables of the environment (its `vars` file, in the project
+# given, by default REQ_PROJECT_ID) into REQ_VARS; no other file is read. A missing file is fine; without a
+# project nothing is loaded. An invalid file reports every problem with its absolute path, leaves REQ_VARS
+# empty and returns 1. A leftover secrets.json gets a warning that says where the variables live now.
 req_vars_load() {
     local env=$1 id=${2-$REQ_PROJECT_ID} file legacy line
-    local -A loaded=()
+    local -A seen=()
     REQ_VARS=()
     req_valid_name "$env" || {
         req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
@@ -42,23 +38,14 @@ req_vars_load() {
     [[ -n $id ]] || return 0
     req_valid_name "$id" || { req_err "invalid project id: \"$id\""; return 1; }
 
-    local -a files=("$(req_vars_file "$id")" "$(req_env_file "$id" "$env")")
-    local status=0
-    for file in "${files[@]}"; do req_kv_check "$file" || status=1; done
-    (( status )) && return 1
-
-    local -A seen=()
-    for file in "${files[@]}"; do
-        seen=()
-        while IFS= read -r line; do
-            req_kv_parse_line "$line" || continue
-            [[ -n ${seen[$REQ_KV_KEY]+x} ]] && continue     # the first line of a key wins
-            seen[$REQ_KV_KEY]=1
-            loaded[$REQ_KV_KEY]=$REQ_KV_VALUE
-        done < <(req_kv_list "$file")
-    done
-    local k
-    for k in "${!loaded[@]}"; do REQ_VARS[$k]=${loaded[$k]}; done
+    file=$(req_env_file "$id" "$env")
+    req_kv_check "$file" || return 1
+    while IFS= read -r line; do
+        req_kv_parse_line "$line" || continue
+        [[ -n ${seen[$REQ_KV_KEY]+x} ]] && continue     # the first line of a key wins
+        seen[$REQ_KV_KEY]=1
+        REQ_VARS[$REQ_KV_KEY]=$REQ_KV_VALUE
+    done < <(req_kv_list "$file")
     return 0
 }
 
@@ -74,8 +61,7 @@ REQ_RESOLVED=""        # the value found by req_resolve_key_var
 # shellcheck disable=SC2034  # REQ_RESOLVED is read by req_resolve_key and req_subst
 # req_resolve_key_var <env> <key> - the engine of req_resolve_key, with no subshell: the value goes in
 # REQ_RESOLVED and the status is 0, or the status is 1 with it empty. Precedence: the process variable
-# <ENV>_<KEY>, then the environment file, then the project variables (REQ_VARS, so req_vars_load <env> must
-# have run). A set but empty process variable counts as a value.
+# <ENV>_<KEY>, then the environment's variables (REQ_VARS, so req_vars_load <env> must have run). A set but empty process variable counts as a value.
 req_resolve_key_var() {
     local env=$1 key=$2 name
     REQ_RESOLVED=""
@@ -98,14 +84,14 @@ req_resolve_key() {
 REQ_SUBST_OUT=""        # the text produced by req_subst
 
 # req_subst_fail <env> <project id> <key>... - the error for keys with no value: one line listing them and,
-# for each, the process variable and the project's environment files that would define it.
+# for each, the process variable and the file of the environment that would define it.
 req_subst_fail() {
     local env=$1 id=$2 key list="" where=""
     shift 2
     for key in "$@"; do list+=", $key"; done
     req_err "no value for ${list#, } in environment \"$env\""
     if [[ -n $id ]] && req_valid_name "$id"; then
-        where="$(req_abs_path "$(req_env_file "$id" "$env")") (or $(req_abs_path "$(req_vars_file "$id")") for every environment)"
+        where=$(req_abs_path "$(req_env_file "$id" "$env")")
     fi
     for key in "$@"; do
         printf '  %s: set the variable %s' "$key" "$(req_env_var_name "$env" "$key")" >&2

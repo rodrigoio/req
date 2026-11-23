@@ -14,7 +14,8 @@ trap 'rm -rf "$TMP"' EXIT
 export REQ_CONFIG_DIR=$TMP/cfg
 
 ID=shop
-# envfile <env> <text> / varsfile <text> - write the files of the project "shop".
+# envfile <env> <text> - writes the vars file of an environment of the project "shop"; varsfile <text> writes the
+# vars file of the project that the previous layout had, which nothing reads any more.
 envfile() { mkdir -p "$REQ_CONFIG_DIR/projects/$ID/env/$1"; printf '%s\n' "$2" >"$REQ_CONFIG_DIR/projects/$ID/env/$1/vars"; }
 varsfile() { mkdir -p "$REQ_CONFIG_DIR/projects/$ID"; printf '%s\n' "$1" >"$REQ_CONFIG_DIR/projects/$ID/vars"; }
 
@@ -24,7 +25,7 @@ test_paths() {
     assert_eq "$HOME/.req" "$(REQ_CONFIG_DIR='' req_config_dir)" "the default is ~/.req"
     assert_eq "$TMP/cfg/projects/shop/env/dev" "$(req_env_dir shop dev)" "folder of an environment"
     assert_eq "$TMP/cfg/projects/shop/env/dev/vars" "$(req_env_file shop dev)" "file of an environment, inside its folder"
-    assert_eq "$TMP/cfg/projects/shop/vars" "$(req_vars_file shop)" "project variables"
+    declare -F req_vars_file >/dev/null; assert_eq "1" "$?" "there is no path for variables of the project: only environments have them"
 }
 
 test_load() {
@@ -43,11 +44,11 @@ test_load() {
 
     varsfile $'region=eu\ntoken=shared'
     req_vars_load dev $ID
-    assert_eq "eu" "${REQ_VARS[region]}" "project variables are loaded too"
-    assert_eq "abc" "${REQ_VARS[token]}" "the environment wins over the project variables"
+    assert_eq "" "${REQ_VARS[region]-}" "a vars file of the project (the previous layout) is not read"
+    assert_eq "abc" "${REQ_VARS[token]}" "only the variables of the environment are loaded"
+    assert_eq "3" "${#REQ_VARS[@]}" "exactly those"
     req_vars_load nothing-here $ID; assert_eq "0" "$?" "a missing environment file is not an error"
-    assert_eq "shared" "${REQ_VARS[token]}" "and only the project variables remain"
-    assert_eq "2" "${#REQ_VARS[@]}" "exactly those"
+    assert_eq "0" "${#REQ_VARS[@]}" "and nothing is loaded, not even the file of the project"
 
     envfile dup $'k=first\nk=second'
     req_vars_load dup $ID
@@ -77,8 +78,8 @@ test_invalid() {
     assert_eq "0" "${#REQ_VARS[@]}" "nothing is loaded from an invalid file"
 
     varsfile 'broken line'
-    out=$(req_vars_load dev $ID 2>&1); assert_eq "1" "$?" "an invalid vars file fails even when the environment is fine"
-    assert_contains "$REQ_CONFIG_DIR/projects/$ID/vars:1" "$out" "and names that file"
+    out=$(req_vars_load dev $ID 2>&1); assert_eq "0" "$?" "an invalid vars file of the project is not read, so it is no problem"
+    assert_eq "" "$out" "and says nothing"
     rm -f "$REQ_CONFIG_DIR/projects/$ID/vars"
 
     out=$(req_vars_load "../etc" $ID 2>&1); assert_eq "1" "$?" "an environment name that is not a slug is refused"
@@ -105,8 +106,8 @@ test_resolve() {
     local out
     rm -f "$REQ_CONFIG_DIR/env/dev/secrets.json"       # left by the previous test
     rm -f "$REQ_CONFIG_DIR/projects/$ID/vars"
-    varsfile $'region=eu\ntoken=from-vars\nonly_vars=v'
-    envfile dev $'url=http://dev\ntoken=from-env\nempty='
+    varsfile $'token=from-project-file\nonly_project_file=v'
+    envfile dev $'region=eu\nurl=http://dev\ntoken=from-env\nempty='
     req_vars_load dev $ID
 
     assert_eq "DEV_URL" "$(req_env_var_name dev url)" "the variable name is ENV_KEY in capitals"
@@ -114,8 +115,9 @@ test_resolve() {
     assert_eq "DEV_MY_KEY" "$(req_env_var_name dev my_key)" "underscores in the key stay"
 
     assert_eq "http://dev" "$(req_resolve_key dev url)" "a key of the environment file"
-    assert_eq "eu" "$(req_resolve_key dev region)" "a key only the project variables define"
-    assert_eq "from-env" "$(req_resolve_key dev token)" "the environment file wins over the project variables"
+    assert_eq "eu" "$(req_resolve_key dev region)" "another key of the environment file"
+    assert_eq "from-env" "$(req_resolve_key dev token)" "the value is the environment's, never the one of a vars file of the project"
+    req_resolve_key dev only_project_file; assert_eq "1" "$?" "a key only a vars file of the project has is not resolved"
     out=$(req_resolve_key dev empty); assert_eq "0|" "$?|$out" "an empty value is a value"
     out=$(req_resolve_key dev missing); assert_eq "1|" "$?|$out" "an undefined key fails and prints nothing"
 
@@ -140,8 +142,7 @@ test_resolve() {
 test_subst() {
     echo "env: substituting \${key}"
     local err
-    varsfile $'region=eu\ntoken=from-vars'
-    envfile dev $'url=http://dev\nsecret=s3'
+    envfile dev $'url=http://dev\nsecret=s3\nregion=eu\ntoken=from-vars'
     req_vars_load dev $ID
 
     req_subst 'GET ${url}/users?r=${region}' dev $ID; assert_eq "0" "$?" "a text with known keys is substituted"
@@ -168,7 +169,7 @@ test_subst() {
     assert_eq "" "$REQ_SUBST_OUT" "and nothing is produced"
     assert_contains 'req: error: no value for missing, other in environment "dev"' "$err" "the error lists each missing key once, in order"
     assert_contains "missing: set the variable DEV_MISSING, or add missing=... to $REQ_CONFIG_DIR/projects/$ID/env/dev/vars" "$err" "and says what to define and where"
-    assert_contains "(or $REQ_CONFIG_DIR/projects/$ID/vars for every environment)" "$err" "including the variables of the project"
+    assert_not_contains "for every environment" "$err" "and no file shared by the environments is suggested, there is none"
     assert_contains "other: set the variable DEV_OTHER" "$err" "for every missing key"
     err=$(req_subst '${x}' pre-prod $ID 2>&1); assert_contains "PRE_PROD_X" "$err" "the variable name follows the environment"
     err=$(req_subst '${x}' dev "" 2>&1)
@@ -182,8 +183,7 @@ test_subst() {
 test_subst_json() {
     echo "env: substituting in a request"
     local j err
-    varsfile $'host=h.example\ntok=a"b\\c\nn=5'
-    envfile dev 'extra=e1'
+    envfile dev $'host=h.example\ntok=a"b\\c\nn=5\nextra=e1'
     req_vars_load dev $ID
 
     j='{"name":"${keep}","description":"${keep}","method":"POST","url":"https://${host}/x","headers":{"Authorization":"Bearer ${tok}","${host}":"k"},"query":{"q":"${n}"},"parameters":{"f":"${extra}"},"raw_data":{"a":["${tok}",1,true,null],"${host}":"v"}}'
@@ -191,7 +191,7 @@ test_subst_json() {
     assert_eq "https://h.example/x" "$(jq -r .url <<<"$REQ_SUBST_OUT")" "in the url"
     assert_eq 'Bearer a"b\c' "$(jq -r .headers.Authorization <<<"$REQ_SUBST_OUT")" "in the headers (the quote and backslash survive as JSON)"
     assert_eq "5" "$(jq -r .query.q <<<"$REQ_SUBST_OUT")" "in the query"
-    assert_eq "e1" "$(jq -r .parameters.f <<<"$REQ_SUBST_OUT")" "in the parameters, from the environment file"
+    assert_eq "e1" "$(jq -r .parameters.f <<<"$REQ_SUBST_OUT")" "in the parameters"
     assert_eq '["a\"b\\c",1,true,null]' "$(jq -c .raw_data.a <<<"$REQ_SUBST_OUT")" "in the strings of a native JSON raw_data, other values unchanged"
     assert_eq '${keep}|${keep}' "$(jq -r '[.name,.description] | join("|")' <<<"$REQ_SUBST_OUT")" "name and description are left alone"
     assert_eq '["Authorization","${host}"]' "$(jq -c '.headers | keys_unsorted' <<<"$REQ_SUBST_OUT")" "names of properties are never substituted"

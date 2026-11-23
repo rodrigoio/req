@@ -54,32 +54,32 @@ test_flow() {
     # shellcheck disable=SC2016  # the placeholders are jq strings on purpose
     jq '.url="${base}/echo" | .headers={"X-Test":"${tok}"} | .raw_data={"user":"${tok}"}' \
         "$work/login.post.json" >"$work/login.tmp" && mv "$work/login.tmp" "$work/login.post.json"
-    printf 'base=http://127.0.0.1:%s\ntok=from-vars\n' "$port" >"$state/vars"
-    mkdir -p "$state/env/dev"; printf 'tok=from-dev\n' >"$state/env/dev/vars"
+    printf 'base=http://127.0.0.1:%s\ntok=from-vars\n' "$port" >"$state/env/default/vars"
+    mkdir -p "$state/env/dev"; printf 'base=http://127.0.0.1:%s\ntok=from-dev\n' "$port" >"$state/env/dev/vars"
 
-    # 4. run from the menu in the default environment: variables from vars
+    # 4. run from the menu in the default environment: the variables of that environment
     out=$(menu "$ENTER" "$ENTER" "$(cmd q)")
     assert_contains "POST http://127.0.0.1:$port/echo" "$out" "the menu shows the substituted url"
     assert_contains "HTTP 200" "$out" "and runs the request"
-    assert_contains '"x_test": "from-vars"' "$out" "the header came from the project variables"
+    assert_contains '"x_test": "from-vars"' "$out" "the header came from the variables of default"
     assert_contains 'from-vars' "$(grep -o 'body.*' <<<"$out" | head -n 1)" "and so did the body"
 
-    # 5. :env dev switches the environment: the file wins over vars
+    # 5. :env dev switches the environment: it has its own variables
     out=$(menu "$(cmd env dev)" "$ENTER" "$ENTER" "$(cmd q)")
     assert_contains "work @ dev" "$out" "the header shows the environment"
-    assert_contains '"x_test": "from-dev"' "$out" "the environment file wins over the project variables"
+    assert_contains '"x_test": "from-dev"' "$out" "the variables of dev are used, not those of default"
 
-    # 6. a process variable wins over both; REQ_ENV chooses the environment from outside
+    # 6. a process variable wins over the file; REQ_ENV chooses the environment from outside
     out=$(DEV_TOK=from-process REQ_ENV=dev $REQ run "$work/login.post.json" 2>&1)
     assert_eq "0" "$?" "req run works"
     assert_contains '"x_test": "from-process"' "$out" "the process variable DEV_TOK wins"
 
     # 7. a missing key stops the request with a friendly error
-    printf 'base=http://127.0.0.1:%s\n' "$port" >"$state/vars"
+    printf 'base=http://127.0.0.1:%s\n' "$port" >"$state/env/default/vars"
     out=$($REQ run "$work/login.post.json" 2>&1); assert_eq "1" "$?" "a missing key fails req run"
     assert_contains 'no value for tok in environment "default"' "$out" "naming the key and the environment"
     assert_contains "DEFAULT_TOK" "$out" "and how to define it"
-    printf 'base=http://127.0.0.1:%s\ntok=from-vars\n' "$port" >"$state/vars"
+    printf 'base=http://127.0.0.1:%s\ntok=from-vars\n' "$port" >"$state/env/default/vars"
 
     # 8. log and verbose: off by default, on with :log and :v, in one session
     out=$($REQ run "$work/login.post.json" 2>&1)
@@ -418,7 +418,7 @@ test_headers() {
     $REQ init >/dev/null 2>&1
     state=$REQ_CONFIG_DIR/projects/hdrs; file=$work/ping.get.json
     printf 'restore_cursor=no\nlog=yes\n' >"$state/config"
-    printf 'tok=from-vars\n' >"$state/vars"
+    printf 'tok=from-vars\n' >"$state/env/default/vars"
 
     # 1. :n: a header with a placeholder typed as key=value is stored; one typed as key: value is refused
     # shellcheck disable=SC2016  # a placeholder, literal text

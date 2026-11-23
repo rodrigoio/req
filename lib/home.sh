@@ -6,7 +6,6 @@
 #   ~/.req/config                  global configuration
 #   ~/.req/projects/<id>/project   name=<folder name> and path=<absolute path of the project>
 #   ~/.req/projects/<id>/config    project configuration (wins over the global one)
-#   ~/.req/projects/<id>/vars      project variables
 #   ~/.req/projects/<id>/env/<e>/vars   variables of environment <e>
 #   ~/.req/projects/<id>/cursor    last position in the menu
 #
