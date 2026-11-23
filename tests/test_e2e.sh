@@ -18,6 +18,10 @@ REQ="bash $ROOT/bin/req"
 # bin/req refuses anything but a terminal), typing one chunk at a time. Enter is \r.
 menu() { python3 -I "$ROOT/tests/pty_run.py" "$@" -- bash "$ROOT/bin/req" 2>&1; }
 
+# guarded_menu <chunk...> - menu with a limit of time: a session that is meant to end by itself (a key that quits)
+# and does not fails with status 124, instead of waiting for ever.
+guarded_menu() { timeout 60 python3 -I "$ROOT/tests/pty_run.py" "$@" -- bash "$ROOT/bin/req" 2>&1; }
+
 # cmd <text> - a command: ":" then the text, then Enter.
 cmd() { printf ':%s\r' "$*"; }
 ENTER=$'\r'
@@ -480,6 +484,83 @@ test_start_clear() {
     cd "$ROOT" || return
 }
 
+test_usability_release() {
+    echo "e2e: the usability release (a clean start, q and Esc, h, no hint lines, messages in the bar)"
+    command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
+    command -v timeout >/dev/null 2>&1 || { echo "  skip timeout unavailable"; return; }
+    [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
+    local work=$TMP/usab port out status state after line word
+    local clear=$'\033[H\033[2J' esc=$'\033' down=$'\033[B'
+    port=$(<"$TMP/port")
+    mkdir -p "$work/sub" && cd "$work" || return
+    $REQ init >/dev/null 2>&1
+    state=$REQ_CONFIG_DIR/projects/usab
+    printf 'restore_cursor=no\n' >"$state/config"
+    printf '{"name":"ping","method":"GET","url":"http://127.0.0.1:%s/echo"}\n' "$port" >sub/ping.get.json
+    printf '{"name":"top","method":"GET","url":"http://127.0.0.1:%s/echo"}\n' "$port" >top.get.json
+
+    # 1. a clean start, no hint line on the list, and q at the root ends the program by itself
+    out=$(PTY_RAW=1 guarded_menu "q"); status=$?
+    assert_eq "0" "$status" "q at the root of the list quits req"
+    assert_eq "$clear" "${out:0:${#clear}}" "the screen was cleared when the menu started"
+    assert_contains "req / (1/2)" "$out" "and the list was drawn"
+    for word in "Enter open" "Esc back" "v response" ":h help" "move   Enter"; do
+        assert_not_contains "$word" "$out" "the list has no hint line: no \"$word\""
+    done
+
+    # 2. Esc at the root does nothing (the program is still there to open the help), and the help lists every key
+    out=$(guarded_menu "$esc" "h" "x" "$(cmd q)"); status=$?
+    assert_eq "0" "$status" "Esc did not quit: h opened the help, a key closed it, :q ended the session"
+    assert_contains "req help" "$out" "h opened the help"
+    for word in "move the selection" "go back one level" "this help (same as :h)" "show the last response" \
+                "clear the screen" "closes this help" "command mode"; do
+        assert_contains "$word" "$out" "the help lists a key: $word"
+    done
+    assert_contains "Ctrl-C   quit" "$out" "Ctrl-C included"
+
+    # 3. on the details h opens the help and any key goes back to them; q goes back to the list of the directory
+    out=$(guarded_menu "$ENTER" "$ENTER" "h" "x" "q" "$ENTER" "$(cmd q)"); status=$?
+    assert_eq "0" "$status" "the session ended with :q"
+    assert_eq $'dir=sub\nitem=sub/ping.get.json' "$(<"$state/cursor")" "q on the details went back to the list of sub, not further"
+    assert_not_contains "HTTP 200" "$out" "after q the list was showing: Enter opened the details again and ran nothing"
+    assert_contains "req help" "$out" "h opened the help on the details"
+    for word in "Enter run" "Esc back" "Enter choose" "Press any key"; do
+        assert_not_contains "$word" "$out" "no hint line on the details or the help: no \"$word\""
+    done
+
+    # 4. q goes up from a directory to the root
+    out=$(guarded_menu "$ENTER" "q" "$(cmd q)"); status=$?
+    assert_eq "0" "$status" "the session ended with :q"
+    assert_eq $'dir=\nitem=sub' "$(<"$state/cursor")" "q went up from sub to the root, with sub selected"
+
+    # 5. q leaves the environment menu (:q works afterwards, so the view is the list again), and it has no hint line
+    out=$(guarded_menu "$(cmd env)" "q" "$(cmd q)"); status=$?
+    assert_eq "0" "$status" "q left the :env menu: the :q that follows ended the session"
+    assert_contains "req environments" "$out" "the menu was open"
+    assert_not_contains "Enter choose" "$out" "with no hint line"
+
+    # 6. what a command says is a bar at the top, once, right above the header and not under the menu
+    out=$(guarded_menu "$(cmd env staging)" "$ENTER" "$(cmd q)"); status=$?
+    assert_eq "0" "$status" "the session ended with :q"
+    assert_eq "1" "$(grep -c 'environment: staging, created in' <<<"$out")" ":env staging said where it made the file, once"
+    line=$(grep -n '^! environment: staging, created in' <<<"$out" | head -1 | cut -d: -f1)
+    assert_contains "! environment: staging, created in" "$(sed -n "${line:-0}p" <<<"$out")" "in a bar"
+    assert_contains "req / (1/2)  usab @ staging" "$(sed -n "$(( ${line:-0} + 1 ))p" <<<"$out")" "and the header, in the new environment, is right under it"
+
+    # 7. an arrow key in the viewer does not close it (Esc is not bound there: it would close it at the first arrow)
+    if command -v less >/dev/null 2>&1; then
+        out=$(PAGER='' guarded_menu "$down" "$ENTER" "$ENTER" "v" "$down" "q" "$(cmd q)"); status=$?
+        assert_eq "0" "$status" "the session ended with :q"
+        assert_contains "HTTP 200" "$out" "the request ran"
+        after=$(awk '/^=+$/ { buf = ""; next } { buf = buf $0 "\n" } END { printf "%s", buf }' <<<"$out")
+        assert_contains "GET    top" "$after" "after the run the details were drawn again, the viewer was opened"
+        assert_not_contains "req / (" "$after" "an arrow key did not close the viewer, and q closed it: the list was never drawn again"
+    else
+        echo "  skip less unavailable"
+    fi
+    cd "$ROOT" || return
+}
+
 test_flow
 test_notifications
 test_usability
@@ -488,4 +569,5 @@ test_environments
 test_vars
 test_headers
 test_start_clear
+test_usability_release
 test_summary
