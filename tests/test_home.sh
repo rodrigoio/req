@@ -202,7 +202,7 @@ test_activate() {
     assert_eq "700" "$(stat -c %a "$envdir")" "env/ is private"
     assert_eq "700" "$(stat -c %a "$envdir/default")" "so is the folder of the environment"
     assert_eq "600" "$(stat -c %a "$envdir/default/vars")" "and the file"
-    assert_eq "0" "$(wc -c <"$envdir/default/vars" | tr -d ' ')" "which is empty"
+    assert_eq "$(req_vars_template default)" "$(<"$envdir/default/vars")" "which starts with the template: comments that show the format"
     printf 'token=kept-by-the-test\n' >"$envdir/default/vars"
     req_project_activate "$a"; assert_eq "0" "$?" "opening the project again works"
     assert_eq "token=kept-by-the-test" "$(<"$envdir/default/vars")" "and leaves the default environment as it is"

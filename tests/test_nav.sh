@@ -1139,7 +1139,7 @@ test_command_env() {
     [[ -f $envdir/staging/vars ]]; assert_eq "0" "$?" "the vars file is in a folder of the environment, in the project's env folder"
     assert_eq "600" "$(stat -c %a "$envdir/staging/vars")" "private"
     assert_eq "700" "$(stat -c %a "$envdir/staging")" "in a private folder"
-    assert_eq "0" "$(wc -c <"$envdir/staging/vars" | tr -d ' ')" "and empty"
+    assert_eq "$(req_vars_template staging)" "$(<"$envdir/staging/vars")" "starting with the template"
     assert_contains "environment: staging, created in $envdir/staging/vars" "$REQ_STATUS" "the status says where the file is"
     req_nav_build_list; assert_contains "proj @ staging" "${REQ_SCREEN_LINES[0]}" "the header follows"
     type_keys : e n v enter
@@ -1456,12 +1456,12 @@ vars_fake() { mkdir -p "$1"; printf '#!/bin/sh\n%s\n' "$3" >"$1/$2"; chmod +x "$
 
 # shellcheck disable=SC2016  # the text of the fake editors and the ${host} placeholders are single-quoted on purpose
 test_command_vars() {
-    echo "nav: :var and :vars edit the project variables"
+    echo "nav: :var and :vars edit the variables of the environment in use"
     make_project
     req_nav_init "$PROJ/.req"
     req_project_activate "$PROJ" || return
-    local statedir file fakes=$TMP/vars-fakes tools=$TMP/vars-tools t oldpath=$PATH
-    statedir=$(req_project_state_dir "$REQ_PROJECT_ID"); file=$statedir/vars
+    local statedir file fakes=$TMP/vars-fakes tools=$TMP/vars-tools t oldpath=$PATH before
+    statedir=$(req_project_state_dir "$REQ_PROJECT_ID"); file=$(req_env_file "$REQ_PROJECT_ID" default)
     unset REQ_ENV
     REQ_INPUT_FD=3
     mkdir -p "$tools"
@@ -1469,11 +1469,12 @@ test_command_vars() {
     for t in sh mktemp rm cat mkdir dirname; do ln -sf "$(command -v "$t")" "$tools/$t"; done
     vars_fake "$fakes" spy 'printf "%s" "$1" >"$0.path"; cat "$1" >"$0.seen"; echo "host=https://dev.example.com" >>"$1"'
 
-    rm -f "$file"       # the config directory is shared with the tests before this one
-    [[ ! -e $file ]]; assert_eq "0" "$?" "a new project has no vars file yet"
+    rm -rf "$statedir/vars" "$statedir/env/default"       # the config directory is shared with the tests before this one
+    [[ ! -e $file ]]; assert_eq "0" "$?" "an environment of a project from before has no folder yet"
     type_keys : v a r s; VISUAL=$fakes/spy req_nav_handle enter 3</dev/null >/dev/null
-    assert_eq "$file" "$(<"$fakes/spy.path")" ":vars runs the editor on the vars file of the project, not on a copy"
-    assert_eq "$(req_vars_template)" "$(<"$fakes/spy.seen")" "which the editor finds made, with the commented template"
+    assert_eq "$file" "$(<"$fakes/spy.path")" ":vars runs the editor on the vars file of the environment in use, not on a copy"
+    assert_eq "$(req_vars_template default)" "$(<"$fakes/spy.seen")" "which the editor finds made, with the commented template"
+    assert_eq "700" "$(stat -c %a "${file%/*}")" "in a private folder, made with it"
     assert_eq "600" "$(stat -c %a "$file")" "private"
     assert_eq "https://dev.example.com" "${REQ_VARS[host]-}" "what the editor wrote is loaded when it closes"
     assert_eq "1" "${#REQ_VARS[@]}" "the comment lines of the template are not variables"
@@ -1486,10 +1487,15 @@ test_command_vars() {
     type_keys : v a r; VISUAL=$fakes/spy req_nav_handle enter 3</dev/null >/dev/null
     assert_eq "token=abc" "$(<"$fakes/spy.seen")" ":var is the same command, and a file with content is not touched before the editor"
     assert_eq "2" "${#REQ_VARS[@]}" "its variables are loaded with the new one"
-    env_vars dev $'only=env-file\n'
+    # Another environment in use: :vars opens the file of that one and leaves the first alone.
+    env_vars dev $'only=env-file\nsecond=2\n'
+    before=$(<"$file")
     REQ_ENV=dev
-    type_keys : v a r s; VISUAL=true req_nav_handle enter 3</dev/null >/dev/null
-    assert_contains "environment: dev (3 variables)" "$REQ_STATUS" "the variables loaded are those of the environment in use (the project's two plus its own)"
+    type_keys : v a r s; VISUAL=$fakes/spy req_nav_handle enter 3</dev/null >/dev/null
+    assert_eq "$(req_env_file "$REQ_PROJECT_ID" dev)" "$(<"$fakes/spy.path")" "with another environment in use :vars opens that environment's file"
+    assert_eq $'only=env-file\nsecond=2' "$(<"$fakes/spy.seen")" "which the editor finds as it is"
+    assert_eq "$before" "$(<"$file")" "and the file of the first environment is left alone"
+    assert_contains "environment: dev (3 variables)" "$REQ_STATUS" "the variables loaded are those of the environment in use (its two plus the line the editor added)"
     unset REQ_ENV
 
     # The order of the editors: $VISUAL, $EDITOR, vim, nano, then the message.
@@ -1512,6 +1518,7 @@ test_command_vars() {
     rm -f "$tools/vim" "$tools/nano" "$file"; REQ_STATUS=""
     PATH=$tools; type_keys : v a r s; VISUAL='' EDITOR='' req_nav_handle enter 3<<<"" >"$TMP/vars-howto.txt"; PATH=$oldpath
     assert_contains "No editor found (tried \$VISUAL, \$EDITOR, vim and nano)." "$(<"$TMP/vars-howto.txt")" "with no editor it says so"
+    assert_contains "The variables of environment default are in:" "$(<"$TMP/vars-howto.txt")" "names the environment the file belongs to"
     assert_contains $'\n  '"$file"$'\n' "$(<"$TMP/vars-howto.txt")" "gives the whole path on a line of its own"
     assert_contains $'\n  host=https://api.example.com\n' "$(<"$TMP/vars-howto.txt")" "shows how a variable is written"
     assert_contains 'use it in a request as ${host}' "$(<"$TMP/vars-howto.txt")" "and used"
@@ -1539,6 +1546,7 @@ test_command_vars() {
     rm -f "$fakes/spy.path"
     type_keys : v a r s ' ' d e v; VISUAL=$fakes/spy req_nav_handle enter 3</dev/null >/dev/null
     assert_contains "usage: :vars" "$REQ_NOTIFICATION_WARN" "an argument is a usage warning"
+    assert_contains "the environment in use" "$REQ_NOTIFICATION_WARN" "that says which variables it opens"
     [[ ! -e $fakes/spy.path ]]; assert_eq "0" "$?" "and no editor is run"
     REQ_PROJECT_ID=""
     type_keys : v a r s; VISUAL=$fakes/spy req_nav_handle enter 3</dev/null >/dev/null
