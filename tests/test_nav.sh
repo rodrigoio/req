@@ -202,16 +202,17 @@ test_list_screen() {
     req_nav_init "$PROJ/.req"; screen list; out=$OUT
     assert_contains "> dir    api/" "$out" "selected directory with a marker"
     assert_contains "  dir    auth/" "$out" "directory without a marker"
-    [[ $out != *"Esc back"* ]]; assert_eq "0" "$?" "no Esc hint at the root"
+    assert_eq "3" "${#REQ_SCREEN_LINES[@]}" "the header and the two directories: no hint line under them"
+    assert_not_contains "Enter open" "$out" "and no word about keys"
 
     req_nav_handle enter
     screen list; out=$OUT
-    assert_contains "Esc back" "$out" "Esc hint away from the root"
+    assert_not_contains "Esc back" "$out" "no Esc hint away from the root either"
     assert_contains "> dir    v2/" "$out" "subdirectory highlighted"
     assert_contains "  POST   create" "$out" "request with a method"
     assert_contains "  GET    list-users" "$out" "request GET"
     assert_contains "  DELETE remove" "$out" "request DELETE"
-    assert_eq "7" "${#REQ_SCREEN_LINES[@]}" "lines: header, 5 items and footer"
+    assert_eq "6" "${#REQ_SCREEN_LINES[@]}" "lines: the header and 5 items"
 }
 
 test_selection_highlight() {
@@ -253,7 +254,7 @@ test_detail_screen() {
     assert_contains "desc lists everyone" "$out" "description"
     assert_contains "Accept: application/json" "$out" "headers"
     assert_contains "page=1" "$out" "query"
-    assert_contains "Enter run" "$out" "run hint"
+    assert_not_contains "Enter run" "$out" "no hint line under the details"
 
     req_nav_handle esc
     assert_eq "list" "$REQ_VIEW" "Esc goes back to the list"
@@ -567,7 +568,7 @@ test_end_to_end() {
     assert_contains "hello text" "$out" "result shown"
     assert_contains "============================================================" "$out" "separator after the result"
     assert_eq "2" "$(grep -c '^HTTP 200' <<<"$out")" "a second Enter on the details runs again"
-    assert_eq "3" "$(grep -c '^Enter run' <<<"$out")" "details redrawn after each result"
+    assert_eq "3" "$(grep -c '^GET    ping' <<<"$out")" "details redrawn after each result"
 
     local notice="! a persistent notice made up for the test" rule
     rule=$(printf '=%.0s' {1..60})
@@ -585,6 +586,7 @@ type_keys() { local c; REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0; f
 
 test_command_mode() {
     echo "nav: command mode"
+    local n
     make_project
     req_nav_init "$PROJ/.req"
     req_nav_handle ":"
@@ -605,8 +607,9 @@ test_command_mode() {
 
     req_nav_handle ":"
     REQ_CMD_BUF="x"; REQ_NAV_DIRTY=0
-    req_nav_build_list; req_nav_overlay
-    assert_eq ":x_" "${REQ_SCREEN_LINES[-1]}" "the prompt replaces the hint line"
+    req_nav_build_list; n=${#REQ_SCREEN_LINES[@]}; req_nav_overlay
+    assert_eq ":x_" "${REQ_SCREEN_LINES[-1]}" "the prompt is the last line"
+    assert_eq "$(( n + 1 ))" "${#REQ_SCREEN_LINES[@]}" "one line more: it hides no row of the list"
     req_nav_handle esc
 
     type_keys : z z enter
@@ -810,14 +813,11 @@ EOF
     [[ ! -e $REQ_TEST_PAGER_IN ]]; assert_eq "0" "$?" "on the help any key closes it: no pager"
     assert_eq "detail" "$REQ_VIEW" "back to the details"
 
-    REQ_VIEW=list; COLUMNS=100 req_nav_build_list          # wide enough: the hint is cut at the width, v is the last item
-    assert_contains "v response" "${REQ_SCREEN_LINES[-1]}" "the list hint shows v once there is a response"
+    # a response adds nothing to the screens: v is in the help, not in a hint line
+    REQ_VIEW=list; COLUMNS=100 req_nav_build_list
+    assert_not_contains "v response" "${REQ_SCREEN_LINES[*]}" "the list has no hint about v when there is a response"
     REQ_VIEW=detail; req_nav_build_detail
-    assert_contains "v response" "${REQ_SCREEN_LINES[-1]}" "and so does the details hint"
-    REQ_RESULT=failed; req_nav_build_detail
-    assert_not_contains "v response" "${REQ_SCREEN_LINES[-1]}" "not when the last request got no response"
-    REQ_VIEW=list; REQ_RESULT=""; COLUMNS=100 req_nav_build_list
-    assert_not_contains "v response" "${REQ_SCREEN_LINES[-1]}" "nor before any request"
+    assert_not_contains "v response" "${REQ_SCREEN_LINES[*]}" "nor have the details"
     assert_contains "v|show the last response" "$(printf '%s\n' "${REQ_HELP_ROWS[@]}")" "the help lists v"
 
     PATH=$old_path; REQ_NOTIFICATION_ACTIVE=0; REQ_NOTIFICATION_WARN=""; REQ_RESP_CTYPE=""; REQ_RESP_BODY=""; REQ_VIEW=list
@@ -836,9 +836,19 @@ test_help() {
     assert_contains "h  " "$out" "lists the key h"
     assert_contains "q leaves it (Esc does not)" "${REQ_HELP_ROWS[*]}" "the row of v says that q, not Esc, leaves the pager"
     assert_contains ":nd [name]" "$out" "lists a command with its argument"
-    assert_contains "Press any key" "$out" "says how to go back"
+    assert_contains "any key  closes" "$out" "says that any key closes it"
+    assert_not_contains "Press any key" "$out" "and has no footer line about it"
     for row in ":n" ":nd" ":e" ":d" ":h" ":q"; do
         assert_contains "$row" "$out" "every command is listed: $row"
+    done
+    # The help is the only place that lists the keys: one row for each, and whole at 80 columns.
+    for row in up/down Enter "Esc / q" h v Ctrl-L Ctrl-C : "any key"; do
+        assert_contains " $row|" " ${REQ_HELP_ROWS[*]}" "the table has a row for the key: $row"
+    done
+    COLUMNS=80 req_nav_build_help; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
+    for row in "${REQ_HELP_ROWS[@]}"; do
+        [[ $row == Commands ]] && break
+        [[ $row == *'|'* ]] && assert_contains "${row#*|}" "$out" "at 80 columns the row of ${row%%|*} is not cut"
     done
     req_nav_handle x
     assert_eq "list" "$REQ_VIEW" "any key returns to the list"
@@ -849,9 +859,9 @@ test_help() {
     type_keys : help enter; req_nav_handle up
     assert_eq "detail" "$REQ_VIEW" ":help returns to the details it was opened from"
     REQ_VIEW=list
-    req_nav_build_list; assert_contains ":h help" "${REQ_SCREEN_LINES[-1]}" "list footer points to :h"
+    req_nav_build_list; assert_not_contains ":h help" "${REQ_SCREEN_LINES[*]}" "the list has no footer pointing to :h"
     REQ_VIEW=detail; req_nav_build_detail
-    assert_contains ":h help" "${REQ_SCREEN_LINES[-1]}" "details footer points to :h"
+    assert_not_contains ":h help" "${REQ_SCREEN_LINES[*]}" "nor have the details"
     REQ_VIEW=list
     type_keys : z enter
     assert_contains ":h" "$REQ_NOTIFICATION_WARN" "unknown command points to :h"
@@ -993,7 +1003,8 @@ test_command_config() {
     assert_contains "restore_cursor" "$out" "lists every known key"
     assert_contains "default yes" "$out" "with its default"
     assert_contains "$f" "$out" "and says which file it is"
-    assert_contains "Press any key" "$out" "and how to go back"
+    assert_contains "Change one with :config key=value" "$out" "and how to change one"
+    assert_not_contains "Press any key" "$out" "with no line about how to go back"
     req_nav_handle x
     assert_eq "list" "$REQ_VIEW" "any key returns to the list"
 
@@ -1174,9 +1185,9 @@ test_env_menu() {
     assert_contains "> default (in use)" "$out" "the selected row is marked, and so is the one in use"
     assert_contains "  dev" "$out" "the others are listed below it"
     assert_not_contains "dev (in use)" "$out" "only the one in use is marked"
-    assert_contains "Enter choose" "$out" "the hint line says what the keys do"
-    assert_contains "Esc cancel" "$out" "and how to leave"
-    assert_eq "6" "${#REQ_SCREEN_LINES[@]}" "the header, three environments, the new one and the hint"
+    assert_not_contains "Enter choose" "$out" "the menu has no hint line about the keys"
+    assert_not_contains "Esc cancel" "$out" "nor about how to leave"
+    assert_eq "5" "${#REQ_SCREEN_LINES[@]}" "just the header, three environments and the new one"
     assert_eq "  + new environment" "${REQ_SCREEN_LINES[4]}" "the last row is + new environment"
 
     req_nav_handle down; assert_eq "1" "$REQ_ENV_SEL" "down moves the selection"
@@ -1242,7 +1253,6 @@ test_env_menu() {
     # The main loop draws the view and takes its keys.
     out=$(keys : e n v enter down enter | req_nav_run "$PROJ/.req" 2>&1)
     assert_contains "req environments" "$out" "the loop draws the menu"
-    assert_contains "Enter choose" "$out" "with its hint"
     assert_contains "environment: dev" "$out" "and the choice is made through it"
     REQ_VIEW=list; unset REQ_ENV
 }
@@ -1754,7 +1764,7 @@ test_review_flow() {
         keys : r m enter; printf 'y\n'
         keys : q enter
     } | req_nav_run "$p/.req" 2>&1)
-    assert_contains "Press any key to go back" "$out" ":h opened the help"
+    assert_contains "any key  closes this help" "$out" ":h opened the help"
     assert_contains "renamed to gateway" "$out" ":ed ran inside the loop"
     assert_contains "copied to gateway-copy" "$out" ":cp ran inside the loop"
     assert_contains "removed extra.get.json" "$out" ":rm removed a request"

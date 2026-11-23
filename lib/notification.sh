@@ -19,7 +19,7 @@ REQ_NOTIFICATION_WARN_MORE=0   # how many more came after it before that draw
 REQ_NOTIFICATION_PRODUCERS=(req_notification_persistent_lines req_notification_warn_lines)
 
 # req_notification_bar <text> - one bar line: black letters on orange, padded with spaces to one column
-# short of the terminal width (like the hint lines, so no terminal wraps it) and truncated when longer.
+# short of the terminal width (so no terminal wraps it) and truncated when longer.
 # Without colors it is the plain text starting with "! ", so it is still told apart.
 req_notification_bar() {
     local cols room text pad

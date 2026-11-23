@@ -211,7 +211,7 @@ EOF
     assert_contains "HTTP 200" "$out" "a JSON request ran"
     assert_contains $'\n  "method": "GET"' $'\n'"$(<"$REQ_TEST_PAGER_OUT")" "v gave the pager the response, indented"
     assert_eq "0" "$status" "the menu is back after the pager: :q ends it"
-    assert_contains "v response" "$out" "and the hint says v is there"
+    assert_not_contains "v response" "$out" "and no hint line about v (the help lists it)"
 
     rm -f "$REQ_TEST_PAGER_OUT"
     out=$(PAGER=$standin menu "$down" "$ENTER" "$ENTER" "v" "$(cmd q)"); status=$?
@@ -257,7 +257,7 @@ test_environments() {
     assert_contains "req environments" "$out" ":env opens the environment menu"
     assert_contains "default (in use)" "$out" "with default, the one in use"
     assert_contains "+ new environment" "$out" "and + new environment as the last row"
-    assert_contains "Enter choose   Esc cancel" "$out" "and the keys on the hint line"
+    assert_not_contains "Enter choose" "$out" "and no hint line about its keys"
 
     # 3. the last row creates an environment: the name is asked, the file made, the variables loaded
     out=$(menu "$(cmd env)" "$up" "$ENTER" $'staging\r' "$(cmd q)")

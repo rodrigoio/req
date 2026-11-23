@@ -218,7 +218,7 @@ req_nav_crumb() {
 
 req_nav_build_list() {
     local n=${#REQ_ITEM_KIND[@]} cols rows visible i end width pos
-    local c_dim c_bold c_reset c_sel arrows hint tag label tail="" room
+    local c_dim c_bold c_reset c_sel tag label tail="" room
     cols=$(req_term_cols); rows=$(req_term_rows)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     c_sel=$(req_color sel)
@@ -237,8 +237,9 @@ req_nav_build_list() {
     if (( n == 0 )); then
         REQ_SCREEN_LINES+=("  ${c_dim}(empty)${c_reset}")
     else
-        # the bars at the top (REQ_NOTIFICATION_LINES, notification.sh) take rows from the list
-        visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+        # the bars at the top (REQ_NOTIFICATION_LINES, notification.sh) take rows from the list, and so does the
+        # header; one row stays free for the command prompt, which is drawn under the list
+        visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
         (( n < visible )) && visible=$n
         (( REQ_SEL < REQ_TOP )) && REQ_TOP=$REQ_SEL
         (( REQ_SEL >= REQ_TOP + visible )) && REQ_TOP=$(( REQ_SEL - visible + 1 ))
@@ -260,12 +261,6 @@ req_nav_build_list() {
             fi
         done
     fi
-
-    if req_utf8; then arrows="↑↓"; else arrows="up/down"; fi
-    hint="$arrows move   Enter open   : commands   :h help"
-    [[ ${#REQ_STACK_DIR[@]} -gt 0 ]] && hint+="   Esc back"
-    [[ ${REQ_RESULT-} == ok ]] && hint+="   v response"
-    REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $((cols - 1)))${c_reset}")
 }
 
 # req_nav_build_detail - the open request's details; an invalid request shows its problems instead of the
@@ -294,7 +289,7 @@ req_nav_build_detail() {
         done
         (( ${#plist[@]} > REQ_PROBLEMS_MAX_LINES )) &&
             REQ_SCREEN_LINES+=("  ... ($(( ${#plist[@]} - REQ_PROBLEMS_MAX_LINES )) more)")
-        REQ_SCREEN_LINES+=("${c_dim}Fix the file and open it again.   Esc back${c_reset}")
+        REQ_SCREEN_LINES+=("${c_dim}Fix the file and open it again.${c_reset}")
         return 0
     fi
 
@@ -330,30 +325,34 @@ req_nav_build_detail() {
         fi
         req_nav_detail_section "$raw_title" "$width" "${raw_lines[@]}"
     fi
-
-    hint="Enter run   : commands   :h help   Esc back"
-    [[ ${REQ_RESULT-} == ok ]] && hint+="   v response"
-    REQ_SCREEN_LINES+=("${c_dim}${hint}${c_reset}")
 }
 
+# req_nav_build_help - the help screen, from REQ_HELP_ROWS. The key column of each section is as wide as its own
+# longest key, so the long command rows do not squeeze the descriptions of the keys.
 req_nav_build_help() {
-    local cols row keys w=0 c_dim c_bold c_reset
+    local cols row keys sec=0 c_dim c_bold c_reset
+    local -a keyw=(0)
     cols=$(req_term_cols)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
     for row in "${REQ_HELP_ROWS[@]}"; do
-        [[ $row == *'|'* ]] && { keys=${row%%|*}; (( ${#keys} > w )) && w=${#keys}; }
+        if [[ $row == *'|'* ]]; then
+            keys=${row%%|*}; (( ${#keys} > keyw[sec] )) && keyw[sec]=${#keys}
+        else
+            (( sec++ )); keyw[sec]=0
+        fi
     done
+    sec=0
     REQ_SCREEN_LINES+=("${c_bold}req${c_reset} help")
     for row in "${REQ_HELP_ROWS[@]}"; do
         if [[ $row == *'|'* ]]; then
-            keys=$(printf '%-*s' "$w" "${row%%|*}")
+            keys=$(printf '%-*s' "${keyw[sec]}" "${row%%|*}")
             REQ_SCREEN_LINES+=("  $(req_trunc "$keys  ${row#*|}" $((cols - 3)))")
         else
+            (( sec++ ))
             REQ_SCREEN_LINES+=("${c_dim}${row}${c_reset}")
         fi
     done
-    REQ_SCREEN_LINES+=("${c_dim}Press any key to go back${c_reset}")
 }
 
 # req_nav_build_config - the settings screen (:config): every known key with its effective value, default
@@ -371,7 +370,7 @@ req_nav_build_config() {
         src=""; [[ -z ${REQ_CONFIG_LOCAL[$key]+x} ]] || src="project"
         REQ_SCREEN_LINES+=("  $(req_trunc "$(printf '%-*s  %-4s  default %-4s  %-7s  %s' "$w" "$key" "$value" "$def" "$src" "${REQ_CONFIG_DESC[$key]}")" $((cols - 3)))")
     done
-    REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value (:config -g key=value for the global file)   Press any key to go back${c_reset}")
+    REQ_SCREEN_LINES+=("${c_dim}Change one with :config key=value (:config -g key=value for the global file)${c_reset}")
 }
 
 # req_nav_build_env - the environment menu (:env): the environments of REQ_ENV_CHOICES with the one in use
@@ -379,14 +378,14 @@ req_nav_build_config() {
 # rows scroll in a window sized like the list's.
 req_nav_build_env() {
     local total=$(( ${#REQ_ENV_CHOICES[@]} + 1 )) cols rows visible i end width label inuse current=${REQ_ENV:-default}
-    local c_dim c_bold c_reset c_sel arrows hint
+    local c_dim c_bold c_reset c_sel
     cols=$(req_term_cols); rows=$(req_term_rows)
     c_dim=$(req_color dim); c_bold=$(req_color bold); c_reset=$(req_color reset)
     c_sel=$(req_color sel)
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
     REQ_SCREEN_LINES+=("${c_bold}req${c_reset} environments${c_dim}$(req_trunc "  $REQ_NAV_PROJECT  (in use: $current)" $(( cols - 16 )))${c_reset}")
 
-    visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+    visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
     (( total < visible )) && visible=$total
     (( REQ_ENV_SEL < REQ_ENV_TOP )) && REQ_ENV_TOP=$REQ_ENV_SEL
     (( REQ_ENV_SEL >= REQ_ENV_TOP + visible )) && REQ_ENV_TOP=$(( REQ_ENV_SEL - visible + 1 ))
@@ -408,10 +407,6 @@ req_nav_build_env() {
             REQ_SCREEN_LINES+=("  ${label}${c_dim}${inuse}${c_reset}")
         fi
     done
-
-    if req_utf8; then arrows="↑↓"; else arrows="up/down"; fi
-    hint="$arrows move   Enter choose   Esc cancel"
-    REQ_SCREEN_LINES+=("${c_dim}$(req_trunc "$hint" $(( cols - 1 )))${c_reset}")
 }
 
 # req_nav_env_key <key> - a key on the environment menu: up and down move the selection (wrapping around,
@@ -561,10 +556,12 @@ req_nav_handle() {
     return 0
 }
 
+# req_nav_overlay - what goes under the screen at each draw: the command prompt while a command is typed (one more
+# line, the list keeps a row free for it), then the one-shot status.
 req_nav_overlay() {
-    local last=$(( ${#REQ_SCREEN_LINES[@]} - 1 )) cursor='_'
+    local cursor='_'
     req_utf8 && cursor='█'
-    (( REQ_CMD_ACTIVE )) && REQ_SCREEN_LINES[last]=":${REQ_CMD_BUF}${cursor}"
+    (( REQ_CMD_ACTIVE )) && REQ_SCREEN_LINES+=(":${REQ_CMD_BUF}${cursor}")
     if [[ -n $REQ_STATUS ]]; then
         REQ_SCREEN_LINES+=("$(req_color dim)${REQ_STATUS}$(req_color reset)")
         REQ_STATUS=""
