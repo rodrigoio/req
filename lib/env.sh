@@ -21,6 +21,41 @@ req_env_legacy_file() {
     printf '%s/env/%s/secrets.json' "$(req_config_dir)" "$1"
 }
 
+# req_env_legacy_files [project id] - what the previous layout left in the project's state: its `vars` file and
+# the plain files directly in env/ (the old environments), one absolute path per line, `vars` first and the
+# others in order. Nothing is read, moved or changed.
+req_env_legacy_files() {
+    local id=${1-$REQ_PROJECT_ID} dir f
+    local -a found=()
+    [[ -n $id ]] || return 0
+    f=$(req_project_state_dir "$id" vars)
+    [[ -f $f ]] && printf '%s\n' "$(req_abs_path "$f")"
+    dir=$(req_project_state_dir "$id" env)
+    [[ -d $dir ]] || return 0
+    for f in "$dir"/*; do
+        [[ -f $f ]] && found+=("$(req_abs_path "$f")")
+    done
+    (( ${#found[@]} == 0 )) || printf '%s\n' "${found[@]}" | LC_ALL=C sort
+    return 0
+}
+
+# req_env_legacy_notice [project id] - one warning (req_warn) for each file req_env_legacy_files finds: it is no
+# longer read, and where its lines go. In the menu several warnings are the first one and "(+N more)".
+req_env_legacy_notice() {
+    local id=${1-$REQ_PROJECT_ID} f project_vars
+    [[ -n $id ]] || return 0
+    project_vars=$(req_abs_path "$(req_project_state_dir "$id" vars)")
+    while IFS= read -r f; do
+        [[ -n $f ]] || continue
+        if [[ $f == "$project_vars" ]]; then
+            req_warn "$f is from the previous layout and is no longer read: copy its lines into the vars file of each environment that uses them"
+        else
+            req_warn "$f is from the previous layout and is no longer read: rename it, make a folder with its name and move the file into it as vars"
+        fi
+    done < <(req_env_legacy_files "$id")
+    return 0
+}
+
 # shellcheck disable=SC2034  # REQ_VARS is read by the callers
 # req_vars_load <env> [project id] - loads the variables of the environment (its `vars` file, in the project
 # given, by default REQ_PROJECT_ID) into REQ_VARS; no other file is read. A missing file is fine; without a

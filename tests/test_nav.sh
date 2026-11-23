@@ -548,6 +548,27 @@ test_run_failures_in_the_bar() {
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
 }
 
+test_legacy_layout_in_the_bar() {
+    echo "nav: the files of the previous layout are warned about in the top bar"
+    make_project
+    req_nav_init "$PROJ/.req"
+    req_project_activate "$PROJ" || return
+    local statedir; statedir=$(req_project_state_dir "$REQ_PROJECT_ID")
+    rm -rf "$statedir/env" "$statedir/vars"; mkdir -p "$statedir/env"
+    printf 'k=1\n' >"$statedir/vars"; printf 'k=2\n' >"$statedir/env/dev"; : >"$statedir/env/default"
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0; REQ_NOTIFICATION_ACTIVE=1
+    req_project_activate "$PROJ"
+    REQ_NOTIFICATION_ACTIVE=0
+    assert_contains "$statedir/vars is from the previous layout and is no longer read" "$REQ_NOTIFICATION_WARN" "the first file is the warning"
+    assert_eq "2" "$REQ_NOTIFICATION_WARN_MORE" "and the other two are counted after it"
+    req_notification_collect
+    assert_contains "(+2 more)" "${REQ_NOTIFICATION_LINES[0]}" "the bar says so"
+    req_notification_collect
+    assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "and it is shown once"
+    rm -rf "$statedir/env" "$statedir/vars"; req_project_activate "$PROJ"; REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
+    REQ_PROJECT_ID=""
+}
+
 test_status_in_the_bar() {
     echo "nav: what a command says goes to the bar at the top"
     make_project
@@ -2030,6 +2051,7 @@ test_notification_bars
 test_root_notice
 test_config_warnings_in_the_bar
 test_run_failures_in_the_bar
+test_legacy_layout_in_the_bar
 test_status_in_the_bar
 test_end_to_end
 test_summary

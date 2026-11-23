@@ -235,6 +235,39 @@ test_activate() {
     REQ_CONFIG_DIR=$cfg
 }
 
+test_activate_legacy() {
+    echo "home: opening a project that has the previous layout"
+    local d=$TMP/old/proj out status state cfg=$REQ_CONFIG_DIR
+    mkdir -p "$d"
+    REQ_CONFIG_DIR=$TMP/old-cfg
+    req_project_activate "$d" 2>/dev/null; state=$TMP/old-cfg/projects/proj
+    out=$(req_project_activate "$d" 2>&1); assert_eq "" "$out" "a project with the current layout says nothing"
+
+    rm -rf "$state/env"; mkdir -p "$state/env"
+    printf 'region=eu\n' >"$state/vars"; printf 'url=http://dev\n' >"$state/env/dev"; : >"$state/env/default"
+    out=$(req_project_activate "$d" 2>&1); status=$?
+    assert_eq "0" "$status" "opening it works"
+    assert_eq "3" "$(grep -c 'req: warning:' <<<"$out")" "there is one warning for each file of the previous layout"
+    assert_contains "req: warning: $state/vars is from the previous layout and is no longer read" "$out" "the vars file of the project is named with its absolute path"
+    assert_contains "copy its lines into the vars file of each environment that uses them" "$out" "and where its lines go"
+    assert_contains "$state/env/dev is from the previous layout and is no longer read: rename it, make a folder with its name and move the file into it as vars" "$out" "an old environment says how to move it"
+    assert_contains "$state/env/default is from the previous layout" "$out" "default too"
+    assert_not_contains "is not a folder" "$out" "and the failure to make default is not a second warning"
+    assert_eq "region=eu" "$(<"$state/vars")" "the vars file of the project is never touched"
+    assert_eq "url=http://dev" "$(<"$state/env/dev")" "nor an old environment"
+    [[ -f $state/env/default && ! -d $state/env/default ]]; assert_eq "0" "$?" "default stays a plain file until the user moves it"
+    assert_eq "" "$(req_env_list proj)" "and no old file is an environment"
+    req_project_activate "$d" 2>/dev/null
+    assert_eq "proj" "$REQ_PROJECT_ID" "the project is open all the same"
+
+    rm -f "$state/vars" "$state/env/dev" "$state/env/default"
+    out=$(req_project_activate "$d" 2>&1); assert_eq "" "$out" "once the files are moved there is nothing to say"
+    [[ -f $state/env/default/vars ]]; assert_eq "0" "$?" "and default is made"
+    mkdir "$state/env/dev"; : >"$state/env/dev/vars"
+    out=$(req_project_activate "$d" 2>&1); assert_eq "" "$out" "an environment of the current layout is no old file"
+    REQ_CONFIG_DIR=$cfg
+}
+
 test_init_command() {
     echo "home: req init registers the project"
     local d=$TMP/initproj out
@@ -328,6 +361,7 @@ test_projects
 test_current
 test_cursor
 test_activate
+test_activate_legacy
 test_init_command
 test_workspace
 test_summary

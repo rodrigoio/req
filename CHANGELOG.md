@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Warn, in the bar at the top, when a project opens and still has files of the previous layout of the variables (its
+  `vars` file and the files `env/<name>`): the warning names each one, says it is no longer read and where its
+  lines go. Those files are never read, moved or changed.
+
 ### Changed
 
 - Open the variables of the environment in use with `:vars` (or `:var`), its own `env/<name>/vars`, instead of the

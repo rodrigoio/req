@@ -101,6 +101,27 @@ test_legacy() {
     out=$(req_vars_load prod $ID 2>&1); assert_not_contains "no longer read" "$out" "other environments are not warned about"
 }
 
+test_legacy_files() {
+    echo "env: the files of the previous layout"
+    local cfg=$REQ_CONFIG_DIR dir
+    dir=$cfg/projects/oldlayout
+    mkdir -p "$dir/env"
+    assert_eq "" "$(req_env_legacy_files oldlayout)" "a project with nothing of the previous layout lists nothing"
+    assert_eq "" "$(req_env_legacy_files nothing-here)" "so does a project with no folder"
+    assert_eq "" "$(req_env_legacy_files "")" "and no project at all"
+    mkdir -p "$dir/env/dev" "$dir/env/.hidden-test"; : >"$dir/env/dev/vars"
+    assert_eq "" "$(req_env_legacy_files oldlayout)" "environments in the current layout are not old files"
+    printf 'region=eu\n' >"$dir/vars"
+    printf 'k=1\n' >"$dir/env/prod"; printf 'k=2\n' >"$dir/env/default"; : >"$dir/env/.hidden-file-test"
+    assert_eq "$dir/vars"$'\n'"$dir/env/default"$'\n'"$dir/env/prod" "$(req_env_legacy_files oldlayout)" "the project's vars file comes first, then the plain files of env/ in order; folders and hidden files are left out"
+    assert_eq "region=eu" "$(<"$dir/vars")" "nothing is touched"
+    REQ_PROJECT_ID=oldlayout
+    assert_eq "3" "$(req_env_legacy_files | wc -l | tr -d ' ')" "the project defaults to REQ_PROJECT_ID"
+    REQ_PROJECT_ID=""
+    rm -f "$dir/vars"
+    assert_eq "$dir/env/default"$'\n'"$dir/env/prod" "$(req_env_legacy_files oldlayout)" "without the vars file only the environments are listed"
+}
+
 test_resolve() {
     echo "env: resolving a key"
     local out
@@ -410,6 +431,7 @@ test_paths
 test_load
 test_invalid
 test_legacy
+test_legacy_files
 test_resolve
 test_subst
 test_subst_json
