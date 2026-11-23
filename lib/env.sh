@@ -212,9 +212,9 @@ req_env_ensure_dir() {
     (umask 077; mkdir -p "$dir") 2>/dev/null || { req_err "cannot create $(req_abs_path "$dir")"; return 1; }
 }
 
-# req_env_create <env> [project id] - makes the environment's folder, private (0700), with an empty private
-# (0600) `vars` file in it. An existing environment is left exactly as it is (status 0); something that is not a
-# folder in its place is an error.
+# req_env_create <env> [project id] - makes the environment's folder, private (0700), with a private (0600)
+# `vars` file in it that starts with req_vars_template. An existing environment is left exactly as it is
+# (status 0); something that is not a folder in its place is an error.
 req_env_create() {
     local env=$1 id=${2-$REQ_PROJECT_ID} dir abs file
     req_valid_name "$env" || {
@@ -227,18 +227,18 @@ req_env_create() {
     [[ ! -e $dir && ! -L $dir ]] || { req_err "$abs exists and is not a folder"; return 1; }
     (umask 077; mkdir "$dir") 2>/dev/null || { [[ -d $dir ]] && return 0; req_err "cannot create $abs"; return 1; }
     file=$(req_env_file "$id" "$env")
-    (umask 077; : >"$file") 2>/dev/null || { req_err "cannot create $(req_abs_path "$file")"; return 1; }
+    (umask 077; req_vars_template "$env" >"$file") 2>/dev/null || { req_err "cannot create $(req_abs_path "$file")"; return 1; }
 }
 
 # shellcheck disable=SC2016  # the ${key} and ${host} in the quotes are text for the user, not expansions
-# req_vars_template - the text a new `vars` file starts with: comment lines that show the format (the loader
-# ignores them, so a new file has no variables), ending with a blank line, because in vim `o` after a
+# req_vars_template <env> - the text a new `vars` file starts with: comment lines that show the format (the
+# loader ignores them, so a new file has no variables), ending with a blank line, because in vim `o` after a
 # comment line continues the comment. Quoted strings and not a heredoc: the single-file build drops
 # full-line comments, and a heredoc line that starts with # would look like one to the test of the built
 # file.
 req_vars_template() {
     printf '%s\n' \
-        '# Variables of this project, shared by every environment (the file of an environment wins).' \
+        "# Variables of environment $1: they are loaded when it is the environment in use." \
         '# One per line, key=value: the key uses letters, digits and underscores; the value is the rest of the line.' \
         '# Lines that start with # are comments. A request uses a variable as ${key}, for example ${host}/users.' \
         '#' \
@@ -246,18 +246,23 @@ req_vars_template() {
         ''
 }
 
-# req_vars_create [project id] - makes the project's `vars` file when missing: private (0600), with the
-# lines of req_vars_template. An existing file is left as it is, even empty (noclobber); something that is
-# not a regular file is an error. The error carries the absolute path.
+# req_vars_create <env> [project id] - makes the environment's `vars` file when it is missing (with its folder,
+# req_env_create, when that is missing too). An existing file is left as it is, even empty (noclobber);
+# something that is not a regular file is an error. The error carries the absolute path.
 req_vars_create() {
-    local id=${1-$REQ_PROJECT_ID} file abs
+    local env=$1 id=${2-$REQ_PROJECT_ID} file abs
     [[ -n $id ]] || { req_err "no project is open, so there are no variables to make"; return 1; }
     req_valid_name "$id" || { req_err "invalid project id: \"$id\""; return 1; }
-    file=$(req_vars_file "$id")
+    req_valid_name "$env" || {
+        req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
+        return 1; }
+    file=$(req_env_file "$id" "$env")
     abs=$(req_abs_path "$file")
     [[ -f $file ]] && return 0
     [[ ! -e $file && ! -L $file ]] || { req_err "$abs exists and is not a file"; return 1; }
-    (umask 077; mkdir -p "${file%/*}"; set -o noclobber; req_vars_template >"$file") 2>/dev/null ||
+    req_env_create "$env" "$id" || return 1
+    [[ -f $file ]] && return 0
+    (umask 077; set -o noclobber; req_vars_template "$env" >"$file") 2>/dev/null ||
         { req_err "cannot create $abs"; return 1; }
 }
 

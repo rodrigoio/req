@@ -324,14 +324,14 @@ editors_off() {
 
 # shellcheck disable=SC2016  # the text of the fake editors and the placeholders are single-quoted on purpose
 test_vars() {
-    echo "e2e: :vars edits the project variables in the editor"
+    echo "e2e: :vars edits the variables of the environment in the editor"
     command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
     [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
     local work=$TMP/varsproj port out status state file fakes=$TMP/vars-fakes tools=$TMP/vars-tools
     port=$(<"$TMP/port")
     mkdir -p "$work" "$fakes" && cd "$work" || return
     $REQ init >/dev/null 2>&1
-    state=$REQ_CONFIG_DIR/projects/varsproj; file=$state/vars
+    state=$REQ_CONFIG_DIR/projects/varsproj; file=$state/env/default/vars
     printf 'restore_cursor=no\n' >"$state/config"
     printf '{"name":"a-ping","method":"GET","url":"${host}/echo","headers":{"X-Test":"${tag}"}}\n' >a-ping.get.json
     printf '#!/bin/sh\nprintf "host=http://127.0.0.1:%s\\ntag=from-vars\\n" >>"$1"\n' "$port" >"$fakes/writer"
@@ -342,10 +342,11 @@ test_vars() {
     chmod +x "$fakes"/*
     unset VISUAL EDITOR
 
-    # 1. a new project has no vars file; :vars makes it, private and commented, and runs the editor on it
-    [[ ! -e $file ]]; assert_eq "0" "$?" "a new project has no vars file"
+    # 1. the environment has its vars file from the start, with comments; with its folder gone :vars makes both
+    assert_contains "# Variables of environment default" "$(<"$file")" "req init made the vars file of default, with comments that show the format"
+    rm -rf "$state/env/default"
     out=$(VISUAL=$fakes/viewer menu "$(cmd vars)" "$(cmd q)")
-    [[ -f $file ]]; assert_eq "0" "$?" ":vars made the file"
+    [[ -f $file ]]; assert_eq "0" "$?" ":vars made the folder and the file"
     assert_eq "600" "$(stat -c %a "$file")" "private"
     assert_contains "# host=https://api.example.com" "$(<"$fakes/seen")" "the editor found the commented examples in it"
     assert_contains "environment: default (no variables)" "$out" "the comment lines are not variables"
@@ -355,7 +356,7 @@ test_vars() {
     assert_contains "environment: default (2 variables)" "$out" "when the editor closes the variables are loaded and counted"
     assert_contains "GET http://127.0.0.1:$port/echo" "$out" "the request goes to the host from the file, not to the commented example"
     assert_contains '"x_test": "from-vars"' "$out" "and uses its other variable"
-    assert_contains "# Variables of this project" "$(<"$file")" "the file keeps the comments the program wrote"
+    assert_contains "# Variables of environment default" "$(<"$file")" "the file keeps the comments the program wrote"
 
     # 3. :var is the same command, and the editor works on the file in the project's folder
     out=$(VISUAL=$fakes/second menu "$(cmd var)" "$(cmd q)")

@@ -256,9 +256,10 @@ test_env_create() {
     assert_eq "700" "$(stat -c %a "$env_dir")" "the folder of the environment is private"
     assert_eq "600" "$(stat -c %a "$env_dir/vars")" "the file is private"
     assert_eq "700" "$(stat -c %a "$dir")" "and so is env/"
-    assert_eq "0" "$(wc -c <"$env_dir/vars" | tr -d ' ')" "the file is empty"
+    assert_eq "$(req_vars_template staging-test-env)" "$(<"$env_dir/vars")" "the file starts with the template, which shows the format in comments"
     req_vars_load staging-test-env creator && empty_loads=1
-    assert_eq "1" "$empty_loads" "an empty vars file is valid for the loader"
+    assert_eq "1" "$empty_loads" "that file is valid for the loader"
+    assert_eq "0" "${#REQ_VARS[@]}" "and has no variables, comments are not variables"
 
     printf 'token=kept\n' >"$env_dir/vars"
     req_env_create staging-test-env creator; assert_eq "0" "$?" "creating one that exists is not an error"
@@ -305,62 +306,80 @@ test_env_create() {
 }
 
 test_vars_create() {
-    echo "env: creating the project variables"
-    local cfg=$REQ_CONFIG_DIR out f file
+    echo "env: creating the variables of an environment"
+    local cfg=$REQ_CONFIG_DIR out f dir file
     mkdir -p "$cfg/projects/varsmaker"
-    file=$cfg/projects/varsmaker/vars
+    dir=$cfg/projects/varsmaker/env/dev
+    file=$dir/vars
 
-    assert_contains "# host=https://api.example.com" "$(req_vars_template)" "the template shows a commented example"
-    assert_contains '${host}' "$(req_vars_template)" "and how a request uses a variable"
-    req_vars_create varsmaker; assert_eq "0" "$?" "the file is made"
-    [[ -f $file ]]; assert_eq "0" "$?" "and it is in the project's folder"
+    assert_contains "# host=https://api.example.com" "$(req_vars_template dev)" "the template shows a commented example"
+    assert_contains '${host}' "$(req_vars_template dev)" "and how a request uses a variable"
+    assert_contains "# Variables of environment dev:" "$(req_vars_template dev)" "it names the environment"
+    assert_not_contains "shared" "$(req_vars_template dev)" "and says nothing about sharing: each environment has its own"
+    req_vars_create dev varsmaker; assert_eq "0" "$?" "the file is made"
+    [[ -f $file ]]; assert_eq "0" "$?" "in the folder of the environment, which is made with it"
     assert_eq "600" "$(stat -c %a "$file")" "private, since it may hold credentials"
-    assert_eq "$(req_vars_template)" "$(<"$file")" "it starts with the template"
+    assert_eq "700" "$(stat -c %a "$dir")" "in a private folder"
+    assert_eq "$(req_vars_template dev)" "$(<"$file")" "it starts with the template"
     req_kv_check "$file"; assert_eq "0" "$?" "which is a valid file"
     assert_eq "" "$(tail -n 1 "$file")" "and ends with a blank line, so a line opened after it in vim does not continue a comment"
-    req_vars_load default varsmaker
+    req_vars_load dev varsmaker
     assert_eq "0" "${#REQ_VARS[@]}" "its comment lines are not variables, the commented example included"
     printf 'host=https://dev.example.com\n' >>"$file"
-    req_vars_load default varsmaker
+    req_vars_load dev varsmaker
     assert_eq "1" "${#REQ_VARS[@]}" "only the line written after them is"
     assert_eq "https://dev.example.com" "${REQ_VARS[host]}" "with its value"
-    req_subst '${host}/users' default varsmaker
+    req_subst '${host}/users' dev varsmaker
     assert_eq "https://dev.example.com/users" "$REQ_SUBST_OUT" "and a request can use it"
 
     : >"$file"; chmod 640 "$file"
-    req_vars_create varsmaker; assert_eq "0" "$?" "making it again is not an error"
+    req_vars_create dev varsmaker; assert_eq "0" "$?" "making it again is not an error"
     assert_eq "0" "$(wc -c <"$file" | tr -d ' ')" "an empty file is left empty"
     assert_eq "640" "$(stat -c %a "$file")" "and keeps its mode"
     printf 'token=kept\n' >"$file"
-    req_vars_create varsmaker
+    req_vars_create dev varsmaker
     assert_eq "token=kept" "$(<"$file")" "a file with content is never touched"
 
+    rm -f "$file"
+    req_vars_create dev varsmaker; assert_eq "0" "$?" "a folder without its file gets the file"
+    assert_eq "$(req_vars_template dev)" "$(<"$file")" "with the template"
+    assert_eq "600" "$(stat -c %a "$file")" "private"
+
+    req_vars_create staging varsmaker
+    assert_eq "$(req_vars_template staging)" "$(<"$cfg/projects/varsmaker/env/staging/vars")" "another environment has a file of its own, with its own name in the template"
+    assert_eq "$(req_vars_template dev)" "$(<"$file")" "and the first one is untouched"
+
     rm -rf "$cfg/projects/varsmaker"
-    req_vars_create varsmaker; assert_eq "0" "$?" "the project folder is made with it when it is missing"
+    req_vars_create dev varsmaker; assert_eq "0" "$?" "the project folder is made with it when it is missing"
     [[ -f $file ]]; assert_eq "0" "$?" "and so is the file"
-    assert_eq "700" "$(stat -c %a "$cfg/projects/varsmaker")" "the folder is private"
+    assert_eq "700" "$(stat -c %a "$cfg/projects/varsmaker")" "the project folder is private"
 
     REQ_PROJECT_ID=varsmaker; rm -f "$file"
-    req_vars_create; assert_eq "0" "$?" "the project defaults to REQ_PROJECT_ID"
+    req_vars_create dev; assert_eq "0" "$?" "the project defaults to REQ_PROJECT_ID"
     [[ -f $file ]]; assert_eq "0" "$?" "and the file is made in it"
     REQ_PROJECT_ID=""
-    out=$(req_vars_create 2>&1); assert_eq "1" "$?" "without a project nothing is made"
+    out=$(req_vars_create dev 2>&1); assert_eq "1" "$?" "without a project nothing is made"
     assert_contains "no project is open" "$out" "and the error says why"
-    out=$(req_vars_create "Bad_Id" 2>&1); assert_eq "1" "$?" "a project id that is not a slug is refused"
+    out=$(req_vars_create dev "Bad_Id" 2>&1); assert_eq "1" "$?" "a project id that is not a slug is refused"
     assert_contains 'invalid project id: "Bad_Id"' "$out" "and named"
+    out=$(req_vars_create "../etc" varsmaker 2>&1); assert_eq "1" "$?" "an environment name that is not a slug is refused"
+    assert_contains 'invalid environment name: "../etc"' "$out" "and named"
 
-    rm -f "$file"; mkdir "$file"
-    out=$(req_vars_create varsmaker 2>&1); assert_eq "1" "$?" "a folder where the file goes is refused"
+    rm -rf "$dir"; : >"$dir"
+    out=$(req_vars_create dev varsmaker 2>&1); assert_eq "1" "$?" "a plain file where the environment's folder goes is refused"
+    assert_contains "$dir exists and is not a folder" "$out" "with the absolute path"
+    rm -f "$dir"; mkdir -p "$file"
+    out=$(req_vars_create dev varsmaker 2>&1); assert_eq "1" "$?" "a folder where the file goes is refused"
     assert_contains "$file exists and is not a file" "$out" "with the absolute path"
     rmdir "$file"; ln -s "$TMP/nowhere-vars" "$file"
-    out=$(req_vars_create varsmaker 2>&1); assert_eq "1" "$?" "so is a link that points nowhere"
+    out=$(req_vars_create dev varsmaker 2>&1); assert_eq "1" "$?" "so is a link that points nowhere"
     [[ ! -e $TMP/nowhere-vars ]]; assert_eq "0" "$?" "and the target of the link is not created"
     rm -f "$file"
 
     if (( EUID != 0 )); then       # root ignores the permissions
-        chmod 500 "$cfg/projects/varsmaker"
-        out=$(req_vars_create varsmaker 2>&1); f=$?
-        chmod 700 "$cfg/projects/varsmaker"
+        chmod 500 "$dir"
+        out=$(req_vars_create dev varsmaker 2>&1); f=$?
+        chmod 700 "$dir"
         assert_eq "1" "$f" "a folder that cannot be written fails"
         assert_contains "req: error: cannot create $file" "$out" "naming the file with its absolute path"
     fi
