@@ -215,7 +215,6 @@ Everything `req` keeps outside your repository lives in `~/.req` (or `REQ_CONFIG
   projects/<id>/
     project               name= and path= of the project folder
     config                the project's settings (win over the global ones)
-    vars                  variables shared by every environment
     env/<env>/vars        variables of one environment, in a folder of its own (dev, prod, ...)
     cursor                dir= and item= where the menu was left
     req.log               the log of requests and responses (only with log=yes)
@@ -252,7 +251,6 @@ It follows the file by name (`-F`), so it keeps working when `req` trims the log
 Variables live in the central directory (`~/.req`, or `REQ_CONFIG_DIR`), one folder per project, as plain `key=value` files:
 
 ```
-~/.req/projects/<id>/vars          shared by every environment
 ~/.req/projects/<id>/env/<env>/vars     one folder per environment, with its file (dev, prod, ...)
 ```
 
@@ -262,7 +260,7 @@ url=https://api.example.com
 token=abc123
 ```
 
-`req` makes the `env/` folder and the `default` environment (its folder and a `vars` file that shows the format in comments) itself when it opens the project, and `:env` makes the others (see "Choosing the environment"); you only fill the files with `key=value` lines. An environment is a folder: a plain file in `env/` (the layout of earlier versions, `env/<env>`) is not an environment, is not listed and is not read; to migrate, rename it, make the folder `env/<env>/` and move the file into it as `vars`. `:vars` opens the file of the environment in use for you (see "Editing the variables"); any other file you edit with your own editor. Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. The environment wins over the project variables. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
+`req` makes the `env/` folder and the `default` environment (its folder and a `vars` file that shows the format in comments) itself when it opens the project, and `:env` makes the others (see "Choosing the environment"); you only fill the files with `key=value` lines. An environment is a folder: a plain file in `env/` (the layout of earlier versions, `env/<env>`) is not an environment, is not listed and is not read; to migrate, rename it, make the folder `env/<env>/` and move the file into it as `vars`. `:vars` opens the file of the environment in use for you (see "Editing the variables"); any other file you edit with your own editor. Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. Nothing is shared between environments: only the file of the environment in use is read, so a value several environments need is written in each of them, and a `vars` file at the project level (the layout of earlier versions) is not read. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
 
 ### Editing the variables
 
@@ -281,8 +279,7 @@ token=abc123
 Write `${key}` in the `url`, in the values of `headers`, `query` and `parameters`, and in `raw_data` (also inside a JSON body) and `req` replaces it before sending. The value comes from, in this order:
 
 1. the process variable `<ENV>_<KEY>`, both in capitals, hyphens of the environment turned into underscores (`${url}` in `dev` is `DEV_URL`);
-2. the environment file `env/<env>/vars`;
-3. the project `vars`.
+2. the environment file `env/<env>/vars`.
 
 The environment is the `REQ_ENV` variable, `default` when it is not set. If a key has no value nothing is sent: the error lists every missing key and says which variable or file would define it. `name` and `description`, and the names of properties, are never replaced. There is no way yet to write a literal `${key}` in a request (see TA.14 in `TASKS.md` (in the `req_context` repository)). The url shown when a request runs is the substituted one.
 
@@ -296,7 +293,7 @@ The environment of a session is chosen with `:env`:
 - The last row of the menu, `+ new environment`, asks for a name (a slug; an empty name cancels), makes the environment and switches to it. The name of one that already exists just switches to it.
 - `:env <name>` switches straight to the environment, with no menu. If the project has no environment with that name, `req` asks `Create environment "<name>"? [Y/n]`: Enter makes the folder `env/<name>/` with a private file `vars` (comments that show the format) and says where the file is, ready for your `key=value` lines; `n` changes nothing.
 - `default` is always offered and accepted, even if its file is gone.
-- Switching loads the whole set of variables of the environment at once, the project's `vars` plus the environment's file, and says how many came in (`environment: dev (3 variables)`). Each environment is its own set: nothing of the previous one stays. A file that is not valid is reported right then, with its path and line, instead of waiting for a request to run: the switch still happens, with nothing loaded, and the file is not touched.
+- Switching loads the variables of the environment at once, from its own file, and says how many came in (`environment: dev (3 variables)`). Each environment is its own set: nothing of the previous one stays. A file that is not valid is reported right then, with its path and line, instead of waiting for a request to run: the switch still happens, with nothing loaded, and the file is not touched.
 - The variables are read again every time a request runs, so a file you edit while `req` is open counts on the next run.
 - The choice is not remembered: the next start uses `REQ_ENV` or `default`.
 

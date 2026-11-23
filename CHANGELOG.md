@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Open the variables of the environment in use with `:vars` (or `:var`), its own `env/<name>/vars`, instead of the
   file that every environment shared. A new environment starts with a `vars` file whose comment lines show the
   format, the lines `:vars` used to add.
+- **BREAKING:** Load only the variables of the environment in use, and no longer the project's `vars` file that
+  every environment shared: nothing is shared between environments now, and a value that several of them need
+  is written in each one. To migrate, copy the lines of `~/.req/projects/<id>/vars` into the `vars` of each
+  environment that uses them.
 - **BREAKING:** Keep the variables of each environment in a folder of its own, `env/<name>/vars`, instead of the
   file `env/<name>`. An old file is no longer read, listed as an environment or switched to. To migrate, rename
   the file, make the folder `env/<name>/` in `~/.req/projects/<id>/` and move the file into it as `vars`.
