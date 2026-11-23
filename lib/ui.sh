@@ -10,7 +10,7 @@ req_colors_enabled() {
     [[ $REQ_COLORS == 1 ]]
 }
 
-# req_color <name> - the ANSI sequence for: get post put patch delete ok warn err orange sel notification bold dim reset.
+# req_color <name> - the ANSI sequence for: get post put patch delete ok warn err orange cyan green sel notification bold dim reset.
 # `sel` is the menu highlight (bold bright green); `notification` is the bar at the top of the menu: black letters
 # (256-color 16, true black in any theme) on the same orange as `orange`.
 req_color() {
@@ -25,6 +25,8 @@ req_color() {
         warn)   printf '\033[33m' ;;
         err)    printf '\033[31m' ;;
         orange) printf '\033[38;5;208m' ;;
+        cyan)   printf '\033[36m' ;;
+        green)  printf '\033[32m' ;;
         sel)    printf '\033[1;92m' ;;
         notification) printf '\033[38;5;16;48;5;208m' ;;
         bold)   printf '\033[1m' ;;
@@ -60,6 +62,18 @@ req_utf8() {
         *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) return 0 ;;
     esac
     return 1
+}
+
+REQ_LOGO=""        # the logo, set by req_logo
+
+# shellcheck disable=SC2034  # REQ_LOGO is read by the menu
+# req_logo - puts the logo of the project, `{❯} Req`, in REQ_LOGO: the braces in cyan, the arrow in green and Req in
+# bold, with the colors req_color decides (none without them) and `>` for the arrow outside UTF-8.
+req_logo() {
+    local arrow='>' c g b r
+    req_utf8 && arrow='❯'
+    c=$(req_color cyan); g=$(req_color green); b=$(req_color bold); r=$(req_color reset)
+    REQ_LOGO="${c}{${g}${arrow}${c}}${r} ${b}Req${r}"
 }
 
 # req_term_cols / req_term_rows - terminal size (COLUMNS/LINES, tput, 80x24).
