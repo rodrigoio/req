@@ -9,6 +9,10 @@
 
 declare -gA REQ_VARS=()      # variables of the last loaded environment (key -> value)
 
+req_env_dir() {
+    req_project_state_dir "$1" "env/$2"
+}
+
 req_env_file() {
     req_project_state_dir "$1" "env/$2"
 }

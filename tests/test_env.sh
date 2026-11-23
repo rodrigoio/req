@@ -22,6 +22,7 @@ test_paths() {
     echo "env: paths"
     assert_eq "$TMP/cfg" "$(req_config_dir)" "REQ_CONFIG_DIR overrides the config directory"
     assert_eq "$HOME/.req" "$(REQ_CONFIG_DIR='' req_config_dir)" "the default is ~/.req"
+    assert_eq "$TMP/cfg/projects/shop/env/dev" "$(req_env_dir shop dev)" "folder of an environment"
     assert_eq "$TMP/cfg/projects/shop/env/dev" "$(req_env_file shop dev)" "file of an environment"
     assert_eq "$TMP/cfg/projects/shop/vars" "$(req_vars_file shop)" "project variables"
 }
