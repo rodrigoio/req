@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Go back with `q` as well as with Esc: on the list (up one directory), on the details of a request and on the
   `:env` menu. At the root of the list `q` quits `req`, saving the position as `:q` does; Esc still does nothing
   there, so it never closes the program by accident.
+- Open the help with the key `h`, on the list and on the details, as `:h` does; any key closes it.
 
 ### Changed
 

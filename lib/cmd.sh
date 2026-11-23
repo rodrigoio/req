@@ -18,6 +18,7 @@ REQ_HELP_ROWS=(
     "Esc / q|go back (details, then list, then parent directory); at the root q quits"
     "v|show the last response in a pager; q leaves it (Esc does not)"
     "Ctrl-L|clear the screen: old results go away and the menu is drawn at the top"
+    "h|this help (same as :h); any key closes it"
     ":|command mode (Esc cancels)"
     "Commands"
     ":n|new request in the current directory"
@@ -38,6 +39,12 @@ REQ_HELP_ROWS=(
     "req log|follow the project's log from another terminal (tail -F)"
 )
 REQ_HELP_BACK=list      # view to return to when the help screen closes
+
+# req_nav_help - opens the help screen (the key h and the command :h); any key goes back to the view it came from.
+req_nav_help() {
+    REQ_HELP_BACK=$REQ_VIEW
+    REQ_VIEW=help
+}
 
 req_cmd_key() {
     local key=$1 line
@@ -85,7 +92,7 @@ req_cmd_run() {
         config)       req_cmd_config "$arg" ;;
         log)          req_cmd_log "$arg" ;;
         v|verbose)    req_cmd_verbose "$arg" ;;
-        h|help)       REQ_HELP_BACK=$REQ_VIEW; REQ_VIEW=help ;;
+        h|help)       req_nav_help ;;
         *)            req_notification_warn "unknown command :$cmd (:h lists the commands)" ;;
     esac
     return 0

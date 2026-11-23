@@ -5,8 +5,8 @@
 # request's result stays visible and the menu is redrawn right below it; the screen is cleared only when the menu starts
 # and on Ctrl-L. Outside a terminal nothing is erased (tests).
 # Keys: up/down move the selection, Enter opens/runs, Esc and q go back (at the root Esc does nothing and q quits),
-# Ctrl-L clears the screen, v shows the last response in a pager, ":" enters command mode (cmd.sh). The environment
-# menu (:env) is a view of its own with its own keys: up/down, Enter, Esc and q.
+# Ctrl-L clears the screen, h opens the help, v shows the last response in a pager, ":" enters command mode (cmd.sh).
+# The environment menu (:env) is a view of its own with its own keys: up/down, Enter, Esc and q.
 
 REQ_RAW_MAX_LINES=15    # lines of raw_data shown on the details screen
 REQ_PROBLEMS_MAX_LINES=10   # problems listed on the details of an invalid request
@@ -544,6 +544,7 @@ req_nav_handle() {
         case $key in
             enter) (( REQ_DETAIL_VALID )) && req_nav_execute ;;
             esc|q) REQ_VIEW=list ;;
+            h)     req_nav_help ;;
             v)     req_nav_view_result ;;
         esac
     else
@@ -553,6 +554,7 @@ req_nav_handle() {
             enter) (( n > 0 )) && req_nav_open ;;
             esc)   req_nav_back ;;
             q)     if (( ${#REQ_STACK_DIR[@]} > 0 )); then req_nav_back; else REQ_QUIT=1; fi ;;
+            h)     req_nav_help ;;
             v)     req_nav_view_result ;;
         esac
     fi
