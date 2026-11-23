@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # notification.sh - the notification bars at the top of the menu screen.
 #
-# Persistent notifications are reprinted at every draw while their condition holds; a warning is printed once. This
-# module builds one bar line (req_notification_bar) and puts the bars of a draw on the screen (req_notification_collect,
-# req_notification_overlay). What goes in the bars comes from producers: functions named in REQ_NOTIFICATION_PRODUCERS,
-# in screen order from the top, each one appending bar lines to REQ_NOTIFICATION_LINES. A producer that is not defined
-# is skipped, so a feature adds its own function and never edits that list. Only the interactive menu draws bars;
-# `req run` never does.
+# Persistent notifications are reprinted at every draw while their condition holds; a warning, and what a command says
+# (REQ_STATUS), are printed once. This module builds one bar line (req_notification_bar) and puts the bars of a draw
+# on the screen (req_notification_collect, req_notification_overlay). What goes in the bars comes from producers:
+# functions named in REQ_NOTIFICATION_PRODUCERS, in screen order from the top, each one appending bar lines to
+# REQ_NOTIFICATION_LINES. A producer that is not defined is skipped, so a feature adds its own function and never
+# edits that list. Only the interactive menu draws bars; `req run` never does.
 
 REQ_NOTIFICATION_LINES=()      # the bar lines of the current draw, from the top of the screen
 REQ_NOTIFICATION_IDS=()        # the persistent notifications, in registration order
@@ -16,7 +16,7 @@ REQ_NOTIFICATION_TEXT=""       # what a check that has something to say puts in 
 REQ_NOTIFICATION_ACTIVE=0      # 1 while the menu is open: req_warn then goes through the warning bar
 REQ_NOTIFICATION_WARN=""       # the warning that waits for the next draw ("" when there is none)
 REQ_NOTIFICATION_WARN_MORE=0   # how many more came after it before that draw
-REQ_NOTIFICATION_PRODUCERS=(req_notification_persistent_lines req_notification_warn_lines)
+REQ_NOTIFICATION_PRODUCERS=(req_notification_persistent_lines req_notification_warn_lines req_notification_status_lines)
 
 # req_notification_bar <text> - one bar line: black letters on orange, padded with spaces to one column
 # short of the terminal width (so no terminal wraps it) and truncated when longer.
@@ -134,6 +134,19 @@ req_notification_warn_lines() {
     text=$(req_notification_more "$REQ_NOTIFICATION_WARN" "$REQ_NOTIFICATION_WARN_MORE")
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
     REQ_NOTIFICATION_LINES+=("$(req_notification_bar "$text")")
+    return 0
+}
+
+# --- what a command says, printed once ---------------------------------------------
+
+# req_notification_status_lines - the producer of the message of a command: what it left in REQ_STATUS (cmd.sh: a
+# confirmation, an environment change) becomes a bar right below the warning and is spent, so it is drawn once. It is a
+# bar of its own: a warning and the message of the same command are both read, not "(+1 more)".
+req_notification_status_lines() {
+    local text=${REQ_STATUS-}
+    [[ -n $text ]] || return 0
+    REQ_STATUS=""
+    REQ_NOTIFICATION_LINES+=("$(req_notification_bar "${text//$'\n'/ }")")
     return 0
 }
 

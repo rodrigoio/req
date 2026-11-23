@@ -6,7 +6,7 @@
 
 REQ_CMD_ACTIVE=0        # 1 while a command is being typed
 REQ_CMD_BUF=""          # the command typed so far
-REQ_STATUS=""           # one-shot message shown under the menu (confirmations; warnings go to req_notification_warn)
+REQ_STATUS=""           # one-shot message of a command (a confirmation); req_notification_status_lines draws it in a bar
 REQ_QUIT=0              # set by :q, ends the main loop
 
 # The help screen (h, :h) is built from this single table, "keys|description"; a line without "|" is a section
