@@ -1,22 +1,6 @@
 #!/usr/bin/env bash
-# cmd.sh - command mode (":") for the interactive menu.
-#
-# Commands:
-#   :n            new request in the current directory (wizard)
-#   :nd [name]    new directory (alias :mkdir); at the root it is also listed in the .req
-#   :ed [name]    rename the selected directory
-#   :cp [name]    copy the selected directory or request, asking for the new name (default <name>-copy)
-#   :rm           remove the selected request or directory (with its contents), after a [y/N] confirmation
-#   :e            edit the selected request (alias :edit)
-#   :d            duplicate the selected request and edit the copy (alias :dup)
-#   :q            quit without asking (alias :quit)
-#   :env [name]   a menu of the project's environments (the last row creates one), or switch the session to <name>
-#                 (offering to create it when it does not exist)
-#   :log [yes|no] switch the log of requests and responses for this session
-#   :v [yes|no]   switch the verbose mode (>> and <<) for this session
-#   :config [-g] [k=v] show the settings, or set one for the project or, with -g, globally (~/.req/config)
-#   :h            help: every key and command (alias :help)
-# Esc leaves command mode; Backspace on an empty line does too.
+# cmd.sh - command mode (":") for the interactive menu. The commands are listed in REQ_HELP_ROWS (the :h screen) and
+# dispatched by req_cmd_run. Esc leaves command mode; Backspace on an empty line does too.
 
 # shellcheck disable=SC2034  # the REQ_* state below is shared with nav.sh
 
@@ -55,7 +39,6 @@ REQ_HELP_ROWS=(
 )
 REQ_HELP_BACK=list      # view to return to when the help screen closes
 
-# req_cmd_key <key> - handles one key while in command mode.
 req_cmd_key() {
     local key=$1 line
     case $key in
@@ -82,7 +65,6 @@ req_cmd_key() {
     return 0
 }
 
-# req_cmd_run <line> - runs one command line.
 req_cmd_run() {
     local line cmd arg
     line=$(req_trim "$1")
@@ -125,8 +107,8 @@ req_nav_prompt_end() {
     return 0
 }
 
-# req_nav_selected_request - prints the request file the commands act on: the open
-# one on the details screen, or the selected request on the list.
+# req_nav_selected_request - the request file the commands act on: the open one on the details, or the
+# selected one on the list.
 req_nav_selected_request() {
     if [[ $REQ_VIEW == detail ]]; then
         printf '%s' "$REQ_DETAIL_FILE"
@@ -137,7 +119,6 @@ req_nav_selected_request() {
     fi
 }
 
-# req_nav_selected_dir - prints the directory under the cursor on the list.
 req_nav_selected_dir() {
     [[ $REQ_VIEW == list ]] && (( ${#REQ_ITEM_KIND[@]} > 0 )) && [[ ${REQ_ITEM_KIND[REQ_SEL]} == d ]] || return 1
     printf '%s' "${REQ_ITEM_PATH[REQ_SEL]}"
@@ -200,7 +181,6 @@ req_cmd_remove() {
     if [[ -n $REQ_LAST_FILE ]]; then
         REQ_VIEW=list
         req_nav_refresh ""
-        # Stay near where the removed row was.
         (( sel >= ${#REQ_ITEM_KIND[@]} )) && sel=$(( ${#REQ_ITEM_KIND[@]} - 1 ))
         (( sel < 0 )) && sel=0
         REQ_SEL=$sel
@@ -258,11 +238,9 @@ req_cmd_dup() {
     req_nav_prompt_end
 }
 
-# req_cmd_config [-g] [key=value] - :config. Without an argument it opens the settings screen
-# (every known key, its value and its default). With key=value it checks the key and the
-# value against the table (req_config_valid) and writes the open project's file, which is
-# where settings belong by default; with -g it writes the global file (~/.req/config)
-# instead. The project's file wins over the global one.
+# req_cmd_config [-g] [key=value] - :config. Without an argument it opens the settings screen. With
+# key=value it checks the key and the value against the table (req_config_valid) and writes the open
+# project's file, or the global one with -g (the project's file wins).
 req_cmd_config() {
     local arg=$1 key value file scope=project
     if [[ $arg == -g || $arg == "-g "* ]]; then
@@ -312,8 +290,8 @@ req_cmd_switch() {
 }
 
 # shellcheck disable=SC2034  # REQ_LOG_SESSION is read by req_log_enabled
-# req_cmd_log [yes|no] - :log. Switches the log of requests and responses for this
-# session (the "log" setting is not changed); it needs an open project to keep the log in.
+# req_cmd_log [yes|no] - :log. Switches the log for this session (the "log" setting is not changed); needs
+# an open project.
 req_cmd_log() {
     local now=no new
     if [[ -z $REQ_PROJECT_ID ]]; then
@@ -332,7 +310,6 @@ req_cmd_log() {
 }
 
 # shellcheck disable=SC2034  # REQ_VERBOSE is read by the verbose functions in http.sh
-# req_cmd_verbose [yes|no] - :v. Switches the verbose mode for this session.
 req_cmd_verbose() {
     local now=no new
     req_verbose_on && now=yes
@@ -346,13 +323,11 @@ req_cmd_verbose() {
 }
 
 # shellcheck disable=SC2034  # REQ_ENV is read by req_run_request and the header
-# req_env_activate <name> [file just made] - the end of req_env_use: makes <name> the environment
-# of the session and loads its whole set of variables right away (the project's plus the
-# environment's, see req_vars_load), so a broken file is reported now and not only when a
-# request runs. The problems go to the warning bar and the switch stands, with no variables
-# loaded; nothing is fixed or overwritten. The status says how many variables were loaded and,
-# for an environment that was just made, where its file is. The variables are loaded again at
-# every request (req_run_request), so a file edited while req is open is read as it is then.
+# req_env_activate <name> [file just made] - makes <name> the environment of the session (REQ_ENV) and loads
+# its variables right away (req_vars_load), so a broken file is reported now and not only when a request
+# runs: the problems go to the warning bar and the switch stands, with no variables loaded; nothing is
+# fixed. The status says how many variables were loaded and, for an environment just made, where its file
+# is. They are loaded again at every request, so a file edited while req is open is read as it is then.
 req_env_activate() {
     local name=$1 made=${2-} errs ok=1 note n
     REQ_ENV=$name
@@ -376,13 +351,11 @@ req_env_activate() {
     REQ_STATUS="environment: $name${made:+, created in $made} ($note)"
 }
 
-# req_env_use <name> [ask|now] - switches the session to an environment (REQ_ENV, shown in the
-# header and used by the next request, req_env_activate). An environment of the project, or "default",
-# is switched to at once. One that does not exist yet is created: with "ask" (the default) after a [Y/n]
-# question, with "now" straight away (the caller has asked already). The new file is empty and
-# private, and the status says where it is. A name that is not a slug, or no project state to
-# keep the file in, is a warning and changes nothing; so is answering no or a file that cannot
-# be made. Always succeeds, like the commands.
+# req_env_use <name> [ask|now] - switches the session to an environment (req_env_activate). One of the
+# project, or "default", is switched to at once; one that does not exist is created: with "ask" (the
+# default) after a [Y/n] question, with "now" straight away (the caller has asked). A name that is not a
+# slug, no project state, answering no or a file that cannot be made is a warning and changes nothing.
+# Always succeeds, like the commands.
 req_env_use() {
     local name=$1 mode=${2:-ask} file err
     if ! req_valid_name "$name"; then
@@ -414,10 +387,9 @@ req_env_use() {
     return 0
 }
 
-# req_cmd_env [name] - :env. With a name it switches the session to that environment, creating
-# it when it does not exist (req_env_use). Without one it opens the environment menu (the view
-# env, see req_nav_build_env), with the selection on the one in use; the menu goes back to the view
-# it was opened from. With no project state there is no menu, only "default" can be used.
+# req_cmd_env [name] - :env. With a name it switches to that environment (req_env_use). Without one it opens
+# the environment menu (the view env, req_nav_build_env) with the one in use selected, and it goes back to
+# the view it was opened from. With no project state only "default" can be used.
 req_cmd_env() {
     local name=$1 current=${REQ_ENV:-default} i
     if [[ -n $name ]]; then
@@ -438,9 +410,8 @@ req_cmd_env() {
 }
 
 # shellcheck disable=SC2016  # the $-words in the quotes are text for the user, not expansions
-# req_vars_howto <abs path> - what the user sees when there is no editor for :vars: where the
-# project variables are and how to write them, whole and on their own lines, so the path can be
-# copied. It waits for Enter, between req_nav_prompt_begin and _end.
+# req_vars_howto <abs path> - what the user sees when there is no editor for :vars: where the project
+# variables are and how to write them, on their own lines so the path can be copied. Waits for Enter.
 req_vars_howto() {
     printf 'No editor found (tried $VISUAL, $EDITOR, vim and nano).\n'
     printf 'The variables of the project, shared by every environment, are in:\n\n  %s\n\n' "$1"
@@ -449,14 +420,11 @@ req_vars_howto() {
     req_prompt "Press Enter to go back" "" || true
 }
 
-# req_cmd_vars [arg] - :var and :vars. Opens the project variables (projects/<id>/vars, shared by
-# every environment) in the editor of the user: $VISUAL, then $EDITOR, then vim, then nano. The
-# file is made first when it is missing (req_vars_create: private, with comment lines that show the
-# format), and edited in place. When the editor closes, the variables of the environment in use are
-# loaded again (req_env_activate), so a bad line is reported at once, with its path and line, and
-# the status says how many variables there are; nothing is fixed. With no editor at all the file is
-# still made and req_vars_howto says where it is and how to write the variables. An argument, or no
-# project state to keep the file in, is a warning. Always succeeds, like the commands.
+# req_cmd_vars [arg] - :var and :vars. Opens the project variables (shared by every environment) in $VISUAL,
+# $EDITOR, vim or nano, making the file first when it is missing (req_vars_create). When the editor closes
+# the variables of the environment in use are loaded again (req_env_activate), so a bad line is reported at
+# once, with its path and line. With no editor the file is still made and req_vars_howto says where it is.
+# An argument, or no project state, is a warning. Always succeeds, like the commands.
 req_cmd_vars() {
     local file abs err status
     if [[ -n $1 ]]; then

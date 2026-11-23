@@ -17,11 +17,10 @@ REQ_VERBOSE=${REQ_VERBOSE:-0}   # 1: show what is sent (>>) and received (<<); :
 # because it can contain any character except a line break.
 REQ_CURL_FORMAT=$'\n%{http_code}|%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_pretransfer}|%{time_starttransfer}|%{time_total}|%{content_type}'
 
-# Request preparation in a single jq call, as "tag NUL value NUL" records: method,
-# url with the url-encoded querystring, headers and body. The body exists only for
-# POST, PUT and PATCH. A non-empty raw_data (object, list or non-empty string) is the
-# body ("raw", plus "rawjson" when it was an object or list) and wins over parameters,
-# which otherwise come out as key=value form pairs.
+# Request preparation in one jq call, as "tag NUL value NUL" records: method, url with the url-encoded
+# querystring, headers, timeout, follow, insecure and the body, which exists only for POST, PUT and PATCH. A
+# non-empty raw_data is the body ("raw", plus "rawjson" for an object or list) and wins over parameters,
+# which otherwise come out as form pairs, and files.
 # shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
 REQ_PREPARE_JQ=$REQ_JQ_LEAVES'
 ((.method // "") | ascii_upcase) as $m
@@ -86,11 +85,10 @@ req_prepare_request() {
 
 REQ_URL_PROBLEM=""      # why req_url_check refused an address
 
-# req_url_check <url> - succeeds when the url is a usable address; otherwise it fails and puts the
-# reason in REQ_URL_PROBLEM. Narrow on purpose, curl decides the rest: whitespace or control
-# characters; a "://" whose scheme is not http or https, or with no host after it. A url with no
-# "://" is accepted (curl assumes http), and a ${key} placeholder is tolerated, since it is only
-# resolved when the request runs.
+# req_url_check <url> - succeeds for a usable address; otherwise fails with the reason in REQ_URL_PROBLEM.
+# Narrow on purpose, curl decides the rest: whitespace or control characters, a "://" whose scheme is not
+# http or https or with no host after it. A url with no "://" is accepted (curl assumes http), and so is a
+# ${key} placeholder, which is only resolved when the request runs.
 # shellcheck disable=SC2016  # the placeholder is matched literally
 req_url_check() {
     local url=$1 scheme rest host
@@ -112,19 +110,17 @@ req_url_check() {
     return 0
 }
 
-# req_build_url <json> - the url with the (url-encoded) querystring appended.
 req_build_url() {
     req_prepare_request "$1" || return 1
     printf '%s' "$REQ_P_URL"
 }
 
-# req_build_curl_args <json> - fills REQ_P_*, REQ_CURL_ARGS and REQ_BODY. The maximum
-# time of the whole request is the "timeout" field (seconds), else REQ_TIMEOUT, else 60.
-# Body (POST, PUT and PATCH only): a non-empty raw_data is sent as it is, through
-# stdin; an object or list gets "Content-Type: application/json" when the request
-# has no Content-Type, and free text gets none (curl'"'"'s default one is removed).
-# Without raw_data, parameters are sent as an url-encoded form, always. The form
-# uses "key=value", so values starting with "@" are never read as files by curl.
+# req_build_curl_args <json> - fills REQ_P_*, REQ_CURL_ARGS and REQ_BODY. The maximum time of the whole
+# request is the "timeout" field (seconds), else REQ_TIMEOUT, else 60. Body (POST, PUT and PATCH only): a
+# non-empty raw_data is sent as it is, through stdin, with "Content-Type: application/json" for an object or
+# list when the request has no Content-Type, and none for free text (curl's default one is removed). Without
+# raw_data, "files" go as a multipart form (req_files_args) and parameters as an url-encoded form, as
+# "key=value" so a value starting with "@" is never read as a file by curl.
 req_build_curl_args() {
     local line
     req_prepare_request "$1" || return 1
@@ -161,10 +157,9 @@ req_build_curl_args() {
     REQ_CURL_ARGS+=("$REQ_P_URL")
 }
 
-# req_split_headers <text> - the text is what curl wrote with "-D -": the header block
-# (CRLF lines, ended by a blank line) and then the body. Fills REQ_RESP_STATUSLINE and
-# REQ_RESP_HEADERS, and puts the body in REQ_RESP_BODY. An interim "1xx" block (such as
-# "100 Continue") is skipped, and so are the "3xx" blocks of the redirects followed
+# req_split_headers <text> - the text is what curl wrote with "-D -": the header block (CRLF lines, ended by
+# a blank line) and then the body. Fills REQ_RESP_STATUSLINE, REQ_RESP_HEADERS and REQ_RESP_BODY. An interim
+# "1xx" block ("100 Continue") is skipped, and so are the "3xx" blocks of the redirects followed
 # (REQ_P_FOLLOW). Text that does not start with "HTTP/" is all body.
 req_split_headers() {
     local rest=$1 block line crlf=$'\r\n'
@@ -182,11 +177,10 @@ req_split_headers() {
     REQ_RESP_BODY=$rest
 }
 
-# req_files_args - the multipart form of a request with "files": every parameter as a
-# text field (--form-string, so a value starting with "@" or "<" is never read as a file)
-# and every file as "-F field=@path", quoted so a ";" or "," in the path is not read as an
-# option of curl. A relative path starts at REQ_REQUEST_DIR. A file that cannot be read
-# stops the request.
+# req_files_args - the multipart form of a request with "files": every parameter as a text field
+# (--form-string, so a value starting with "@" or "<" is never read as a file) and every file as "-F
+# field=@path", quoted so a ";" or "," in the path is not read as an option of curl. A relative path starts
+# at REQ_REQUEST_DIR. A file that cannot be read stops the request.
 req_files_args() {
     local item name path
     for item in "${REQ_P_FORM[@]}"; do
@@ -218,7 +212,6 @@ req_curl_exec() {
     return "$status"
 }
 
-# req_execute <json> - builds and runs the request.
 req_execute() {
     req_build_curl_args "$1" || return 1
     req_curl_exec
@@ -240,14 +233,12 @@ req_timing_stages() {
         }'
 }
 
-# req_bar_char - full block in UTF-8 locales, "#" otherwise.
 req_bar_char() {
     if req_utf8; then printf '█'; else printf '#'; fi
 }
 
-# req_print_profile - one horizontal bar per stage, proportional to the total time,
-# and the total line. The settings time_stats (the stages) and time_stat_total (the
-# total line) turn each part off; with both off nothing is printed.
+# req_print_profile - one horizontal bar per stage, proportional to the total time, and the total line. The
+# settings time_stats (the stages) and time_stat_total (the total line) turn each part off.
 req_print_profile() {
     local stages label ms total char bar n show_stats show_total
     show_stats=$(req_config_get time_stats); show_total=$(req_config_get time_stat_total)
@@ -279,8 +270,8 @@ REQ_BODY_TEXT=""        # what req_body_format made of the last body
 REQ_RESULT=""           # ok after a response, failed when the last request sent got none, empty before any
 
 # req_body_format <content-type> <body> <color 0|1> - puts in REQ_BODY_TEXT what is shown for a body:
-# indented by jq (with its colors when the third argument is 1) when the Content-Type has "json" and jq
-# can read the body; the body as it came otherwise. Status 0 when jq formatted it, 1 when it is as it came.
+# indented by jq (with its colors when the third argument is 1) when the Content-Type has "json" and jq can
+# read the body, the body as it came otherwise. Status 0 when jq formatted it.
 req_body_format() {
     local flags=()
     REQ_BODY_TEXT=$2
@@ -291,7 +282,6 @@ req_body_format() {
     return 1
 }
 
-# req_print_body <content-type> <body> - indented JSON; text and HTML as received.
 req_print_body() {
     local color=0
     if [[ -z $2 ]]; then
@@ -303,8 +293,8 @@ req_print_body() {
     printf '%s\n' "$REQ_BODY_TEXT"
 }
 
-# req_result_check - succeeds when there is a response to view and a pager to view it in (PAGER, else
-# less). Otherwise it warns (the menu shows the warning in the bar) and fails.
+# req_result_check - succeeds when there is a response to view and a pager to view it in (PAGER, else less);
+# otherwise it warns and fails.
 req_result_check() {
     local cmd=less
     case ${REQ_RESULT-} in
@@ -320,14 +310,12 @@ req_result_check() {
     fi
 }
 
-# req_result_view - "v": the body of the last response in the pager, full screen (the caller checked with
-# req_result_check and hands the terminal over). JSON is indented by jq and anything else comes as it
-# came. PAGER, when it is set, runs through sh -c and gets the text without colors, so any pager shows it
-# right. Without it, less runs with LESS emptied (the user's options, such as -F and -X, would get in the
-# way of a full screen): -R only for JSON, to carry the colors of jq -C, never for a body that is not JSON,
-# so that a control character in what a server sent is shown and not obeyed. Ctrl-C belongs to the pager
-# while it runs: it must not close req (req_trap_int_exit gives the trap back). Status 0, or 1 with a
-# warning when the pager fails.
+# req_result_view - "v": the body of the last response in the pager, full screen (the caller ran
+# req_result_check and handed the terminal over). JSON is indented by jq, anything else shown as it came.
+# PAGER, when set, runs through sh -c on text without colors. Without it, less runs with LESS emptied (the
+# user's -F or -X would get in the way of a full screen), -R only for JSON, so a control character in a body
+# that is not JSON is shown and not obeyed. Ctrl-C belongs to the pager while it runs (req_trap_int_exit
+# gives the trap back). Status 0, or 1 with a warning when the pager fails.
 req_result_view() {
     local color=0 json=1 flags=() status
     [[ -z ${PAGER-} ]] && req_colors_enabled && color=1
@@ -349,14 +337,12 @@ req_result_view() {
     return 1
 }
 
-# req_verbose_on - succeeds when the verbose mode is on.
 req_verbose_on() {
     [[ $REQ_VERBOSE == 1 ]]
 }
 
-# req_verbose_request - with the verbose mode on, shows the data sent (set by
-# req_build_curl_args), one ">>" line per form field or per line of raw_data. Prints
-# nothing without data (a GET, or no parameters and no raw_data).
+# req_verbose_request - in verbose mode, one ">>" line per form field, file or line of raw_data sent.
+# Nothing without data.
 req_verbose_request() {
     local line
     req_verbose_on || return 0
@@ -372,8 +358,8 @@ req_verbose_request() {
     done
 }
 
-# req_verbose_response - with the verbose mode on, shows the status line and the headers
-# of the response (REQ_RESP_STATUSLINE, REQ_RESP_HEADERS), one "<<" line each.
+# req_verbose_response - in verbose mode, the status line and the headers of the response, one "<<" line
+# each.
 req_verbose_response() {
     local line
     req_verbose_on || return 0
@@ -384,13 +370,11 @@ req_verbose_response() {
     printf '\n'
 }
 
-# req_run_request <file> - validates, runs and shows: response, timing profile
-# and a line of "=" that separates the result from the menu redrawn after it. Before
-# sending, every ${key} in the url, headers, query, parameters and raw_data is replaced
-# by its value in the environment REQ_ENV (default "default"); a key without a value
-# stops the request with an error that says how to define it. With the "log" setting on,
-# the request is written to the project's log just before it is sent and the response (or the
-# failure) right after it arrives (log.sh).
+# req_run_request <file> - validates, replaces every ${key} by its value in the environment REQ_ENV (default
+# "default"; a key with no value stops the request with an error that says how to define it), runs and shows
+# the response, the timing profile and a line of "=" that separates the result from the menu redrawn after
+# it. With the "log" setting on, the request is logged just before it is sent and the response (or the
+# failure) right after it arrives.
 req_run_request() {
     local file=$1 json status env=${REQ_ENV:-default}
     req_request_check "$file" || return 1

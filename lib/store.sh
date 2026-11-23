@@ -4,21 +4,14 @@
 # Request format:
 #   {"name": "list-users", "method": "GET", "url": "https://api/users",
 #    "description": "...", "headers": {}, "query": {}, "parameters": {}, "raw_data": ...}
-#
-# - `name` is a slug (lowercase letters, digits and hyphens) identical to the
-#   file name; it is also the label shown in the menu.
-# - `name`, `method` and `url` are required; the other fields are optional.
-# - headers, query and parameters are objects with simple values (string,
-#   number or boolean).
-# - raw_data is the raw body: an object or list (JSON) or a string (any other text).
-# Any unknown field or wrong type invalidates the request; the file is never
-# changed, the error is only reported.
+# `name` (a slug, identical to the file name and the label in the menu), `method` and `url` are required; the other
+# fields are optional (all of them are in REQ_SCHEMA_JQ). headers, query and parameters hold simple values; raw_data is
+# the raw body: an object or list (JSON) or a string. An unknown field or a wrong type invalidates the request; the
+# file is never changed, the error is only reported.
 
 REQ_METHODS=(GET POST PUT PATCH DELETE)
 REQ_PROJECT_FILE=.req
 
-# Content checks (independent of the file name): prints one problem per line.
-# shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
 # jq definition shared by the schema, the display and the request preparation: the
 # "leaves" of a (possibly nested) query value, as [name, text] pairs. An object adds
 # "[key]" to the name and a list adds "[]": {"f":{"a":1},"t":["x","y"]} gives f[a]=1,
@@ -31,6 +24,7 @@ def leaves($p):
     else [$p, tostring] end;
 '
 
+# The content checks (independent of the file name): prints one problem per line.
 # shellcheck disable=SC2016  # a jq program: the $variables are jq's, not the shell's
 REQ_SCHEMA_JQ='
 def scalar: type == "string" or type == "number" or type == "boolean";
@@ -90,7 +84,6 @@ def check_map($lbl; $item):
          then "field \"raw_data\" must be an object, a list or a string" else empty end)
   end'
 
-# req_valid_method <method> - succeeds for a supported method (any case).
 req_valid_method() {
     local m
     for m in "${REQ_METHODS[@]}"; do
@@ -104,13 +97,12 @@ req_valid_name() {
     [[ $1 =~ ^[a-z0-9]+(-[a-z0-9]+)*$ ]]
 }
 
-# req_request_filename <name> <method> - prints "<name>.<lowercase method>.json".
 req_request_filename() {
     printf '%s.%s.json' "$1" "${2,,}"
 }
 
-# req_parse_filename <file> - prints "<name>\t<METHOD>", or fails if the file
-# does not follow <slug>.<method>.json with a supported method.
+# req_parse_filename <file> - prints "<name>\t<METHOD>", or fails when the file is not <slug>.<method>.json
+# with a supported method.
 req_parse_filename() {
     local base=${1##*/} stem method
     [[ $base == *.*.json ]] || return 1
@@ -150,10 +142,9 @@ REQ_F_RAW=""        # raw_data as text: indented JSON for an object or list, els
 REQ_F_RAW_SET=0     # 1 when the request has a non-empty raw_data
 
 # shellcheck disable=SC2034  # REQ_F_* are read by nav.sh
-# req_request_fields <file> - reads the fields of an already validated request in
-# a single jq call and fills REQ_F_NAME, REQ_F_METHOD, REQ_F_URL, REQ_F_DESC and
-# the arrays REQ_F_HEADERS ("key: value"), REQ_F_QUERY and REQ_F_PARAMS ("key=value"),
-# plus REQ_F_RAW and REQ_F_RAW_SET for raw_data.
+# req_request_fields <file> - reads an already validated request in one jq call into REQ_F_NAME,
+# REQ_F_METHOD, REQ_F_URL, REQ_F_DESC, the arrays REQ_F_HEADERS ("key: value"), REQ_F_QUERY and REQ_F_PARAMS
+# ("key=value"), and REQ_F_RAW plus REQ_F_RAW_SET for raw_data.
 req_request_fields() {
     local tag val
     REQ_F_NAME=""; REQ_F_METHOD=""; REQ_F_URL=""; REQ_F_DESC=""
@@ -173,9 +164,8 @@ req_request_fields() {
     done < <(jq -j "$REQ_FIELDS_JQ" "$1")
 }
 
-# req_request_check <file> - validates the JSON, fields, types and consistency
-# with the file name. Prints each problem to stderr; succeeds if there are none.
-# Invalid JSON is only reported, the file is never changed.
+# req_request_check <file> - validates the JSON, the fields, the types and the consistency with the file
+# name. Prints each problem to stderr and succeeds when there is none. The file is never changed.
 req_request_check() {
     local file=$1 abs out status line parsed stem fmethod jname jmethod
     local lines=() problems=()
@@ -218,7 +208,6 @@ req_request_check() {
     return 1
 }
 
-# req_request_template <name> <method> <url> - prints a new request as JSON.
 req_request_template() {
     jq -n --arg name "$1" --arg method "${2^^}" --arg url "$3" '{
         name: $name, method: $method, url: $url, description: "",
@@ -226,11 +215,9 @@ req_request_template() {
     }'
 }
 
-# req_request_write <directory> <name> <method> <url> [json]
-# Atomically writes the request as valid JSON and prints the created path.
-# [json] carries the optional fields (description, headers, query, parameters);
-# name, method and url come from the arguments and take precedence. If the
-# result fails validation, nothing is written.
+# req_request_write <directory> <name> <method> <url> [json] - writes the request atomically and prints its
+# path. [json] carries the optional fields; name, method and url come from the arguments and win. Nothing is
+# written when the result fails validation.
 req_request_write() {
     local dir=$1 name=$2 method=$3 url=$4 json=${5-} target tmp problems line
     req_valid_name "$name" || {
@@ -261,8 +248,8 @@ req_request_write() {
     mv "$tmp" "$target" && printf '%s\n' "$target"
 }
 
-# req_request_get <file> <field> - prints a field's value (raw text).
-# Missing fields become {} (headers, query, parameters) or empty (others).
+# req_request_get <file> <field> - a field's value as raw text; a missing headers, query or parameters is
+# {}, any other missing field is empty.
 req_request_get() {
     case $2 in
         headers|query|parameters) jq -c --arg f "$2" '.[$f] // {}' "$1" ;;
@@ -270,16 +257,14 @@ req_request_get() {
     esac
 }
 
-# req_project_find [directory] - prints the path of the .req in the directory (default: current).
 req_project_find() {
     local file=${1:-.}/$REQ_PROJECT_FILE
     [[ -f $file ]] || return 1
     printf '%s\n' "$file"
 }
 
-# req_project_init [directory] - creates the .req file of a new project, and nothing
-# else: a comment and "workspace=." (the working directory, relative to the .req; "." is
-# the folder itself). Fails if the directory does not exist or already has a .req.
+# req_project_init [directory] - writes a new .req: a comment and "workspace=.", nothing else. Fails when
+# the directory does not exist or already has a .req.
 req_project_init() {
     local dir=${1:-.} file
     file=$dir/$REQ_PROJECT_FILE

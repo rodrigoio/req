@@ -1,38 +1,31 @@
 #!/usr/bin/env bash
 # env.sh - environments and variables.
 #
-# A project keeps its variables in the central directory (see home.sh):
-#   $REQ_CONFIG_DIR/projects/<id>/vars        variables shared by every environment
-#   $REQ_CONFIG_DIR/projects/<id>/env/<env>   variables of one environment
-# Both are plain "key=value" files. The environment wins over the project variables.
-# An invalid file is only reported, never fixed or overwritten. The old format
-# ($REQ_CONFIG_DIR/env/<env>/secrets.json, T5.1) is not read and not migrated.
-# req_env_create makes the folder and the file of an environment; the user does not have to.
+# A project keeps its variables in the central directory (home.sh), as "key=value" files:
+#   $REQ_CONFIG_DIR/projects/<id>/vars        shared by every environment
+#   $REQ_CONFIG_DIR/projects/<id>/env/<env>   one environment's, which wins over vars
+# An invalid file is only reported, never fixed or overwritten. The old format ($REQ_CONFIG_DIR/env/<env>/secrets.json)
+# is not read and not migrated.
 
 declare -gA REQ_VARS=()      # variables of the last loaded environment (key -> value)
 
-# req_env_file <project id> <env> - path of the file of an environment.
 req_env_file() {
     req_project_state_dir "$1" "env/$2"
 }
 
-# req_vars_file <project id> - path of the project variables.
 req_vars_file() {
     req_project_state_dir "$1" vars
 }
 
-# req_env_legacy_file <env> - path of the T5.1 secrets file, which is no longer read.
 req_env_legacy_file() {
     printf '%s/env/%s/secrets.json' "$(req_config_dir)" "$1"
 }
 
 # shellcheck disable=SC2034  # REQ_VARS is read by the callers
-# req_vars_load <env> [project id] - loads the variables of the project (default: the
-# one in REQ_PROJECT_ID) and then those of the environment into REQ_VARS, so the
-# environment wins. A missing file is not an error. Without a project (its state could
-# not be saved) nothing is loaded. If a file is invalid, every problem is reported with
-# its absolute path, REQ_VARS stays empty and the status is 1. When the old
-# secrets.json of the environment exists, a warning says where the variables live now.
+# req_vars_load <env> [project id] - loads the project's variables (default: REQ_PROJECT_ID) and then the
+# environment's, which win, into REQ_VARS. A missing file is fine; without a project nothing is loaded. An
+# invalid file reports every problem with its absolute path, leaves REQ_VARS empty and returns 1. A leftover
+# secrets.json gets a warning that says where the variables live now.
 req_vars_load() {
     local env=$1 id=${2-$REQ_PROJECT_ID} file legacy line
     local -A loaded=()
@@ -65,9 +58,8 @@ req_vars_load() {
     return 0
 }
 
-# req_env_var_name <env> <key> - the name of the process variable that overrides a key in
-# an environment: both in capitals, hyphens of the environment turned into underscores
-# ("dev" and "url" give DEV_URL, "pre-prod" and "token" give PRE_PROD_TOKEN).
+# req_env_var_name <env> <key> - the process variable that overrides a key in an environment: both in
+# capitals, hyphens of the environment as underscores ("pre-prod" and "token" give PRE_PROD_TOKEN).
 req_env_var_name() {
     local env=${1^^} key=${2^^}
     printf '%s_%s' "${env//-/_}" "$key"
@@ -76,12 +68,10 @@ req_env_var_name() {
 REQ_RESOLVED=""        # the value found by req_resolve_key_var
 
 # shellcheck disable=SC2034  # REQ_RESOLVED is read by req_resolve_key and req_subst
-# req_resolve_key_var <env> <key> - the engine of req_resolve_key, with no subshell: puts
-# the value in REQ_RESOLVED and succeeds, or fails (REQ_RESOLVED empty) when nothing
-# defines the key. Precedence: the process variable <ENV>_<KEY> (req_env_var_name), then
-# the environment file, then the project variables; the last two come from REQ_VARS,
-# so req_vars_load <env> must have run for that environment. A set but empty process
-# variable counts as a value.
+# req_resolve_key_var <env> <key> - the engine of req_resolve_key, with no subshell: the value goes in
+# REQ_RESOLVED and the status is 0, or the status is 1 with it empty. Precedence: the process variable
+# <ENV>_<KEY>, then the environment file, then the project variables (REQ_VARS, so req_vars_load <env> must
+# have run). A set but empty process variable counts as a value.
 req_resolve_key_var() {
     local env=$1 key=$2 name
     REQ_RESOLVED=""
@@ -96,8 +86,6 @@ req_resolve_key_var() {
     fi
 }
 
-# req_resolve_key <env> <key> - prints the value of a key (see req_resolve_key_var) and
-# succeeds, or fails printing nothing.
 req_resolve_key() {
     req_resolve_key_var "$1" "$2" || return 1
     printf '%s\n' "$REQ_RESOLVED"
@@ -105,9 +93,8 @@ req_resolve_key() {
 
 REQ_SUBST_OUT=""        # the text produced by req_subst
 
-# req_subst_fail <env> <project id> <key>... - the error for keys that have no value: one
-# line listing them and, for each, the process variable and the files of the project's
-# environment that would define it (the files only when there is a project).
+# req_subst_fail <env> <project id> <key>... - the error for keys with no value: one line listing them and,
+# for each, the process variable and the project's environment files that would define it.
 req_subst_fail() {
     local env=$1 id=$2 key list="" where=""
     shift 2
@@ -124,13 +111,10 @@ req_subst_fail() {
 }
 
 # shellcheck disable=SC2034  # REQ_SUBST_OUT is read by the callers
-# req_subst <text> <env> [project id] - replaces every ${key} (a valid key name between
-# braces) in the text by its value in the environment (req_resolve_key_var) and puts the
-# result in REQ_SUBST_OUT, so trailing line breaks survive. A value is never expanded
-# again, and anything else that looks like ${...} is left as it is. When some keys have no
-# value nothing is replaced: the status is 1, REQ_SUBST_OUT is empty and one error lists
-# every missing key (once each, in order of appearance) and says how to define it: the
-# process variable and the files of the project's environment.
+# req_subst <text> <env> [project id] - replaces every ${key} by its value (req_resolve_key_var) into
+# REQ_SUBST_OUT, so trailing line breaks survive. A value is never expanded again and any other ${...} is
+# left alone. With some keys missing nothing is replaced: the status is 1, REQ_SUBST_OUT is empty and one
+# error lists each missing key once, in order, and how to define it.
 req_subst() {
     local rest=$1 env=$2 id=${3-$REQ_PROJECT_ID} out="" token key
     local -a missing=()
@@ -154,17 +138,14 @@ req_subst() {
     REQ_SUBST_OUT=$out$rest
 }
 
-# The executable fields of a request (the ones sent to curl), where req_subst_json works.
-# Names of properties are never substituted, only values.
+# The fields of a request that go to curl, where req_subst_json works; property names are never substituted.
 REQ_SUBST_FIELDS='["url","headers","query","parameters","raw_data","files"]'
 
 # shellcheck disable=SC2034  # REQ_SUBST_OUT is read by the callers
-# req_subst_json <request json> <env> [project id] - like req_subst, for a request: every
-# ${key} in the string values of url, headers, query, parameters, raw_data and files (also the
-# strings inside a raw_data that is native JSON) is replaced, and the result, still valid
-# JSON, goes to REQ_SUBST_OUT. Other fields (name, description) are left alone. The keys
-# are resolved first: when some are missing, nothing is replaced, the status is 1 and
-# req_subst_fail lists them all.
+# req_subst_json <request json> <env> [project id] - req_subst for a request: every ${key} in the string
+# values of REQ_SUBST_FIELDS (also inside a raw_data that is native JSON) is replaced and the result, still
+# valid JSON, goes to REQ_SUBST_OUT; other fields are left alone. The keys are resolved first: with any
+# missing, nothing is replaced, the status is 1 and req_subst_fail lists them all.
 req_subst_json() {
     local json=$1 env=$2 id=${3-$REQ_PROJECT_ID} key map='{}'
     local -a missing=()
@@ -193,9 +174,8 @@ req_subst_json() {
         with_entries(if (.key | IN($f[])) then .value |= fill else . end)' <<<"$json")
 }
 
-# req_env_list [project id] - prints the names of the project's environments (the files
-# in projects/<id>/env/ whose name is a slug), one per line, sorted. Nothing without a
-# project or a folder.
+# req_env_list [project id] - the project's environments (the slug-named files of projects/<id>/env/), one
+# per line, sorted. Nothing without a project or a folder.
 req_env_list() {
     local id=${1-$REQ_PROJECT_ID} dir f name
     [[ -n $id ]] || return 0
@@ -208,8 +188,8 @@ req_env_list() {
     done | LC_ALL=C sort
 }
 
-# req_env_exists <env> [project id] - succeeds when the environment can be used: it has a
-# file in the project, or it is "default", which needs none.
+# req_env_exists <env> [project id] - the environment can be used: it has a file in the project, or it is
+# "default", which needs none.
 req_env_exists() {
     local env=$1 id=${2-$REQ_PROJECT_ID}
     req_valid_name "$env" || return 1
@@ -217,9 +197,8 @@ req_env_exists() {
     [[ -n $id && -f $(req_env_file "$id" "$env") ]]
 }
 
-# req_env_ensure_dir [project id] - makes the folder of the project's environments
-# (projects/<id>/env), private (0700) like everything in the central directory. It is
-# not an error when it is already there. The error carries the absolute path.
+# req_env_ensure_dir [project id] - makes projects/<id>/env, private (0700); already there is fine. The
+# error carries the absolute path.
 req_env_ensure_dir() {
     local id=${1-$REQ_PROJECT_ID} dir
     [[ -n $id ]] || { req_err "no project is open, so there is no folder for its environments"; return 1; }
@@ -229,10 +208,9 @@ req_env_ensure_dir() {
     (umask 077; mkdir -p "$dir") 2>/dev/null || { req_err "cannot create $(req_abs_path "$dir")"; return 1; }
 }
 
-# req_env_create <env> [project id] - makes an environment: its file, empty and private (0600),
-# in the environment folder, which is made too when it is missing. An environment that already
-# exists is left exactly as it is (status 0): it is never overwritten, not even by a race
-# (noclobber). Something that is not a regular file in its place is an error.
+# req_env_create <env> [project id] - makes the environment's file, empty and private (0600), and its
+# folder. An existing environment is left exactly as it is (status 0), not even overwritten by a race
+# (noclobber); something that is not a regular file in its place is an error.
 req_env_create() {
     local env=$1 id=${2-$REQ_PROJECT_ID} file abs
     req_valid_name "$env" || {
@@ -247,12 +225,11 @@ req_env_create() {
 }
 
 # shellcheck disable=SC2016  # the ${key} and ${host} in the quotes are text for the user, not expansions
-# req_vars_template - prints the text a new project `vars` file starts with: comment lines that
-# show the format, which the loader ignores (req_kv_parse_line), so a new file has no variables.
-# It ends with a blank line: in vim a line opened right after a comment line (`o`) continues the comment,
-# so a variable typed there would be a comment without the user noticing.
-# Quoted strings and not a heredoc: the single-file build drops full-line comments, and a line
-# of a heredoc that starts with # would look like one to the test that checks the built file.
+# req_vars_template - the text a new `vars` file starts with: comment lines that show the format (the loader
+# ignores them, so a new file has no variables), ending with a blank line, because in vim `o` after a
+# comment line continues the comment. Quoted strings and not a heredoc: the single-file build drops
+# full-line comments, and a heredoc line that starts with # would look like one to the test of the built
+# file.
 req_vars_template() {
     printf '%s\n' \
         '# Variables of this project, shared by every environment (the file of an environment wins).' \
@@ -263,11 +240,9 @@ req_vars_template() {
         ''
 }
 
-# req_vars_create [project id] - makes the project's `vars` file when it is missing: private
-# (0600) and with the comment lines of req_vars_template. A file that exists is left exactly
-# as it is (status 0), even an empty one; it is never overwritten, not even by a race
-# (noclobber). Something that is not a regular file in its place is an error. The error
-# carries the absolute path.
+# req_vars_create [project id] - makes the project's `vars` file when missing: private (0600), with the
+# lines of req_vars_template. An existing file is left as it is, even empty (noclobber); something that is
+# not a regular file is an error. The error carries the absolute path.
 req_vars_create() {
     local id=${1-$REQ_PROJECT_ID} file abs
     [[ -n $id ]] || { req_err "no project is open, so there are no variables to make"; return 1; }
@@ -283,9 +258,8 @@ req_vars_create() {
 declare -ga REQ_ENV_CHOICES=()      # the environments to choose from (req_env_choices)
 
 # shellcheck disable=SC2034  # REQ_ENV_CHOICES is read by the environment menu
-# req_env_choices [project id] - fills REQ_ENV_CHOICES with the environments one can switch
-# to: "default" first, which is always there, whether it has a file or not, then those of
-# req_env_list in its order, with no repeat. Without a project only "default".
+# req_env_choices [project id] - fills REQ_ENV_CHOICES with the environments one can switch to: "default"
+# first, which is always there with or without a file, then req_env_list without repeats.
 req_env_choices() {
     local id=${1-$REQ_PROJECT_ID} name
     REQ_ENV_CHOICES=(default)

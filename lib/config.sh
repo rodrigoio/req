@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
-# config.sh - the global configuration ($REQ_CONFIG_DIR/config, default ~/.req/config).
-#
-# A "key=value" file (see home.sh for the format). The project can have its own file,
-# $REQ_CONFIG_DIR/projects/<id>/config, with the same keys: its values win over the global
-# ones (REQ_CONFIG_LOCAL lists the keys it set). The known keys, with their type,
-# default and description, are listed once, in REQ_CONFIG_KEYS below; every other part
-# of req (the :config command, the presentation code) goes through that table. Reading
-# never blocks the menu: an unknown key, a value of the wrong type or a malformed line
-# is reported as a warning with the absolute path and the line number, and ignored.
+# config.sh - the global configuration ($REQ_CONFIG_DIR/config, default ~/.req/config), a key=value file (format in
+# home.sh). The project can have its own, projects/<id>/config, whose values win (REQ_CONFIG_LOCAL lists the keys it
+# set). The known keys, their type, default and description live only in the tables below; the rest of req goes
+# through them. Reading never blocks the menu: an unknown key, a value of the wrong type or a malformed line is a
+# warning with the absolute path and the line number, and is ignored.
 
-# Known keys, in the order they are listed. Types: bool (yes or no), int (a whole number,
-# 0 or more).
+# Known keys, in listing order. Types: bool (yes or no), int (a whole number, 0 or more).
 REQ_CONFIG_KEYS=(time_stats time_stat_total restore_cursor log log_request_limit max_redirects)
 declare -gA REQ_CONFIG_TYPE=(
     [time_stats]=bool
@@ -28,7 +23,7 @@ declare -gA REQ_CONFIG_DEFAULT=(
     [log_request_limit]=500
     [max_redirects]=10
 )
-# shellcheck disable=SC2034  # read by :config (TR2.6)
+# shellcheck disable=SC2034  # read by :config
 declare -gA REQ_CONFIG_DESC=(
     [time_stats]="show the timing profile after a request runs"
     [time_stat_total]="show the total time line after a request runs"
@@ -41,24 +36,18 @@ declare -gA REQ_CONFIG_DESC=(
 declare -gA REQ_CONFIG=()       # values of the loaded files (key -> value)
 declare -gA REQ_CONFIG_LOCAL=() # keys whose value comes from the project's file
 
-# req_config_file - path of the global configuration file.
 req_config_file() {
     printf '%s/config' "$(req_config_dir)"
 }
 
-# req_config_local_file - path of the configuration file of the open project
-# (REQ_PROJECT_ID).
 req_config_local_file() {
     req_project_state_dir "$REQ_PROJECT_ID" config
 }
 
-# req_config_known <key> - succeeds when the key is in the table.
 req_config_known() {
     [[ -n ${REQ_CONFIG_TYPE[$1]+x} ]]
 }
 
-# req_config_valid <key> <value> - succeeds when the key is known and the value fits
-# its type.
 req_config_valid() {
     req_config_known "$1" || return 1
     case ${REQ_CONFIG_TYPE[$1]} in
@@ -76,8 +65,8 @@ req_config_expect() {
     esac
 }
 
-# req_config_load - fills REQ_CONFIG from the global file and then, when a project is
-# open (REQ_PROJECT_ID), from its own file, which wins.
+# req_config_load - fills REQ_CONFIG from the global file and then, with a project open, from its own file,
+# which wins.
 req_config_load() {
     local status=0
     req_config_load_file "$(req_config_file)" || status=1
@@ -85,18 +74,18 @@ req_config_load() {
     return "$status"
 }
 
-# req_config_load_local - layers the open project's file over what is loaded. Does nothing
-# without a project; a missing file is fine.
+# req_config_load_local - layers the open project's file over what is loaded; nothing without a project or
+# without the file.
 req_config_load_local() {
     REQ_CONFIG_LOCAL=()
     [[ -n $REQ_PROJECT_ID ]] || return 0
     req_config_load_file "$(req_config_local_file)" overlay
 }
 
-# req_config_load_file <file> [overlay] - fills REQ_CONFIG with the file's values (first
-# emptying it, unless "overlay" is given: then the values replace the loaded ones and the
-# keys are listed in REQ_CONFIG_LOCAL). A missing file is fine. Problems are warnings; the
-# status is 1 when there was any. The first line of a repeated key wins.
+# req_config_load_file <file> [overlay] - fills REQ_CONFIG with the file's values (emptied first, unless
+# "overlay": then the values replace the loaded ones and their keys go in REQ_CONFIG_LOCAL). A missing file
+# is fine; problems are warnings and the status is 1 when there was any. The first line of a repeated key
+# wins.
 req_config_load_file() {
     local file=$1 line n=0 abs status=0
     local -A seen=()
@@ -128,8 +117,7 @@ req_config_load_file() {
     return "$status"
 }
 
-# req_config_get <key> - prints the loaded value of a key, or its default when the file
-# does not set it. Fails for an unknown key.
+# req_config_get <key> - the loaded value, else the default; fails for an unknown key.
 req_config_get() {
     req_config_known "$1" || return 1
     printf '%s\n' "${REQ_CONFIG[$1]-${REQ_CONFIG_DEFAULT[$1]}}"
