@@ -2,8 +2,8 @@
 # env.sh - environments and variables.
 #
 # A project keeps its variables in the central directory (home.sh), as "key=value" files:
-#   $REQ_CONFIG_DIR/projects/<id>/vars        shared by every environment
-#   $REQ_CONFIG_DIR/projects/<id>/env/<env>   one environment's, which wins over vars
+#   $REQ_CONFIG_DIR/projects/<id>/vars              shared by every environment
+#   $REQ_CONFIG_DIR/projects/<id>/env/<env>/vars    one environment's, which wins over vars
 # An invalid file is only reported, never fixed or overwritten. The old format ($REQ_CONFIG_DIR/env/<env>/secrets.json)
 # is not read and not migrated.
 
@@ -14,7 +14,7 @@ req_env_dir() {
 }
 
 req_env_file() {
-    req_project_state_dir "$1" "env/$2"
+    req_project_state_dir "$1" "env/$2/vars"
 }
 
 req_vars_file() {
@@ -178,7 +178,7 @@ req_subst_json() {
         with_entries(if (.key | IN($f[])) then .value |= fill else . end)' <<<"$json")
 }
 
-# req_env_list [project id] - the project's environments (the slug-named files of projects/<id>/env/), one
+# req_env_list [project id] - the project's environments (the slug-named folders of projects/<id>/env/), one
 # per line, sorted. Nothing without a project or a folder.
 req_env_list() {
     local id=${1-$REQ_PROJECT_ID} dir f name
@@ -186,19 +186,19 @@ req_env_list() {
     dir=$(req_project_state_dir "$id" env)
     [[ -d $dir ]] || return 0
     for f in "$dir"/*; do
-        [[ -f $f ]] || continue
+        [[ -d $f ]] || continue
         name=${f##*/}
         req_valid_name "$name" && printf '%s\n' "$name"
     done | LC_ALL=C sort
 }
 
-# req_env_exists <env> [project id] - the environment can be used: it has a file in the project, or it is
+# req_env_exists <env> [project id] - the environment can be used: it has a folder in the project, or it is
 # "default", which needs none.
 req_env_exists() {
     local env=$1 id=${2-$REQ_PROJECT_ID}
     req_valid_name "$env" || return 1
     [[ $env == default ]] && return 0
-    [[ -n $id && -f $(req_env_file "$id" "$env") ]]
+    [[ -n $id && -d $(req_env_dir "$id" "$env") ]]
 }
 
 # req_env_ensure_dir [project id] - makes projects/<id>/env, private (0700); already there is fine. The
@@ -212,20 +212,22 @@ req_env_ensure_dir() {
     (umask 077; mkdir -p "$dir") 2>/dev/null || { req_err "cannot create $(req_abs_path "$dir")"; return 1; }
 }
 
-# req_env_create <env> [project id] - makes the environment's file, empty and private (0600), and its
-# folder. An existing environment is left exactly as it is (status 0), not even overwritten by a race
-# (noclobber); something that is not a regular file in its place is an error.
+# req_env_create <env> [project id] - makes the environment's folder, private (0700), with an empty private
+# (0600) `vars` file in it. An existing environment is left exactly as it is (status 0); something that is not a
+# folder in its place is an error.
 req_env_create() {
-    local env=$1 id=${2-$REQ_PROJECT_ID} file abs
+    local env=$1 id=${2-$REQ_PROJECT_ID} dir abs file
     req_valid_name "$env" || {
         req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
         return 1; }
     req_env_ensure_dir "$id" || return 1
+    dir=$(req_env_dir "$id" "$env")
+    abs=$(req_abs_path "$dir")
+    [[ -d $dir ]] && return 0
+    [[ ! -e $dir && ! -L $dir ]] || { req_err "$abs exists and is not a folder"; return 1; }
+    (umask 077; mkdir "$dir") 2>/dev/null || { [[ -d $dir ]] && return 0; req_err "cannot create $abs"; return 1; }
     file=$(req_env_file "$id" "$env")
-    abs=$(req_abs_path "$file")
-    [[ -f $file ]] && return 0
-    [[ ! -e $file && ! -L $file ]] || { req_err "$abs exists and is not a file"; return 1; }
-    (umask 077; set -o noclobber; : >"$file") 2>/dev/null || { req_err "cannot create $abs"; return 1; }
+    (umask 077; : >"$file") 2>/dev/null || { req_err "cannot create $(req_abs_path "$file")"; return 1; }
 }
 
 # shellcheck disable=SC2016  # the ${key} and ${host} in the quotes are text for the user, not expansions

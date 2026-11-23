@@ -136,7 +136,7 @@ lib/cmd.sh     command mode (:n :nd :ed :cp :rm :e :d :env :vars :config :h :q) 
 lib/wizard.sh  prompts to create, edit, duplicate, rename, copy and remove requests and directories
 lib/log.sh     the project's log of the requests sent (`req.log`) and `req log`, which follows it
 lib/config.sh  settings (global `~/.req/config` and the project's `config`) and their table of keys
-lib/env.sh     environments and variables (loading `vars` and `env/<env>`)
+lib/env.sh     environments and variables (loading `vars` and `env/<env>/vars`)
 lib/home.sh    the central directory in ~/.req: `key=value` files, projects and the current-project pointer
 tests/         plain bash tests (no dependencies; see Requirements)
 Makefile       test, lint, build, install and uninstall
@@ -216,7 +216,7 @@ Everything `req` keeps outside your repository lives in `~/.req` (or `REQ_CONFIG
     project               name= and path= of the project folder
     config                the project's settings (win over the global ones)
     vars                  variables shared by every environment
-    env/<env>             variables of one environment (dev, prod, ...)
+    env/<env>/vars        variables of one environment, in a folder of its own (dev, prod, ...)
     cursor                dir= and item= where the menu was left
     req.log               the log of requests and responses (only with log=yes)
 ```
@@ -253,16 +253,16 @@ Variables live in the central directory (`~/.req`, or `REQ_CONFIG_DIR`), one fol
 
 ```
 ~/.req/projects/<id>/vars          shared by every environment
-~/.req/projects/<id>/env/<env>     one file per environment (dev, prod, ...)
+~/.req/projects/<id>/env/<env>/vars     one folder per environment, with its file (dev, prod, ...)
 ```
 
 ```
-# ~/.req/projects/shop/env/dev
+# ~/.req/projects/shop/env/dev/vars
 url=https://api.example.com
 token=abc123
 ```
 
-`req` makes the `env/` folder and the `default` environment itself when it opens the project, and `:env` makes the others (see "Choosing the environment"); you only fill the files with `key=value` lines. `:vars` opens `vars` for you (see "Editing the variables"); the files of the environments you edit with your own editor. Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. The environment wins over the project variables. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
+`req` makes the `env/` folder and the `default` environment (its folder and an empty `vars` file) itself when it opens the project, and `:env` makes the others (see "Choosing the environment"); you only fill the files with `key=value` lines. An environment is a folder: a plain file in `env/` (the layout of earlier versions, `env/<env>`) is not an environment, is not listed and is not read; to migrate, rename it, make the folder `env/<env>/` and move the file into it as `vars`. `:vars` opens `vars` for you (see "Editing the variables"); the files of the environments you edit with your own editor. Keys use letters, digits and underscores, and cannot start with a digit. Blank lines and `#` comments are fine; the value is everything after the first `=`. The environment wins over the project variables. Environment names are slugs. A missing file is fine; an invalid one is reported with its path and line, and nothing is loaded. The old `~/.req/env/<env>/secrets.json` is no longer read (there is no migration): if it exists, `req` warns where the variables go now.
 
 ### Editing the variables
 
@@ -274,14 +274,14 @@ token=abc123
 4. when the editor closes, `req` loads the variables of the environment in use again and says how many there are (`environment: dev (3 variables)`). A bad line is reported at once, with the path and the line, and the file is never fixed for you;
 5. with no editor at all, `req` still makes the file and shows where it is and how to write the variables (`key=value`, one per line, for example `host=https://api.example.com`), so you can fill it any other way. Set `$EDITOR`, or install `vim` or `nano`, to use `:vars`.
 
-`:vars` takes no argument and does not edit the files of the environments (`env/<env>`); those are filled by hand, with the path `:env` shows when it makes one. It needs a project whose state `req` can keep in `~/.req`; without one it warns.
+`:vars` takes no argument and does not edit the files of the environments (`env/<env>/vars`); those are filled by hand, with the path `:env` shows when it makes one. It needs a project whose state `req` can keep in `~/.req`; without one it warns.
 
 ### Placeholders
 
 Write `${key}` in the `url`, in the values of `headers`, `query` and `parameters`, and in `raw_data` (also inside a JSON body) and `req` replaces it before sending. The value comes from, in this order:
 
 1. the process variable `<ENV>_<KEY>`, both in capitals, hyphens of the environment turned into underscores (`${url}` in `dev` is `DEV_URL`);
-2. the environment file `env/<env>`;
+2. the environment file `env/<env>/vars`;
 3. the project `vars`.
 
 The environment is the `REQ_ENV` variable, `default` when it is not set. If a key has no value nothing is sent: the error lists every missing key and says which variable or file would define it. `name` and `description`, and the names of properties, are never replaced. There is no way yet to write a literal `${key}` in a request (see TA.14 in `TASKS.md` (in the `req_context` repository)). The url shown when a request runs is the substituted one.
@@ -292,9 +292,9 @@ The environment is the `REQ_ENV` variable, `default` when it is not set. If a ke
 
 The environment of a session is chosen with `:env`:
 
-- `:env` alone opens a menu of the project's environments (the files in `env/`). The one in use is marked; up and down move (wrapping around), Enter switches to the one under the selection and Esc (or `q`) leaves things as they were, going back to where you were: the list or the details of a request.
+- `:env` alone opens a menu of the project's environments (the folders in `env/`). The one in use is marked; up and down move (wrapping around), Enter switches to the one under the selection and Esc (or `q`) leaves things as they were, going back to where you were: the list or the details of a request.
 - The last row of the menu, `+ new environment`, asks for a name (a slug; an empty name cancels), makes the environment and switches to it. The name of one that already exists just switches to it.
-- `:env <name>` switches straight to the environment, with no menu. If the project has no environment with that name, `req` asks `Create environment "<name>"? [Y/n]`: Enter makes the empty, private file `env/<name>` and says where it is, ready for your `key=value` lines; `n` changes nothing.
+- `:env <name>` switches straight to the environment, with no menu. If the project has no environment with that name, `req` asks `Create environment "<name>"? [Y/n]`: Enter makes the folder `env/<name>/` with an empty, private file `vars` and says where the file is, ready for your `key=value` lines; `n` changes nothing.
 - `default` is always offered and accepted, even if its file is gone.
 - Switching loads the whole set of variables of the environment at once, the project's `vars` plus the environment's file, and says how many came in (`environment: dev (3 variables)`). Each environment is its own set: nothing of the previous one stays. A file that is not valid is reported right then, with its path and line, instead of waiting for a request to run: the switch still happens, with nothing loaded, and the file is not touched.
 - The variables are read again every time a request runs, so a file you edit while `req` is open counts on the next run.

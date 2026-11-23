@@ -196,18 +196,19 @@ test_activate() {
     assert_eq "one" "$(req_current_get)" "and moves the pointer back"
     assert_eq "2" "$(find "$TMP/act-cfg/projects" -mindepth 1 -maxdepth 1 | wc -l)" "no duplicate project was created"
 
-    # The environments: the folder and "default" are made by the activation, nothing is asked of the user.
+    # The environments: env/ and "default" (a folder with a vars file) are made by the activation, nothing is asked of the user.
     local envdir=$TMP/act-cfg/projects/one/env
-    [[ -d $envdir && -f $envdir/default ]]; assert_eq "0" "$?" "the activation makes env/ and the default environment"
-    assert_eq "700" "$(stat -c %a "$envdir")" "the folder is private"
-    assert_eq "600" "$(stat -c %a "$envdir/default")" "and so is the file"
-    assert_eq "0" "$(wc -c <"$envdir/default" | tr -d ' ')" "which is empty"
-    printf 'token=kept-by-the-test\n' >"$envdir/default"
+    [[ -d $envdir/default && -f $envdir/default/vars ]]; assert_eq "0" "$?" "the activation makes env/ and the default environment with its vars file"
+    assert_eq "700" "$(stat -c %a "$envdir")" "env/ is private"
+    assert_eq "700" "$(stat -c %a "$envdir/default")" "so is the folder of the environment"
+    assert_eq "600" "$(stat -c %a "$envdir/default/vars")" "and the file"
+    assert_eq "0" "$(wc -c <"$envdir/default/vars" | tr -d ' ')" "which is empty"
+    printf 'token=kept-by-the-test\n' >"$envdir/default/vars"
     req_project_activate "$a"; assert_eq "0" "$?" "opening the project again works"
-    assert_eq "token=kept-by-the-test" "$(<"$envdir/default")" "and leaves the default environment as it is"
+    assert_eq "token=kept-by-the-test" "$(<"$envdir/default/vars")" "and leaves the default environment as it is"
     rm -rf "$envdir"
     req_project_activate "$a"
-    [[ -f $envdir/default ]]; assert_eq "0" "$?" "a project registered before this existed gets them when it is opened"
+    [[ -f $envdir/default/vars ]]; assert_eq "0" "$?" "a project registered before this existed gets them when it is opened"
     assert_eq "default" "$(req_env_list one)" "and it is the only environment listed"
 
     # An environment folder that cannot be written is a warning only: the project stays active.

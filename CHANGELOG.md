@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING:** Keep the variables of each environment in a folder of its own, `env/<name>/vars`, instead of the
+  file `env/<name>`. An old file is no longer read, listed as an environment or switched to. To migrate, rename
+  the file, make the folder `env/<name>/` in `~/.req/projects/<id>/` and move the file into it as `vars`.
+
 ## [0.6.0] - 2026-11-23
 
 ### Added
