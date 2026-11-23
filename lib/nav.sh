@@ -239,9 +239,9 @@ req_nav_build_list() {
     if (( n == 0 )); then
         REQ_SCREEN_LINES+=("  ${c_dim}(empty)${c_reset}")
     else
-        # the bars at the top (REQ_NOTIFICATION_LINES, notification.sh) take rows from the list, and so does the
-        # header; one row stays free for the command prompt, which is drawn under the list
-        visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+        # the logo and the bars at the top (REQ_NOTIFICATION_LINES, notification.sh) take rows from the list, and so
+        # does the header; one row stays free for the command prompt, which is drawn under the list
+        visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
         (( n < visible )) && visible=$n
         (( REQ_SEL < REQ_TOP )) && REQ_TOP=$REQ_SEL
         (( REQ_SEL >= REQ_TOP + visible )) && REQ_TOP=$(( REQ_SEL - visible + 1 ))
@@ -387,7 +387,7 @@ req_nav_build_env() {
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
     REQ_SCREEN_LINES+=("${c_bold}req${c_reset} environments${c_dim}$(req_trunc "  $REQ_NAV_PROJECT  (in use: $current)" $(( cols - 16 )))${c_reset}")
 
-    visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+    visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
     (( total < visible )) && visible=$total
     (( REQ_ENV_SEL < REQ_ENV_TOP )) && REQ_ENV_TOP=$REQ_ENV_SEL
     (( REQ_ENV_SEL >= REQ_ENV_TOP + visible )) && REQ_ENV_TOP=$(( REQ_ENV_SEL - visible + 1 ))
@@ -566,12 +566,20 @@ req_nav_overlay() {
     (( REQ_CMD_ACTIVE )) && REQ_SCREEN_LINES+=(":${REQ_CMD_BUF}${cursor}")
 }
 
+# req_nav_logo_overlay - puts the logo (REQ_LOGO, ui.sh) as the first row of the block, above the bars. It is one
+# more row of the block, so the windows of the list and of the :env menu leave a row for it.
+req_nav_logo_overlay() {
+    [[ -n $REQ_LOGO ]] || req_logo
+    REQ_SCREEN_LINES=("$REQ_LOGO" "${REQ_SCREEN_LINES[@]}")
+}
+
 # req_nav_run <.req file> - the main loop; ends at end of input or on :q, saving the menu position (also
 # when the process is signaled).
 # shellcheck disable=SC2034  # REQ_EXIT_HOOK is read by req_on_exit (core.sh)
 req_nav_run() {
     req_nav_init "$1" || return 1
     req_nav_restore_cursor
+    req_logo
     REQ_EXIT_HOOK=req_nav_save_cursor      # a signal ends the process: save the cursor then too
     [[ -t 1 ]] && printf '\033[?25l'
     [[ -t 0 ]] && stty -echo 2>/dev/null
@@ -592,6 +600,7 @@ req_nav_run() {
         fi
         req_nav_overlay
         req_notification_overlay        # the bars go above everything else
+        req_nav_logo_overlay            # and the logo above the bars
         req_screen_draw
         req_read_key || break
         req_nav_handle "$REQ_KEY"

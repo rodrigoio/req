@@ -448,11 +448,12 @@ test_notification_bars() {
     req_request_write "$p" ping GET "http://127.0.0.1:1/x" >/dev/null
 
     out=$(keys enter | req_nav_run "$p/.req" 2>&1)
-    assert_eq "req" "$(head -n 1 <<<"$out" | cut -c1-3)" "with no producer defined the screen starts at the header"
+    assert_eq "{>} Req" "$(head -n 1 <<<"$out")" "the first row of the screen is the logo"
+    assert_eq "req" "$(sed -n 2p <<<"$out" | cut -c1-3)" "with no producer defined the header comes right under it"
 
     REQ_NOTIFICATION_PRODUCERS=(nav_test_producer_bar)
     out=$(keys enter | req_nav_run "$p/.req" 2>&1)
-    assert_eq "$first" "$(head -n 1 <<<"$out")" "a bar is the first line of the screen"
+    assert_eq "$first" "$(sed -n 2p <<<"$out")" "a bar is the line under the logo"
     assert_contains "${first}${nl}req " "$out" "the list header comes right below it"
     assert_contains "${first}${nl}GET    ping" "$out" "the details screen has the bar too"
     assert_eq "2" "$(grep -c -F "$first" <<<"$out")" "one bar per draw: the list and the details"
@@ -464,7 +465,7 @@ test_notification_bars() {
     local warn="! a warning made up for the test"
     req_notification_warn "a warning made up for the test"
     out=$(keys enter | req_nav_run "$p/.req" 2>&1)
-    assert_eq "$warn" "$(head -n 1 <<<"$out")" "a warning waiting when the menu opens is the first line of the first draw"
+    assert_eq "$warn" "$(sed -n 2p <<<"$out")" "a warning waiting when the menu opens is the bar of the first draw, under the logo"
     assert_eq "1" "$(grep -c -F "$warn" <<<"$out")" "and it is printed once: the details drawn next have none"
     REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
 }
@@ -483,7 +484,7 @@ test_root_notice() {
     # shellcheck disable=SC2317  # called by the library, not from this file
     req_notification_is_root() { return 0; }
     out=$(keys enter | req_nav_run "$p/.req" 2>&1)
-    assert_eq "$notice" "$(head -n 1 <<<"$out")" "root sees it as the first line of the screen"
+    assert_eq "$notice" "$(sed -n 2p <<<"$out")" "root sees it right under the logo"
     assert_eq "2" "$(grep -c -F "$notice" <<<"$out")" "at every draw: the list and the details"
     out=$(keys : h enter | req_nav_run "$p/.req" 2>&1)
     assert_contains "${notice}"$'\n'"req help" "$out" "also on the help screen"
@@ -567,6 +568,67 @@ test_legacy_layout_in_the_bar() {
     assert_eq "0" "${#REQ_NOTIFICATION_LINES[@]}" "and it is shown once"
     rm -rf "$statedir/env" "$statedir/vars"; req_project_activate "$PROJ"; REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0
     REQ_PROJECT_ID=""
+}
+
+# logo_block - the block of the current view as the loop draws it: the view, the prompt, the bars, the logo.
+logo_block() { req_nav_overlay; req_notification_overlay; req_nav_logo_overlay; }
+
+test_logo_row() {
+    echo "nav: the logo is the first row of every screen"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local p out i
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_WARN_MORE=0; REQ_NOTIFICATION_LINES=()
+    req_nav_build_list; logo_block
+    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "the logo is the first row of the list"
+    assert_contains "req / (1/2)" "${REQ_SCREEN_LINES[1]}" "and the header comes right under it"
+
+    REQ_NOTIFICATION_WARN="a warning made up for the test"
+    req_notification_collect
+    req_nav_build_list; logo_block
+    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "a bar does not take the first row from it"
+    assert_eq "! a warning made up for the test" "${REQ_SCREEN_LINES[1]}" "the bar is under the logo"
+    assert_contains "req / (1/2)" "${REQ_SCREEN_LINES[2]}" "and the header under the bar"
+    REQ_NOTIFICATION_WARN=""; REQ_NOTIFICATION_LINES=()
+
+    req_nav_build_help; logo_block
+    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "the help starts with it"
+    assert_contains "req" "${REQ_SCREEN_LINES[1]}" "and its own first line follows"
+    req_nav_build_config; logo_block
+    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "so does the settings screen"
+    assert_contains "settings" "${REQ_SCREEN_LINES[1]}" "and its own first line follows"
+
+    # the environment menu needs the state of the project
+    req_project_activate "$PROJ" || return
+    unset REQ_ENV
+    type_keys : e n v enter
+    req_nav_build_env; logo_block
+    assert_eq "{>} Req" "${REQ_SCREEN_LINES[0]}" "so does the environment menu"
+    assert_contains "environments" "${REQ_SCREEN_LINES[1]}" "and its own first line follows"
+    req_nav_handle esc
+    REQ_PROJECT_ID=""
+
+    # the real loop: the list and the details of a request, each draw with the logo above
+    p=$TMP/logo-loop; rm -rf "$p"; mkdir -p "$p"; : >"$p/.req"
+    req_request_write "$p" ping GET "http://127.0.0.1:1/x" >/dev/null
+    out=$(keys enter | req_nav_run "$p/.req" 2>&1)
+    assert_eq "{>} Req" "$(head -n 1 <<<"$out")" "the loop draws it first"
+    assert_eq "2" "$(grep -c '^{>} Req$' <<<"$out")" "once for the list and once for the details, never twice in one block"
+    out=$(keys h | req_nav_run "$p/.req" 2>&1)
+    assert_eq "2" "$(grep -c '^{>} Req$' <<<"$out")" "and once for the help"
+
+    # the block still fits the terminal: the logo, two bars, the header, the list and the command prompt
+    p=$TMP/logo-many; rm -rf "$p"; mkdir -p "$p"; : >"$p/.req"
+    for i in $(seq -w 1 30); do : >"$p/r$i.get.json"; done
+    req_nav_init "$p/.req"
+    REQ_NOTIFICATION_LINES=("! one" "! two"); REQ_CMD_ACTIVE=1; REQ_CMD_BUF="n"
+    LINES=12 req_nav_build_list; logo_block
+    assert_eq "11" "${#REQ_SCREEN_LINES[@]}" "with many items and the command prompt open the block leaves one of the 12 rows spare"
+    REQ_CMD_ACTIVE=0
+    LINES=12 req_nav_build_list; logo_block
+    assert_eq "10" "${#REQ_SCREEN_LINES[@]}" "and two rows spare without the prompt"
+    REQ_CMD_BUF=""; REQ_NOTIFICATION_LINES=()
+    REQ_VIEW=list
 }
 
 test_status_in_the_bar() {
@@ -2053,5 +2115,6 @@ test_config_warnings_in_the_bar
 test_run_failures_in_the_bar
 test_legacy_layout_in_the_bar
 test_status_in_the_bar
+test_logo_row
 test_end_to_end
 test_summary
