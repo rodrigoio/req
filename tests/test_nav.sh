@@ -134,6 +134,55 @@ test_navigation() {
     assert_eq "" "$REQ_CUR_DIR" "repeated Esc reaches the root"
 }
 
+test_key_q() {
+    echo "nav: q goes back like Esc"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local i
+    req_nav_handle esc
+    assert_eq "0" "$REQ_QUIT" "Esc at the root does not quit"
+    req_nav_handle enter; req_nav_handle enter                  # api, then v2
+    assert_eq "$PROJ/api/v2" "$REQ_CUR_DIR" "two directories down"
+    req_nav_handle q
+    assert_eq "$PROJ/api" "$REQ_CUR_DIR" "q goes up one directory, like Esc"
+    assert_eq "0" "$REQ_QUIT" "without quitting"
+    req_nav_handle q
+    assert_eq "" "$REQ_CUR_DIR" "q again reaches the root"
+    assert_eq "0" "$REQ_QUIT" "still without quitting"
+    req_nav_handle q
+    assert_eq "1" "$REQ_QUIT" "q at the root quits, as :q does"
+    assert_eq "" "$REQ_CUR_DIR" "from where it was"
+
+    req_nav_init "$PROJ/.req"; req_nav_handle enter             # api (req_nav_init clears REQ_QUIT)
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "a request is open"
+    req_nav_handle q
+    assert_eq "list" "$REQ_VIEW" "q on the details goes back to the list"
+    assert_eq "$PROJ/api" "$REQ_CUR_DIR" "in the same directory"
+    assert_eq "0" "$REQ_QUIT" "without quitting"
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == broken ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "0" "$REQ_DETAIL_VALID" "an invalid request is open"
+    req_nav_handle q
+    assert_eq "list" "$REQ_VIEW" "q leaves its details too"
+
+    unset REQ_ENV
+    REQ_VIEW="env"; REQ_ENV_BACK=detail; REQ_ENV_CHOICES=(default dev); REQ_ENV_SEL=1
+    req_nav_handle q
+    assert_eq "detail" "$REQ_VIEW" "q leaves the environment menu for the view it came from"
+    assert_eq "" "${REQ_ENV:-}" "changing nothing"
+    REQ_VIEW=help; REQ_HELP_BACK=list
+    req_nav_handle q
+    assert_eq "list" "$REQ_VIEW" "q closes the help, as any key does"
+
+    type_keys : q
+    assert_eq "q" "$REQ_CMD_BUF" "in command mode q is a letter"
+    assert_eq "0" "$REQ_QUIT" "and does not quit"
+    req_nav_handle esc
+    assert_eq "0" "$REQ_CMD_ACTIVE" "Esc leaves command mode"
+}
+
 test_list_screen() {
     echo "nav: list screen"
     make_project
@@ -783,6 +832,7 @@ test_help() {
     assert_eq "help" "$REQ_VIEW" ":h opens the help"
     REQ_NAV_DIRTY=1; req_nav_build_help; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
     assert_contains "Enter  " "$out" "lists Enter"
+    assert_contains "Esc / q" "$out" "lists Esc and q together"
     assert_contains ":nd [name]" "$out" "lists a command with its argument"
     assert_contains "Press any key" "$out" "says how to go back"
     for row in ":n" ":nd" ":e" ":d" ":h" ":q"; do
@@ -1728,6 +1778,10 @@ test_cursor_saved() {
     assert_eq $'dir=\nitem=auth' "$(<"$f")" "the end of the input saves too (the root, second item)"
 
     rm -f "$f"
+    { keys down q up; } | req_nav_run "$PROJ/.req" >/dev/null 2>&1
+    assert_eq $'dir=\nitem=auth' "$(<"$f")" "q at the root ends the menu and saves the cursor (the key after it is not read)"
+
+    rm -f "$f"
     ( req_setup_traps; req_nav_init "$PROJ/.req"; REQ_EXIT_HOOK=req_nav_save_cursor; REQ_SEL=1
       kill -TERM "$BASHPID" ) 2>/dev/null
     assert_eq $'dir=\nitem=auth' "$(<"$f")" "a signal saves it as well"
@@ -1853,6 +1907,7 @@ test_start_init() {
 
 test_keys
 test_navigation
+test_key_q
 test_list_screen
 test_selection_highlight
 test_detail_screen

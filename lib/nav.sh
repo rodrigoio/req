@@ -4,9 +4,9 @@
 # The menu is redrawn in place (the cursor moves up and erases the previous block) without clearing the screen: a
 # request's result stays visible and the menu is redrawn right below it; the screen is cleared only when the menu starts
 # and on Ctrl-L. Outside a terminal nothing is erased (tests).
-# Keys: up/down move the selection, Enter opens/runs, Esc goes back (nothing at the root), Ctrl-L clears the screen, v
-# shows the last response in a pager, ":" enters command mode (cmd.sh). The environment menu (:env) is a view of its
-# own with its own keys: up/down, Enter, Esc.
+# Keys: up/down move the selection, Enter opens/runs, Esc and q go back (at the root Esc does nothing and q quits),
+# Ctrl-L clears the screen, v shows the last response in a pager, ":" enters command mode (cmd.sh). The environment
+# menu (:env) is a view of its own with its own keys: up/down, Enter, Esc and q.
 
 REQ_RAW_MAX_LINES=15    # lines of raw_data shown on the details screen
 REQ_PROBLEMS_MAX_LINES=10   # problems listed on the details of an invalid request
@@ -415,14 +415,14 @@ req_nav_build_env() {
 }
 
 # req_nav_env_key <key> - a key on the environment menu: up and down move the selection (wrapping around,
-# the last row being "+ new environment"), Enter acts on the row (req_nav_env_enter), Esc goes back to the
+# the last row being "+ new environment"), Enter acts on the row (req_nav_env_enter), Esc and q go back to the
 # view the menu was opened from changing nothing.
 req_nav_env_key() {
     local total=$(( ${#REQ_ENV_CHOICES[@]} + 1 ))
     case $1 in
         up)    REQ_ENV_SEL=$(( (REQ_ENV_SEL + total - 1) % total )) ;;
         down)  REQ_ENV_SEL=$(( (REQ_ENV_SEL + 1) % total )) ;;
-        esc)   REQ_VIEW=$REQ_ENV_BACK ;;
+        esc|q) REQ_VIEW=$REQ_ENV_BACK ;;
         enter) req_nav_env_enter ;;
     esac
     return 0
@@ -543,7 +543,7 @@ req_nav_handle() {
     if [[ $REQ_VIEW == detail ]]; then
         case $key in
             enter) (( REQ_DETAIL_VALID )) && req_nav_execute ;;
-            esc)   REQ_VIEW=list ;;
+            esc|q) REQ_VIEW=list ;;
             v)     req_nav_view_result ;;
         esac
     else
@@ -552,6 +552,7 @@ req_nav_handle() {
             down)  (( n > 0 )) && REQ_SEL=$(( (REQ_SEL + 1) % n )) ;;
             enter) (( n > 0 )) && req_nav_open ;;
             esc)   req_nav_back ;;
+            q)     if (( ${#REQ_STACK_DIR[@]} > 0 )); then req_nav_back; else REQ_QUIT=1; fi ;;
             v)     req_nav_view_result ;;
         esac
     fi
