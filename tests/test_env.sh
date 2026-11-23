@@ -15,14 +15,15 @@ export REQ_CONFIG_DIR=$TMP/cfg
 
 ID=shop
 # envfile <env> <text> / varsfile <text> - write the files of the project "shop".
-envfile() { mkdir -p "$REQ_CONFIG_DIR/projects/$ID/env"; printf '%s\n' "$2" >"$REQ_CONFIG_DIR/projects/$ID/env/$1"; }
+envfile() { mkdir -p "$REQ_CONFIG_DIR/projects/$ID/env/$1"; printf '%s\n' "$2" >"$REQ_CONFIG_DIR/projects/$ID/env/$1/vars"; }
 varsfile() { mkdir -p "$REQ_CONFIG_DIR/projects/$ID"; printf '%s\n' "$1" >"$REQ_CONFIG_DIR/projects/$ID/vars"; }
 
 test_paths() {
     echo "env: paths"
     assert_eq "$TMP/cfg" "$(req_config_dir)" "REQ_CONFIG_DIR overrides the config directory"
     assert_eq "$HOME/.req" "$(REQ_CONFIG_DIR='' req_config_dir)" "the default is ~/.req"
-    assert_eq "$TMP/cfg/projects/shop/env/dev" "$(req_env_file shop dev)" "file of an environment"
+    assert_eq "$TMP/cfg/projects/shop/env/dev" "$(req_env_dir shop dev)" "folder of an environment"
+    assert_eq "$TMP/cfg/projects/shop/env/dev/vars" "$(req_env_file shop dev)" "file of an environment, inside its folder"
     assert_eq "$TMP/cfg/projects/shop/vars" "$(req_vars_file shop)" "project variables"
 }
 
@@ -67,7 +68,7 @@ test_invalid() {
     echo "env: invalid files"
     local out f before
     envfile bad $'ok=1\nthis is not valid\n1st=2'
-    f=$REQ_CONFIG_DIR/projects/$ID/env/bad; before=$(<"$f")
+    f=$REQ_CONFIG_DIR/projects/$ID/env/bad/vars; before=$(<"$f")
     out=$(req_vars_load bad $ID 2>&1); assert_eq "1" "$?" "an invalid line fails"
     assert_contains "$f:2: expected key=value" "$out" "the error names the absolute path and the line"
     assert_contains "$f:3: expected key=value" "$out" "every problem is reported"
@@ -93,7 +94,7 @@ test_legacy() {
     printf '{"token":"old"}\n' >"$REQ_CONFIG_DIR/env/dev/secrets.json"
     out=$(req_vars_load dev $ID 2>&1); assert_eq "0" "$?" "the old file is not an error"
     assert_contains "secrets.json is no longer read" "$out" "a warning says so"
-    assert_contains "$REQ_CONFIG_DIR/projects/$ID/env/dev" "$out" "and points to the new location"
+    assert_contains "$REQ_CONFIG_DIR/projects/$ID/env/dev/vars" "$out" "and points to the new location"
     req_vars_load dev $ID 2>/dev/null
     assert_eq "abc" "${REQ_VARS[token]}" "its content is ignored"
     out=$(req_vars_load prod $ID 2>&1); assert_not_contains "no longer read" "$out" "other environments are not warned about"
@@ -166,7 +167,7 @@ test_subst() {
     req_subst 'a ${missing} b ${url} ${other} c ${missing}' dev $ID 2>/dev/null
     assert_eq "" "$REQ_SUBST_OUT" "and nothing is produced"
     assert_contains 'req: error: no value for missing, other in environment "dev"' "$err" "the error lists each missing key once, in order"
-    assert_contains "missing: set the variable DEV_MISSING, or add missing=... to $REQ_CONFIG_DIR/projects/$ID/env/dev" "$err" "and says what to define and where"
+    assert_contains "missing: set the variable DEV_MISSING, or add missing=... to $REQ_CONFIG_DIR/projects/$ID/env/dev/vars" "$err" "and says what to define and where"
     assert_contains "(or $REQ_CONFIG_DIR/projects/$ID/vars for every environment)" "$err" "including the variables of the project"
     assert_contains "other: set the variable DEV_OTHER" "$err" "for every missing key"
     err=$(req_subst '${x}' pre-prod $ID 2>&1); assert_contains "PRE_PROD_X" "$err" "the variable name follows the environment"
@@ -174,7 +175,7 @@ test_subst() {
     assert_contains "set the variable DEV_X" "$err" "without a project only the variable is suggested"
     [[ $err != *"add x=..."* ]]; assert_eq "0" "$?" "and no file"
     REQ_PROJECT_ID=$ID; err=$(req_subst '${x}' dev 2>&1)
-    assert_contains "env/dev" "$err" "the project defaults to REQ_PROJECT_ID"
+    assert_contains "env/dev/vars" "$err" "the project defaults to REQ_PROJECT_ID"
     REQ_PROJECT_ID=""
 }
 
@@ -209,25 +210,24 @@ test_subst_json() {
     req_subst_json '{"url":"${a}/${b}","headers":{"X":"${a}"},"raw_data":{"k":["${c}"]}}' dev $ID 2>/dev/null
     assert_eq "" "$REQ_SUBST_OUT" "with nothing produced"
     assert_contains 'no value for a, b, c in environment "dev"' "$err" "every missing key of the whole request is listed once"
-    assert_contains "c: set the variable DEV_C, or add c=... to $REQ_CONFIG_DIR/projects/$ID/env/dev" "$err" "with how to define it"
+    assert_contains "c: set the variable DEV_C, or add c=... to $REQ_CONFIG_DIR/projects/$ID/env/dev/vars" "$err" "with how to define it"
 }
 
 test_env_list() {
     echo "env: the environments of a project"
     mkdir -p "$REQ_CONFIG_DIR/projects/lister/env"
-    assert_eq "" "$(req_env_list lister)" "a project without environment files lists none"
+    assert_eq "" "$(req_env_list lister)" "a project without environments lists none"
     assert_eq "" "$(req_env_list nothing-here)" "so does a project with no folder"
     assert_eq "" "$(req_env_list "")" "and no project at all"
-    printf 'a=1\n' >"$REQ_CONFIG_DIR/projects/lister/env/prod"
-    printf 'a=1\n' >"$REQ_CONFIG_DIR/projects/lister/env/dev"
-    printf 'a=1\n' >"$REQ_CONFIG_DIR/projects/lister/env/Bad_Name"
-    mkdir "$REQ_CONFIG_DIR/projects/lister/env/folder"
-    assert_eq $'dev\nprod' "$(req_env_list lister)" "files with a slug name are listed, sorted; other names and folders are not"
+    mkdir "$REQ_CONFIG_DIR/projects/lister/env/prod" "$REQ_CONFIG_DIR/projects/lister/env/dev" "$REQ_CONFIG_DIR/projects/lister/env/Bad_Name"
+    : >"$REQ_CONFIG_DIR/projects/lister/env/file-of-the-old-layout-test"
+    assert_eq $'dev\nprod' "$(req_env_list lister)" "folders with a slug name are listed, sorted; other names and plain files are not"
     REQ_PROJECT_ID=lister
     assert_eq $'dev\nprod' "$(req_env_list)" "the project defaults to REQ_PROJECT_ID"
-    req_env_exists dev; assert_eq "0" "$?" "an environment with a file exists"
-    req_env_exists staging; assert_eq "1" "$?" "one without a file does not"
-    req_env_exists default; assert_eq "0" "$?" "default needs no file"
+    req_env_exists dev; assert_eq "0" "$?" "an environment with a folder exists"
+    req_env_exists staging; assert_eq "1" "$?" "one without a folder does not"
+    req_env_exists file-of-the-old-layout-test; assert_eq "1" "$?" "a plain file of the old layout is not an environment"
+    req_env_exists default; assert_eq "0" "$?" "default needs no folder"
     req_env_exists "../x"; assert_eq "1" "$?" "a name that is not a slug never exists"
     req_env_exists dev ""; assert_eq "1" "$?" "without a project only default exists"
     req_env_exists default ""; assert_eq "0" "$?" "which is always there"
@@ -236,7 +236,7 @@ test_env_list() {
 
 test_env_create() {
     echo "env: creating environments"
-    local cfg=$REQ_CONFIG_DIR out dir f empty_loads=0
+    local cfg=$REQ_CONFIG_DIR out dir f empty_loads=0 env_dir
     mkdir -p "$cfg/projects/creator"
     dir=$cfg/projects/creator/env
 
@@ -250,24 +250,30 @@ test_env_create() {
     assert_contains 'invalid project id: "Bad_Id"' "$out" "and named"
 
     rmdir "$dir"
+    env_dir=$dir/staging-test-env
     req_env_create staging-test-env creator; assert_eq "0" "$?" "an environment is created"
-    [[ -d $dir && -f $dir/staging-test-env ]]; assert_eq "0" "$?" "the folder is made with it when it is missing"
-    assert_eq "600" "$(stat -c %a "$dir/staging-test-env")" "the file is private"
-    assert_eq "700" "$(stat -c %a "$dir")" "and so is the folder"
-    assert_eq "0" "$(wc -c <"$dir/staging-test-env" | tr -d ' ')" "the file is empty"
+    [[ -d $env_dir && -f $env_dir/vars ]]; assert_eq "0" "$?" "as a folder with a vars file, and env/ is made with it when missing"
+    assert_eq "700" "$(stat -c %a "$env_dir")" "the folder of the environment is private"
+    assert_eq "600" "$(stat -c %a "$env_dir/vars")" "the file is private"
+    assert_eq "700" "$(stat -c %a "$dir")" "and so is env/"
+    assert_eq "0" "$(wc -c <"$env_dir/vars" | tr -d ' ')" "the file is empty"
     req_vars_load staging-test-env creator && empty_loads=1
-    assert_eq "1" "$empty_loads" "an empty environment file is valid for the loader"
+    assert_eq "1" "$empty_loads" "an empty vars file is valid for the loader"
 
-    printf 'token=kept\n' >"$dir/staging-test-env"
+    printf 'token=kept\n' >"$env_dir/vars"
     req_env_create staging-test-env creator; assert_eq "0" "$?" "creating one that exists is not an error"
-    assert_eq "token=kept" "$(<"$dir/staging-test-env")" "and leaves its content alone"
-    chmod 640 "$dir/staging-test-env"
+    assert_eq "token=kept" "$(<"$env_dir/vars")" "and leaves its content alone"
+    chmod 640 "$env_dir/vars"; chmod 750 "$env_dir"
     req_env_create staging-test-env creator
-    assert_eq "640" "$(stat -c %a "$dir/staging-test-env")" "and its mode"
+    assert_eq "640" "$(stat -c %a "$env_dir/vars")" "and the mode of its file"
+    assert_eq "750" "$(stat -c %a "$env_dir")" "and of its folder"
+    chmod 700 "$env_dir"; rm -f "$env_dir/vars"
+    req_env_create staging-test-env creator; assert_eq "0" "$?" "a folder without its vars file is an environment that exists"
+    [[ ! -e $env_dir/vars ]]; assert_eq "0" "$?" "and the missing file is not made behind the user's back"
 
     REQ_PROJECT_ID=creator
     req_env_create default-by-id-test; assert_eq "0" "$?" "the project defaults to REQ_PROJECT_ID"
-    [[ -f $dir/default-by-id-test ]]; assert_eq "0" "$?" "and the file is made in it"
+    [[ -f $dir/default-by-id-test/vars ]]; assert_eq "0" "$?" "and the environment is made in it"
     REQ_PROJECT_ID=""
 
     out=$(req_env_create "../invalid-name-test" creator 2>&1); assert_eq "1" "$?" "a name that is not a slug is refused"
@@ -275,9 +281,10 @@ test_env_create() {
     [[ ! -e $cfg/projects/creator/invalid-name-test ]]; assert_eq "0" "$?" "and nothing is written outside the folder"
     out=$(req_env_create staging-test-env 2>&1); assert_eq "1" "$?" "without a project nothing is created"
 
-    mkdir "$dir/folder-in-the-way-test"
-    out=$(req_env_create folder-in-the-way-test creator 2>&1); assert_eq "1" "$?" "a folder where the file goes is refused"
-    assert_contains "$dir/folder-in-the-way-test exists and is not a file" "$out" "with the absolute path"
+    printf 'token=from-the-old-layout\n' >"$dir/plain-file-in-the-way-test"
+    out=$(req_env_create plain-file-in-the-way-test creator 2>&1); assert_eq "1" "$?" "a plain file where the folder goes (the old layout) is refused"
+    assert_contains "$dir/plain-file-in-the-way-test exists and is not a folder" "$out" "with the absolute path"
+    assert_eq "token=from-the-old-layout" "$(<"$dir/plain-file-in-the-way-test")" "and the file is left as it was"
     ln -s "$TMP/nowhere" "$dir/dangling-link-test"
     out=$(req_env_create dangling-link-test creator 2>&1); assert_eq "1" "$?" "so is a link, even one that points nowhere"
     [[ ! -e $TMP/nowhere ]]; assert_eq "0" "$?" "and the target of the link is not created"
@@ -291,8 +298,9 @@ test_env_create() {
         chmod 500 "$dir"
         out=$(req_env_create read-only-folder-test creator 2>&1); f=$?
         chmod 700 "$dir"
-        assert_eq "1" "$f" "an environment folder that cannot be written fails"
-        assert_contains "cannot create $dir/read-only-folder-test" "$out" "naming the file"
+        assert_eq "1" "$f" "an env/ folder that cannot be written fails"
+        assert_contains "cannot create $dir/read-only-folder-test" "$out" "naming the environment's folder"
+        [[ ! -e $dir/read-only-folder-test ]]; assert_eq "0" "$?" "and leaves nothing behind"
     fi
 }
 
@@ -366,12 +374,12 @@ test_env_choices() {
     assert_eq "1" "${#REQ_ENV_CHOICES[@]}" "which is always offered, with or without a file"
     req_env_choices ""; assert_eq "default" "${REQ_ENV_CHOICES[*]}" "so does no project at all"
 
-    mkdir -p "$dir"; : >"$dir/prod"; : >"$dir/dev"; : >"$dir/Bad_Name"
+    mkdir -p "$dir/prod" "$dir/dev" "$dir/Bad_Name"; : >"$dir/a-plain-file-test"
     req_env_choices chooser
-    assert_eq "default dev prod" "${REQ_ENV_CHOICES[*]}" "default comes first, then the files in order; a name that is not a slug is left out"
-    : >"$dir/default"; : >"$dir/aaa"
+    assert_eq "default dev prod" "${REQ_ENV_CHOICES[*]}" "default comes first, then the folders in order; a name that is not a slug, and a plain file, are left out"
+    mkdir "$dir/default" "$dir/aaa"
     req_env_choices chooser
-    assert_eq "default aaa dev prod" "${REQ_ENV_CHOICES[*]}" "default is first and listed once even with a file of its own"
+    assert_eq "default aaa dev prod" "${REQ_ENV_CHOICES[*]}" "default is first and listed once even with a folder of its own"
     REQ_PROJECT_ID=chooser; req_env_choices
     assert_eq "default aaa dev prod" "${REQ_ENV_CHOICES[*]}" "the project defaults to REQ_PROJECT_ID"
     REQ_PROJECT_ID=""

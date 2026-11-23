@@ -55,7 +55,7 @@ test_flow() {
     jq '.url="${base}/echo" | .headers={"X-Test":"${tok}"} | .raw_data={"user":"${tok}"}' \
         "$work/login.post.json" >"$work/login.tmp" && mv "$work/login.tmp" "$work/login.post.json"
     printf 'base=http://127.0.0.1:%s\ntok=from-vars\n' "$port" >"$state/vars"
-    mkdir -p "$state/env"; printf 'tok=from-dev\n' >"$state/env/dev"
+    mkdir -p "$state/env/dev"; printf 'tok=from-dev\n' >"$state/env/dev/vars"
 
     # 4. run from the menu in the default environment: variables from vars
     out=$(menu "$ENTER" "$ENTER" "$(cmd q)")
@@ -248,13 +248,14 @@ test_environments() {
     printf '{"name":"a-ping","method":"GET","url":"http://127.0.0.1:%s/echo","headers":{"X-Test":"${tag}"}}\n' "$port" >a-ping.get.json
     printf '{"name":"b-extra","method":"GET","url":"http://127.0.0.1:%s/echo/${extra}"}\n' "$port" >b-extra.get.json
 
-    # 1. nothing is made by hand: the folder and default exist right after req init, private
-    [[ -d $envdir && -f $envdir/default ]]; assert_eq "0" "$?" "req init made the env folder and the default environment"
-    assert_eq "700" "$(stat -c %a "$envdir")" "the folder is private"
-    assert_eq "600" "$(stat -c %a "$envdir/default")" "and so is the file"
+    # 1. nothing is made by hand: env/ and default (a folder with a vars file) exist right after req init, private
+    [[ -d $envdir/default && -f $envdir/default/vars ]]; assert_eq "0" "$?" "req init made the env folder and the default environment"
+    assert_eq "700" "$(stat -c %a "$envdir")" "env/ is private"
+    assert_eq "700" "$(stat -c %a "$envdir/default")" "so is the folder of the environment"
+    assert_eq "600" "$(stat -c %a "$envdir/default/vars")" "and its file"
     rm -rf "$envdir"
     menu "$(cmd q)" >/dev/null
-    [[ -f $envdir/default ]]; assert_eq "0" "$?" "a project from before this gets them when its menu opens"
+    [[ -f $envdir/default/vars ]]; assert_eq "0" "$?" "a project from before this gets them when its menu opens"
 
     # 2. :env opens the menu: default in use, and the last row creates a new one
     out=$(menu "$(cmd env)" "$esc" "$(cmd q)")
@@ -263,17 +264,17 @@ test_environments() {
     assert_contains "+ new environment" "$out" "and + new environment as the last row"
     assert_not_contains "Enter choose" "$out" "and no hint line about its keys"
 
-    # 3. the last row creates an environment: the name is asked, the file made, the variables loaded
+    # 3. the last row creates an environment: the name is asked, the folder and its file made, the variables loaded
     out=$(menu "$(cmd env)" "$up" "$ENTER" $'staging\r' "$(cmd q)")
     assert_contains "Environment name (a slug, e.g. staging)" "$out" "up from the top is + new environment, and Enter asks for the name"
-    assert_contains "environment: staging, created in $envdir/staging (no variables)" "$out" "the environment is created and says where"
+    assert_contains "environment: staging, created in $envdir/staging/vars (no variables)" "$out" "the environment is created and says where its file is"
     assert_contains "envs @ staging" "$out" "and the header shows it"
-    [[ -f $envdir/staging ]]; assert_eq "0" "$?" "the file is there"
-    assert_eq "600" "$(stat -c %a "$envdir/staging")" "private"
+    [[ -f $envdir/staging/vars ]]; assert_eq "0" "$?" "the file is there, in the folder of the environment"
+    assert_eq "600" "$(stat -c %a "$envdir/staging/vars")" "private"
 
     # 4. each environment is its own set of variables (the files are filled as a user would)
-    printf 'tag=from-staging\nextra=staging-extra\n' >"$envdir/staging"
-    printf 'tag=from-dev\n' >"$envdir/dev"
+    printf 'tag=from-staging\nextra=staging-extra\n' >"$envdir/staging/vars"
+    mkdir -p "$envdir/dev"; printf 'tag=from-dev\n' >"$envdir/dev/vars"
     out=$(menu "$(cmd env staging)" "$ENTER" "$ENTER" "$esc" "$down" "$ENTER" "$ENTER" "$(cmd q)")
     assert_contains "environment: staging (2 variables)" "$out" ":env <name> switches straight to an environment and loads its variables"
     assert_contains '"x_test": "from-staging"' "$out" "a request uses the values of staging"
@@ -295,17 +296,17 @@ test_environments() {
     out=$(menu "$(cmd env prd)" $'n\r' "$(cmd q)")
     assert_contains 'Create environment "prd"? [Y/n]' "$out" ":env <name> asks before it creates one"
     assert_contains 'environment "prd" not created (in use: default)' "$out" "n says so and changes nothing"
-    [[ ! -e $envdir/prd ]]; assert_eq "0" "$?" "no file is made"
+    [[ ! -e $envdir/prd ]]; assert_eq "0" "$?" "nothing is made"
     out=$(menu "$(cmd env prd)" "$ENTER" "$(cmd q)")
-    assert_contains "environment: prd, created in $envdir/prd" "$out" "Enter creates it and switches"
-    [[ -f $envdir/prd ]]; assert_eq "0" "$?" "with its file"
+    assert_contains "environment: prd, created in $envdir/prd/vars" "$out" "Enter creates it and switches"
+    [[ -f $envdir/prd/vars ]]; assert_eq "0" "$?" "with its file"
 
     # 7. a broken file is reported when switching to it, and left alone
-    printf 'url=http://x\nthis line is not a pair\n' >"$envdir/broken-test-env"
+    mkdir -p "$envdir/broken-test-env"; printf 'url=http://x\nthis line is not a pair\n' >"$envdir/broken-test-env/vars"
     out=$(menu "$(cmd env broken-test-env)" "$(cmd q)")
-    assert_contains "$envdir/broken-test-env:2: expected key=value" "$out" "the warning has the path and the line"
+    assert_contains "$envdir/broken-test-env/vars:2: expected key=value" "$out" "the warning has the path and the line"
     assert_contains "environment: broken-test-env (variables not loaded)" "$out" "the switch stands, with nothing loaded"
-    assert_eq $'url=http://x\nthis line is not a pair' "$(<"$envdir/broken-test-env")" "and the file is not touched"
+    assert_eq $'url=http://x\nthis line is not a pair' "$(<"$envdir/broken-test-env/vars")" "and the file is not touched"
     cd "$ROOT" || return
 }
 
