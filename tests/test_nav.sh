@@ -833,6 +833,7 @@ test_help() {
     REQ_NAV_DIRTY=1; req_nav_build_help; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
     assert_contains "Enter  " "$out" "lists Enter"
     assert_contains "Esc / q" "$out" "lists Esc and q together"
+    assert_contains "q leaves it (Esc does not)" "${REQ_HELP_ROWS[*]}" "the row of v says that q, not Esc, leaves the pager"
     assert_contains ":nd [name]" "$out" "lists a command with its argument"
     assert_contains "Press any key" "$out" "says how to go back"
     for row in ":n" ":nd" ":e" ":d" ":h" ":q"; do

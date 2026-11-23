@@ -16,7 +16,7 @@ REQ_HELP_ROWS=(
     "up/down|move the selection (wraps around)"
     "Enter|open a directory or request; on the details, run it"
     "Esc / q|go back (details, then list, then parent directory); at the root q quits"
-    "v|show the last response in full screen (JSON indented; PAGER, else less; q leaves it)"
+    "v|show the last response in a pager; q leaves it (Esc does not)"
     "Ctrl-L|clear the screen: old results go away and the menu is drawn at the top"
     ":|command mode (Esc cancels)"
     "Commands"
