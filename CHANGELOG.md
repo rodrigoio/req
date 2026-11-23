@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Clear the screen when the menu starts, so you can see at once that `req` is running. Only the menu does it:
   `req run`, `req init`, `req log`, `--version` and `--help` print as before.
+- Remove the line of hints about the keys at the bottom of the list, the details and the `:env` menu, and the
+  "Press any key" line of the help and the settings: press `h` for the help, which now lists every key (Ctrl-C and
+  "any key" included), in a column that no longer squeezes their descriptions. The command you type shows under the
+  screen without hiding a row of the list.
 
 ## [0.5.2] - 2026-11-23
 

@@ -127,7 +127,7 @@ test_list_window() {
     REQ_SEL=0 REQ_TOP=0
     REQ_NOTIFICATION_LINES=("a" "b" "c" "d" "e" "f" "g" "h")
     LINES=12 req_nav_build_list
-    assert_eq "5" "${#REQ_SCREEN_LINES[@]}" "with many bars the list still keeps three rows (header, three items and the hint)"
+    assert_eq "4" "${#REQ_SCREEN_LINES[@]}" "with many bars the list still keeps three rows (the header and three items)"
     REQ_NOTIFICATION_LINES=()
 }
 

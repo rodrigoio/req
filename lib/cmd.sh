@@ -9,17 +9,21 @@ REQ_CMD_BUF=""          # the command typed so far
 REQ_STATUS=""           # one-shot message shown under the menu (confirmations; warnings go to req_notification_warn)
 REQ_QUIT=0              # set by :q, ends the main loop
 
-# The help screen (:h) is built from this single table, "keys|description"; a line
-# without "|" is a section title. Every new key or command gets a row here.
+# The help screen (h, :h) is built from this single table, "keys|description"; a line without "|" is a section
+# title. It is the only place that lists the keys (the screens have no hint line), so every new key or command gets
+# a row here, and a description that is to be read whole is at most 64 characters (the key column is as wide as
+# the longest key of its section, and a row is cut at the width of the terminal).
 REQ_HELP_ROWS=(
     "Keys"
     "up/down|move the selection (wraps around)"
-    "Enter|open a directory or request; on the details, run it"
-    "Esc / q|go back (details, then list, then parent directory); at the root q quits"
+    "Enter|open a directory or request; run it on the details; pick in :env"
+    "Esc / q|go back one level; at the root q quits, Esc does nothing"
+    "h|this help (same as :h)"
     "v|show the last response in a pager; q leaves it (Esc does not)"
-    "Ctrl-L|clear the screen: old results go away and the menu is drawn at the top"
-    "h|this help (same as :h); any key closes it"
+    "Ctrl-L|clear the screen; the menu is drawn again at the top"
+    "Ctrl-C|quit"
     ":|command mode (Esc cancels)"
+    "any key|closes this help and the settings screen (:config)"
     "Commands"
     ":n|new request in the current directory"
     ":nd [name]|new directory (alias :mkdir)"
