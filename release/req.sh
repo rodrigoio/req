@@ -1079,7 +1079,9 @@ req_nav_build_list() {
         tail="  $REQ_NAV_PROJECT @ ${REQ_ENV:-default}"
         if (( room - ${#tail} >= 12 )); then room=$(( room - ${#tail} )); else tail=""; fi
     fi
-    REQ_SCREEN_LINES+=("${c_bold}req${c_reset} $(req_trunc "$(req_nav_crumb)" "$room")${c_dim}${pos}${tail}${c_reset}")
+
+    [[ -n $REQ_LOGO ]] || req_logo
+    REQ_SCREEN_LINES+=("${REQ_LOGO} $(req_trunc "$(req_nav_crumb)" "$room")${c_dim}${pos}${tail}${c_reset}")
 
     if (( n == 0 )); then
         REQ_SCREEN_LINES+=("  ${c_dim}(empty)${c_reset}")
@@ -1408,7 +1410,6 @@ req_nav_run() {
         fi
         req_nav_overlay
         req_notification_overlay        # the bars go above everything else
-        req_nav_logo_overlay            # and the logo above the bars
         req_screen_draw
         req_read_key || break
         req_nav_handle "$REQ_KEY"

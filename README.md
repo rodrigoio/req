@@ -1,5 +1,7 @@
 # req
 
+![Req Logotype](img/req-logo-dark.png)
+
 The interactive request tool for your terminal. A bash + curl utility to register, browse and fire HTTP requests, with persistence in plain JSON files.
 
 > The roadmap lives in `TASKS.md` (in the `req_context` repository); architecture, gotchas and the points to validate with users are in `DEVELOPMENT.md` (in the `req_context` repository).
