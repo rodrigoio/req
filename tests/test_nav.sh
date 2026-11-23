@@ -833,6 +833,7 @@ test_help() {
     REQ_NAV_DIRTY=1; req_nav_build_help; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
     assert_contains "Enter  " "$out" "lists Enter"
     assert_contains "Esc / q" "$out" "lists Esc and q together"
+    assert_contains "h  " "$out" "lists the key h"
     assert_contains "q leaves it (Esc does not)" "${REQ_HELP_ROWS[*]}" "the row of v says that q, not Esc, leaves the pager"
     assert_contains ":nd [name]" "$out" "lists a command with its argument"
     assert_contains "Press any key" "$out" "says how to go back"
@@ -854,6 +855,41 @@ test_help() {
     REQ_VIEW=list
     type_keys : z enter
     assert_contains ":h" "$REQ_NOTIFICATION_WARN" "unknown command points to :h"
+}
+
+test_key_h() {
+    echo "nav: the key h opens the help"
+    make_project
+    req_nav_init "$PROJ/.req"
+    local i
+    req_nav_handle h
+    assert_eq "help" "$REQ_VIEW" "h opens the help on the list"
+    assert_eq "list" "$REQ_HELP_BACK" "which goes back to the list"
+    req_nav_handle x
+    assert_eq "list" "$REQ_VIEW" "any key closes it"
+    req_nav_handle h; req_nav_handle h
+    assert_eq "list" "$REQ_VIEW" "and so does h itself"
+
+    req_nav_handle enter                                        # api/
+    for i in "${!REQ_ITEM_LABEL[@]}"; do [[ ${REQ_ITEM_LABEL[i]} == list-users ]] && REQ_SEL=$i; done
+    req_nav_handle enter
+    assert_eq "detail" "$REQ_VIEW" "a request is open"
+    req_nav_handle h
+    assert_eq "help" "$REQ_VIEW" "h opens the help on the details"
+    assert_eq "detail" "$REQ_HELP_BACK" "which goes back to the details"
+    req_nav_handle q
+    assert_eq "detail" "$REQ_VIEW" "any key (q here) closes it, back on the details"
+    assert_eq "$PROJ/api/list-users.get.json" "$REQ_DETAIL_FILE" "of the same request"
+
+    type_keys : h
+    assert_eq "h" "$REQ_CMD_BUF" "in command mode h is a letter"
+    assert_eq "detail" "$REQ_VIEW" "and opens nothing"
+    req_nav_handle esc
+
+    REQ_VIEW="env"; REQ_ENV_BACK=list; REQ_ENV_CHOICES=(default); REQ_ENV_SEL=0
+    req_nav_handle h
+    assert_eq "env" "$REQ_VIEW" "on the :env menu h is not a key"
+    REQ_VIEW=list
 }
 
 test_command_rename_dir() {
@@ -1150,7 +1186,7 @@ test_env_menu() {
     req_nav_handle down; assert_eq "0" "$REQ_ENV_SEL" "and wraps around at the end"
     req_nav_handle up; assert_eq "3" "$REQ_ENV_SEL" "up wraps around at the start, to + new environment"
     req_nav_handle up; assert_eq "2" "$REQ_ENV_SEL" "and goes on up from there"
-    for k in v : x n; do req_nav_handle "$k"; done
+    for k in v : x n h; do req_nav_handle "$k"; done
     assert_eq "env" "$REQ_VIEW" "other keys do nothing: the menu stays"
     assert_eq "0" "$REQ_CMD_ACTIVE" "and : does not open command mode"
     assert_eq "2" "$REQ_ENV_SEL" "or move the selection"
@@ -1923,6 +1959,7 @@ test_empty_project
 test_command_mode
 test_command_actions
 test_help
+test_key_h
 test_clear_screen
 test_view_key
 test_dynamic_root
