@@ -213,9 +213,10 @@ REQ_PROJECT_ID=""       # id of the project opened by req_project_activate
 # shellcheck disable=SC2034  # REQ_PROJECT_ID is read by the environment and cursor code
 # req_project_activate <project dir> - registers the project in ~/.req when new, makes it the one in use and
 # sets REQ_PROJECT_ID. It also makes sure the project has its env folder and the "default" environment
-# (req_env_create), at every opening, so projects of older versions get them too. When ~/.req cannot be
-# written it is one warning, REQ_PROJECT_ID stays empty and the status is 1; the menu still works, without
-# saved state.
+# (req_env_create), at every opening, and warns about each file of the previous layout (req_env_legacy_notice),
+# which is never read, moved or changed; while env/default is such a file the default environment is not made,
+# since its warning says why. When ~/.req cannot be written it is one warning, REQ_PROJECT_ID stays empty and
+# the status is 1; the menu still works, without saved state.
 req_project_activate() {
     local dir=$1 id problem
     REQ_PROJECT_ID=""
@@ -232,7 +233,10 @@ req_project_activate() {
         return 1
     fi
     REQ_PROJECT_ID=$id
-    problem=$(req_env_create default "$id" 2>&1) || req_warn "${problem#req: error: }"
+    req_env_legacy_notice "$id"
+    if [[ ! -f $(req_env_dir "$id" default) ]]; then
+        problem=$(req_env_create default "$id" 2>&1) || req_warn "${problem#req: error: }"
+    fi
     return 0
 }
 
