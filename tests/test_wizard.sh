@@ -59,14 +59,24 @@ test_pairs_and_presets() {
     req_ask_preset 3<<<$'x\nJSON\n' >/dev/null 2>&1; assert_eq '{"Content-Type":"application/json","Accept":"application/json"}' "$REQ_REPLY_JSON" "retries, then accepts a name"
     req_ask_preset 3<<<$'\n' >/dev/null; assert_eq '{}' "$REQ_REPLY_JSON" "Enter picks none"
 
-    req_ask_pairs "Headers" ":" '{"A":"1","B":"2"}' 3<<<$'C: 3\n-A\nbad line\n: x\nD:   spaced value  \n\n' >"$TMP/out" 2>&1
+    req_ask_pairs "Headers" '{"A":"1","B":"2"}' 3<<<$'C=3\n-A\nbad line\n=x\nD=   spaced value  \n\n' >"$TMP/out" 2>&1
     assert_eq '{"B":"2","C":"3","D":"spaced value"}' "$REQ_REPLY_JSON" "sets, removes and trims entries"
-    assert_contains "expected key:value" "$(<"$TMP/out")" "reports a line without a separator"
+    assert_contains "expected key=value" "$(<"$TMP/out")" "reports a line without a separator"
     assert_contains "key cannot be empty" "$(<"$TMP/out")" "reports an empty key"
-    req_ask_pairs "Query" "=" '{}' 3<<<$'a=b=c\n\n' >/dev/null
+    assert_contains 'Headers: key=value per line' "$(<"$TMP/out")" "headers are asked for as key=value, like the others"
+    req_ask_pairs "Query" '{}' 3<<<$'a=b=c\n\n' >/dev/null
     assert_eq '{"a":"b=c"}' "$REQ_REPLY_JSON" "splits at the first separator only"
-    req_ask_pairs "Query" "=" '{"x":"1"}' 3</dev/null >/dev/null
+    req_ask_pairs "Query" '{"x":"1"}' 3</dev/null >/dev/null
     assert_eq '{"x":"1"}' "$REQ_REPLY_JSON" "end of input keeps what exists"
+
+    # shellcheck disable=SC2016  # a placeholder is literal text here
+    local ph='${token}'
+    req_ask_pairs "Headers" '{}' 3<<<"X-Token=Bearer $ph"$'\nAuthorization=Basic YWJj==\nReferer=http://a.b\n\n' >/dev/null
+    assert_eq "{\"X-Token\":\"Bearer $ph\",\"Authorization\":\"Basic YWJj==\",\"Referer\":\"http://a.b\"}" "$REQ_REPLY_JSON" \
+        "a header value keeps a placeholder, = and :"
+    req_ask_pairs "Headers" '{}' 3<<<$'X-A: 1\n\n' >"$TMP/out" 2>&1
+    assert_eq '{}' "$REQ_REPLY_JSON" "a key: value line sets nothing"
+    assert_contains "expected key=value" "$(<"$TMP/out")" "and says which format is expected"
 }
 
 test_new() {
@@ -80,7 +90,7 @@ test_new() {
     assert_eq "$D/my-req.post.json" "$REQ_LAST_FILE" "REQ_LAST_FILE points to it"
 
     fresh full
-    IN=$'full\nPOST\nhttp://x/a\ny\nthe desc\n1\nX-A: 1\n-Accept\n\npage=2\n\nn\nuser=ann\n\n'; run req_wizard_new "$D"
+    IN=$'full\nPOST\nhttp://x/a\ny\nthe desc\n1\nX-A=1\n-Accept\n\npage=2\n\nn\nuser=ann\n\n'; run req_wizard_new "$D"
     assert_eq "0" "$STATUS" "creates a request with optional fields"
     f=$D/full.post.json
     assert_eq "the desc" "$(req_request_get "$f" description)" "description"
@@ -146,10 +156,23 @@ test_new() {
     assert_eq "" "$(ls -A "$D")" "nothing was created"
 
     fresh badheader
-    IN=$'bh\nGET\nhttp://x\ny\n\n4\nBad Name: 1\n\n\n'; run req_wizard_new "$D"
+    IN=$'bh\nGET\nhttp://x\ny\n\n4\nBad Name=1\n\n\n'; run req_wizard_new "$D"
     assert_eq "1" "$STATUS" "an invalid header is rejected on write"
     assert_contains "invalid name" "$OUT" "explains the invalid header"
     assert_eq "" "$(ls -A "$D")" "nothing is written then"
+
+    fresh headerph
+    IN=$'hp\nGET\nhttp://x\ny\n\n4\nX-Token=Bearer ${token}\nAccept=a/b:c=d\n\n\n'; run req_wizard_new "$D"
+    assert_eq "0" "$STATUS" "headers typed as key=value are accepted"
+    # shellcheck disable=SC2016  # a placeholder is literal text here
+    assert_eq '{"X-Token":"Bearer ${token}","Accept":"a/b:c=d"}' "$(req_request_get "$D/hp.get.json" headers)" \
+        "a header value keeps its placeholder, = and :"
+
+    fresh headerold
+    IN=$'ho\nGET\nhttp://x\ny\n\n4\nX-Token: abc\n\n\n'; run req_wizard_new "$D"
+    assert_contains "expected key=value" "$OUT" "a key: value header line is refused with the format"
+    assert_eq "0" "$STATUS" "and the request is still made, without that header"
+    assert_eq '{}' "$(req_request_get "$D/ho.get.json" headers)" "nothing of the refused line is stored"
 }
 
 test_edit() {
@@ -168,7 +191,7 @@ test_edit() {
     IN=$'9\nq\n'; run req_wizard_edit "$f"
     assert_contains "choose 1-8, s or q" "$OUT" "an invalid choice is explained"
 
-    IN=$'1\nnew-name\n2\nput\n3\nhttp://y\n4\nhello\n5\nX-B: 2\n-A\n\n6\nq=1\n\n7\nk=v\n\ns\n'; run req_wizard_edit "$f"
+    IN=$'1\nnew-name\n2\nput\n3\nhttp://y\n4\nhello\n5\nX-B=2\n-A\n\n6\nq=1\n\n7\nk=v\n\ns\n'; run req_wizard_edit "$f"
     assert_eq "0" "$STATUS" "edits and saves"
     n=$D/new-name.put.json
     [[ -f $n && ! -e $f ]]; assert_eq "0" "$?" "renaming moves the file"
@@ -181,6 +204,15 @@ test_edit() {
     assert_eq '{"q":"1"}' "$(req_request_get "$n" query)" "query"
     assert_eq '{"k":"v"}' "$(req_request_get "$n" parameters)" "parameters"
     assert_eq "0" "$(req_request_check "$n" 2>/dev/null; echo $?)" "the edited file is valid"
+
+    # Field 5 takes key=value like fields 6 and 7, and keeps the headers it is not told to change.
+    IN=$'5\nX-Token=Bearer ${token}\n\ns\n'; run req_wizard_edit "$n"
+    assert_eq "0" "$STATUS" "editing the headers with a placeholder saves"
+    # shellcheck disable=SC2016  # a placeholder is literal text here
+    assert_eq '{"X-B":"2","X-Token":"Bearer ${token}"}' "$(req_request_get "$n" headers)" "the new header joins the old one"
+    IN=$'5\nX-C: 3\n\nq\n'; run req_wizard_edit "$n"
+    assert_contains "expected key=value" "$OUT" "a key: value line is refused when editing too"
+    assert_eq "2" "$(req_request_get "$n" headers | jq length)" "and the headers stay as they were"
 
     IN=$'4\n-\ns\n'; run req_wizard_edit "$n"
     assert_eq "" "$(req_request_get "$n" description)" "- clears the description"

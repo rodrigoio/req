@@ -7,13 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-23
+
 ### Fixed
 
-- Edit the variables of the project from inside `req` with `:vars` (or `:var`), instead of looking for the
-  file in `~/.req` and creating it by hand. It opens `vars` in `$VISUAL`, `$EDITOR`, `vim` or `nano`, in that
-  order, making the file first with commented examples of the format (comments are never variables). When the
-  editor closes it loads the variables again and reports a bad line with its path and line. With no editor it
-  makes the file anyway and says where it is and how to fill it.
+- Type headers as `key=value` in `:n` and `:e`, the same as query and parameters, instead of `key: value`. A
+  header typed with `=` was refused and lost, as if it had been ignored. Now every key/value prompt takes one
+  format, and a header line written as `key: value` is refused with `expected key=value`.
 
 ## [0.5.1] - 2026-11-18
 
@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Choose the environment from a menu: `:env` with no name lists the environments of the project, with the
   one in use marked (up and down, Enter to switch, Esc to leave), instead of printing a line of text. Its
   last row, `+ new environment`, asks for a name and creates the environment, switching to it.
+- Edit the variables of the project from inside `req` with `:vars` (or `:var`), instead of looking for the
+  file in `~/.req` and creating it by hand. It opens `vars` in `$VISUAL`, `$EDITOR`, `vim` or `nano`, in that
+  order, making the file first with commented examples of the format (comments are never variables). When the
+  editor closes it loads the variables again and reports a bad line with its path and line. With no editor it
+  makes the file anyway and says where it is and how to fill it.
 
 ## [0.5.0] - 2026-11-18
 
@@ -106,7 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the verbose mode (`:v`).
 - Show the installed version with `req --version`.
 
-[unreleased]: https://github.com/rodrigoio/req/compare/v0.5.1...HEAD
+[unreleased]: https://github.com/rodrigoio/req/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/rodrigoio/req/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/rodrigoio/req/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/rodrigoio/req/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rodrigoio/req/compare/v0.3.0...v0.4.0

@@ -106,7 +106,7 @@ Press `:` to type a command; Enter runs it, Esc (or Backspace on an empty line) 
 | `:h` | help: lists every key and command (alias `:help`); any key goes back. A new command is added to the `REQ_HELP_ROWS` table in `lib/cmd.sh` |
 | `:q` | quit, without asking for confirmation |
 
-In the prompts, Enter accepts the default shown in brackets and an empty name cancels. In the key/value prompts, `key: value` (headers) or `key=value` (query and parameters) sets an entry, `-key` removes it and an empty line finishes. Directory and request names are slugs: lowercase letters, digits and hyphens.
+In the prompts, Enter accepts the default shown in brackets and an empty name cancels. In the key/value prompts (headers, query and parameters, in `:n` and `:e`), `key=value` sets an entry (a header is `Authorization=Bearer ${token}`, and the value may hold `=` and `:`), `-key` removes it and an empty line finishes; a line written as `key: value` is refused. Directory and request names are slugs: lowercase letters, digits and hyphens.
 
 ## Development
 
