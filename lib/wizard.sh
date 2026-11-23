@@ -77,11 +77,12 @@ req_ask_preset() {
     done
 }
 
-# req_ask_pairs <title> <separator> <json> - edits an object of simple values: "key<separator>value" sets an
-# entry, "-key" removes it, an empty line finishes. The result goes to REQ_REPLY_JSON.
+# req_ask_pairs <title> <json> - edits an object of simple values, the same way for headers, query and
+# parameters: "key=value" sets an entry (split at the first "=", so a value may hold "=" and ":"), "-key"
+# removes it, an empty line finishes. The result goes to REQ_REPLY_JSON.
 req_ask_pairs() {
-    local title=$1 sep=$2 json=${3:-"{}"} line key val
-    printf '%s: key%svalue per line, "-key" removes, empty line to finish\n' "$title" "$sep"
+    local title=$1 json=${2:-"{}"} line key val
+    printf '%s: key=value per line, "-key" removes, empty line to finish\n' "$title"
     while :; do
         req_prompt "  $title" "" || break
         line=$(req_trim "$REQ_REPLY")
@@ -91,12 +92,12 @@ req_ask_pairs() {
             json=$(jq -c --arg k "$key" 'del(.[$k])' <<<"$json")
             continue
         fi
-        if [[ $line != *"$sep"* ]]; then
-            req_err "expected key${sep}value"
+        if [[ $line != *=* ]]; then
+            req_err "expected key=value"
             continue
         fi
-        key=$(req_trim "${line%%"$sep"*}")
-        val=$(req_trim "${line#*"$sep"}")
+        key=$(req_trim "${line%%=*}")
+        val=$(req_trim "${line#*=}")
         if [[ -z $key ]]; then
             req_err "the key cannot be empty"
             continue
@@ -165,8 +166,8 @@ req_wizard_new() {
         req_prompt "Description" "" && desc=$REQ_REPLY
         REQ_PRESET=none
         req_ask_preset && headers=$REQ_REPLY_JSON
-        req_ask_pairs "Headers" ":" "$headers" && headers=$REQ_REPLY_JSON
-        req_ask_pairs "Query" "=" "{}" && query=$REQ_REPLY_JSON
+        req_ask_pairs "Headers" "$headers" && headers=$REQ_REPLY_JSON
+        req_ask_pairs "Query" "{}" && query=$REQ_REPLY_JSON
         case $method in
             POST|PUT|PATCH)
                 # With a format preset the body is usually raw: offer the editor first, and
@@ -177,7 +178,7 @@ req_wizard_new() {
                     local ask=0; [[ $REQ_PRESET == json ]] && ask=1
                     req_ask_raw_data "" "$ask" && raw=$REQ_REPLY_JSON
                 else
-                    req_ask_pairs "Parameters" "=" "{}" && params=$REQ_REPLY_JSON
+                    req_ask_pairs "Parameters" "{}" && params=$REQ_REPLY_JSON
                 fi ;;
         esac
     fi
@@ -231,11 +232,11 @@ req_wizard_edit() {
                    [[ $REQ_REPLY == - ]] && REQ_REPLY=""
                    json=$(jq -c --arg v "$REQ_REPLY" '.description = $v' <<<"$json")
                fi ;;
-            5) req_ask_pairs "Headers" ":" "$(jq -c '.headers // {}' <<<"$json")" &&
+            5) req_ask_pairs "Headers" "$(jq -c '.headers // {}' <<<"$json")" &&
                    json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.headers = $v' <<<"$json") ;;
-            6) req_ask_pairs "Query" "=" "$(jq -c '.query // {}' <<<"$json")" &&
+            6) req_ask_pairs "Query" "$(jq -c '.query // {}' <<<"$json")" &&
                    json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.query = $v' <<<"$json") ;;
-            7) req_ask_pairs "Parameters" "=" "$(jq -c '.parameters // {}' <<<"$json")" &&
+            7) req_ask_pairs "Parameters" "$(jq -c '.parameters // {}' <<<"$json")" &&
                    json=$(jq -c --argjson v "$REQ_REPLY_JSON" '.parameters = $v' <<<"$json") ;;
             8) cur=$(jq -c '.raw_data // ""' <<<"$json")
                [[ $cur == '""' ]] && cur=""
