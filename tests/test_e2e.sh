@@ -402,10 +402,54 @@ test_vars() {
     cd "$ROOT" || return
 }
 
+test_headers() {
+    echo "e2e: headers are typed as key=value, like query and parameters"
+    command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
+    [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
+    local work=$TMP/hdrs port out state file
+    port=$(<"$TMP/port")
+    mkdir -p "$work" && cd "$work" || return
+    $REQ init >/dev/null 2>&1
+    state=$REQ_CONFIG_DIR/projects/hdrs; file=$work/ping.get.json
+    printf 'restore_cursor=no\nlog=yes\n' >"$state/config"
+    printf 'tok=from-vars\n' >"$state/vars"
+
+    # 1. :n: a header with a placeholder typed as key=value is stored; one typed as key: value is refused
+    # shellcheck disable=SC2016  # a placeholder, literal text
+    out=$(menu "$(cmd n)" "ping"$'\r' "GET"$'\r' "http://127.0.0.1:$port/echo"$'\r' "y"$'\r' $'\r' "4"$'\r' \
+        'X-Test=Bearer ${tok}'$'\r' 'Accept: a/b'$'\r' $'\r' $'\r' "$(cmd q)")
+    assert_contains "Headers: key=value per line" "$out" ":n asks for the headers as key=value"
+    assert_contains "expected key=value" "$out" "a header typed as key: value is refused with the format"
+    assert_contains "created ping.get.json" "$out" "the request is made"
+    # shellcheck disable=SC2016  # a placeholder, literal text
+    assert_eq '{"X-Test":"Bearer ${tok}"}' "$(jq -c .headers "$file")" "with the typed header only, the placeholder kept"
+
+    # 2. run: the placeholder of the header is replaced by the variable
+    out=$($REQ run "$file" 2>&1)
+    assert_contains '"x_test": "Bearer from-vars"' "$out" "the header reaches the server with the value of the variable"
+
+    # 3. :e, field 5: a key=value line adds a header and the others stay; key: value is refused and changes nothing
+    # shellcheck disable=SC2016  # a placeholder, literal text
+    out=$(menu "$(cmd e)" "5"$'\r' 'X-Extra=${tok}'$'\r' $'\r' "s"$'\r' "$(cmd q)")
+    assert_contains "saved ping.get.json" "$out" ":e saves the request"
+    # shellcheck disable=SC2016  # a placeholder, literal text
+    assert_eq '{"X-Test":"Bearer ${tok}","X-Extra":"${tok}"}' "$(jq -c .headers "$file")" "the new header joins the old one"
+    out=$(menu "$(cmd e)" "5"$'\r' 'X-Bad: 1'$'\r' $'\r' "q"$'\r' "$(cmd q)")
+    assert_contains "expected key=value" "$out" ":e refuses key: value too"
+    assert_eq "2" "$(jq '.headers | length' "$file")" "and the headers stay as they were"
+
+    # 4. both headers go out with their values (the log has the request as it was sent)
+    : >"$state/req.log"
+    $REQ run "$file" >/dev/null 2>&1
+    assert_contains "| header: X-Test: Bearer from-vars | header: X-Extra: from-vars" "$(<"$state/req.log")" "each header is sent with its value"
+    cd "$ROOT" || return
+}
+
 test_flow
 test_notifications
 test_usability
 test_response_view
 test_environments
 test_vars
+test_headers
 test_summary
