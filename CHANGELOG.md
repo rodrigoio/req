@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Show the logo of the project, `{❯} Req` (cyan braces, green arrow, bold `Req`), on the first row of every screen of
+  the menu, above the warning bars. It is plain text without colors, and `{>} Req` where the terminal is not UTF-8.
+  The list and the `:env` menu give it a row, so they show one item less.
 - Warn, in the bar at the top, when a project opens and still has files of the previous layout of the variables (its
   `vars` file and the files `env/<name>`): the warning names each one, says it is no longer read and where its
   lines go. Those files are never read, moved or changed.

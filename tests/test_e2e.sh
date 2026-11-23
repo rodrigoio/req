@@ -166,7 +166,8 @@ test_usability() {
     count=$(( (${#out} - ${#stripped}) / ${#clear} ))
     assert_eq "2" "$count" "the terminal was cleared when the menu started and once by Ctrl-L (no draw cleared it)"
     after=${out##*"$clear"}
-    assert_eq "GET    ping" "${after%%$'\n'*}" "the menu is drawn again right after, from the top, with the same request open"
+    assert_eq "{❯} Req" "${after%%$'\n'*}" "the menu is drawn again right after, from the top, with the logo first"
+    assert_eq "GET    ping" "$(sed -n 2p <<<"$after")" "and the same request open under it"
     assert_not_contains "HTTP 200" "$after" "and the old result is not drawn again"
 
     # What that run wrote to the log is what req log shows, and it keeps following.

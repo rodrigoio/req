@@ -127,6 +127,20 @@ test_bash_check() {
     assert_eq "0" "$?" "current bash meets the minimum"
 }
 
+test_logo() {
+    echo "ui: the logo"
+    local old=$REQ_COLORS
+    REQ_COLORS=1
+    LC_ALL=C.UTF-8 req_logo
+    assert_eq $'\033[36m{\033[32m❯\033[36m}\033[0m \033[1mReq\033[0m' "$REQ_LOGO" "the braces are cyan, the arrow green, Req bold"
+    LC_ALL=C req_logo
+    assert_eq $'\033[36m{\033[32m>\033[36m}\033[0m \033[1mReq\033[0m' "$REQ_LOGO" "outside UTF-8 the arrow is >"
+    REQ_COLORS=0
+    LC_ALL=C.UTF-8 req_logo; assert_eq "{❯} Req" "$REQ_LOGO" "without colors it is plain text"
+    LC_ALL=C req_logo; assert_eq "{>} Req" "$REQ_LOGO" "plain text and no UTF-8: the arrow is >"
+    REQ_COLORS=$old
+}
+
 test_colors() {
     echo "ui: colors"
     assert_eq "0" "$REQ_COLORS" "colors are off when NO_COLOR is set"
@@ -139,6 +153,8 @@ test_colors() {
     assert_eq $'\033[38;5;130m' "$(req_color patch)" "PATCH brown"
     assert_eq $'\033[31m' "$(req_color delete)" "DELETE red"
     assert_eq $'\033[1;92m' "$(req_color sel)" "selection is bold bright green"
+    assert_eq $'\033[36m' "$(req_color cyan)" "cyan"
+    assert_eq $'\033[32m' "$(req_color green)" "green"
     assert_eq "" "$(req_method_color head)" "unknown method has no color"
 }
 
@@ -198,6 +214,7 @@ test_editor
 test_editor_for_a_file
 test_bash_check
 test_colors
+test_logo
 test_confirm
 test_trim_prompt
 test_abs_path
