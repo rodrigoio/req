@@ -2,7 +2,8 @@
 # nav.sh - interactive navigation: directory and request menu, details screen.
 #
 # The menu is redrawn in place (the cursor moves up and erases the previous block) without clearing the screen: a
-# request's result stays visible and the menu is redrawn right below it. Outside a terminal nothing is erased (tests).
+# request's result stays visible and the menu is redrawn right below it; the screen is cleared only when the menu starts
+# and on Ctrl-L. Outside a terminal nothing is erased (tests).
 # Keys: up/down move the selection, Enter opens/runs, Esc goes back (nothing at the root), Ctrl-L clears the screen, v
 # shows the last response in a pager, ":" enters command mode (cmd.sh). The environment menu (:env) is a view of its
 # own with its own keys: up/down, Enter, Esc.
@@ -605,10 +606,11 @@ req_nav_run() {
 }
 
 # req_nav_start - interactive entry point: the .req of the current directory; without one it offers to
-# initialize a project right here.
+# initialize a project right here. The screen is cleared once, before anything is printed.
 req_nav_start() {
     local pfile status
     [[ -t 0 && -t 1 ]] || req_die "interactive mode needs a terminal (use 'req run <file>' in scripts)"
+    req_nav_clear_screen
     if ! pfile=$(req_project_find .); then
         printf 'No %s file found in %s.\n' "$REQ_PROJECT_FILE" "$PWD"
         if ! req_confirm "Initialize a req project here?"; then

@@ -160,8 +160,8 @@ test_usability() {
     assert_contains "HTTP 200" "$out" "the request ran and its result is on the screen"
     stripped=${out//"$clear"/}
     count=$(( (${#out} - ${#stripped}) / ${#clear} ))
-    assert_eq "1" "$count" "Ctrl-L cleared the terminal once (and no draw before it did)"
-    after=${out#*"$clear"}
+    assert_eq "2" "$count" "the terminal was cleared when the menu started and once by Ctrl-L (no draw cleared it)"
+    after=${out##*"$clear"}
     assert_eq "GET    ping" "${after%%$'\n'*}" "the menu is drawn again right after, from the top, with the same request open"
     assert_not_contains "HTTP 200" "$after" "and the old result is not drawn again"
 
@@ -445,6 +445,41 @@ test_headers() {
     cd "$ROOT" || return
 }
 
+test_start_clear() {
+    echo "e2e: the screen is cleared when the menu starts"
+    command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
+    [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
+    local work=$TMP/startclear empty=$TMP/startclear-empty port out stripped count
+    local clear=$'\033[H\033[2J'
+    port=$(<"$TMP/port")
+    mkdir -p "$work" "$empty" && cd "$work" || return
+    $REQ init >/dev/null 2>&1
+    printf 'restore_cursor=no\n' >"$REQ_CONFIG_DIR/projects/startclear/config"
+    printf '{"name":"ping","method":"GET","url":"http://127.0.0.1:%s/echo"}\n' "$port" >ping.get.json
+
+    # 1. the first thing a start prints is the clear, once, and the menu comes after it
+    out=$(PTY_RAW=1 menu "$(cmd q)")
+    assert_eq "$clear" "${out:0:${#clear}}" "the first thing the menu prints is the clear sequence"
+    stripped=${out//"$clear"/}
+    count=$(( (${#out} - ${#stripped}) / ${#clear} ))
+    assert_eq "1" "$count" "and it clears once"
+    assert_contains "req / (1/1)" "${out#"$clear"}" "the menu is drawn after it"
+
+    # 2. what is not the menu never clears
+    out=$($REQ run "$work/ping.get.json" 2>&1)
+    assert_not_contains $'\033[2J' "$out" "req run does not clear the screen"
+    out=$($REQ --version 2>&1)
+    assert_not_contains $'\033[2J' "$out" "nor does --version"
+
+    # 3. with no project the clear comes before the offer to start one
+    cd "$empty" || return
+    out=$(PTY_RAW=1 menu "n"$'\r')
+    assert_eq "$clear" "${out:0:${#clear}}" "with no project the clear comes first too"
+    assert_contains "No .req file found" "${out#"$clear"}" "and then the offer to start a project"
+    assert_contains "Nothing created" "$out" "(declined here: nothing is made)"
+    cd "$ROOT" || return
+}
+
 test_flow
 test_notifications
 test_usability
@@ -452,4 +487,5 @@ test_response_view
 test_environments
 test_vars
 test_headers
+test_start_clear
 test_summary
