@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-23
+
 ### Added
 
 - Show the logo of the project, `{❯} Req` (cyan braces, green arrow, bold `Req`), on the first row of every screen of
@@ -154,7 +156,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the verbose mode (`:v`).
 - Show the installed version with `req --version`.
 
-[unreleased]: https://github.com/rodrigoio/req/compare/v0.6.0...HEAD
+[unreleased]: https://github.com/rodrigoio/req/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/rodrigoio/req/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/rodrigoio/req/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/rodrigoio/req/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/rodrigoio/req/compare/v0.5.0...v0.5.1

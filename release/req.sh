@@ -3,7 +3,7 @@
 
 # ==== version.sh
 
-REQ_VERSION="0.6.0"
+REQ_VERSION="0.6.1"
 
 # ==== lib/core.sh
 
@@ -147,6 +147,8 @@ req_color() {
         warn)   printf '\033[33m' ;;
         err)    printf '\033[31m' ;;
         orange) printf '\033[38;5;208m' ;;
+        cyan)   printf '\033[36m' ;;
+        green)  printf '\033[32m' ;;
         sel)    printf '\033[1;92m' ;;
         notification) printf '\033[38;5;16;48;5;208m' ;;
         bold)   printf '\033[1m' ;;
@@ -182,6 +184,15 @@ req_utf8() {
         *[Uu][Tt][Ff]-8*|*[Uu][Tt][Ff]8*) return 0 ;;
     esac
     return 1
+}
+
+REQ_LOGO=""        # the logo, set by req_logo
+
+req_logo() {
+    local arrow='>' c g b r
+    req_utf8 && arrow='❯'
+    c=$(req_color cyan); g=$(req_color green); b=$(req_color bold); r=$(req_color reset)
+    REQ_LOGO="${c}{${g}${arrow}${c}}${r} ${b}Req${r}"
 }
 
 req_term_cols() {
@@ -1073,7 +1084,7 @@ req_nav_build_list() {
     if (( n == 0 )); then
         REQ_SCREEN_LINES+=("  ${c_dim}(empty)${c_reset}")
     else
-        visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+        visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
         (( n < visible )) && visible=$n
         (( REQ_SEL < REQ_TOP )) && REQ_TOP=$REQ_SEL
         (( REQ_SEL >= REQ_TOP + visible )) && REQ_TOP=$(( REQ_SEL - visible + 1 ))
@@ -1207,7 +1218,7 @@ req_nav_build_env() {
     REQ_SCREEN_LINES=(); REQ_SCREEN_EXTRA=0
     REQ_SCREEN_LINES+=("${c_bold}req${c_reset} environments${c_dim}$(req_trunc "  $REQ_NAV_PROJECT  (in use: $current)" $(( cols - 16 )))${c_reset}")
 
-    visible=$(( rows - 3 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
+    visible=$(( rows - 4 - ${#REQ_NOTIFICATION_LINES[@]} )); (( visible < 3 )) && visible=3
     (( total < visible )) && visible=$total
     (( REQ_ENV_SEL < REQ_ENV_TOP )) && REQ_ENV_TOP=$REQ_ENV_SEL
     (( REQ_ENV_SEL >= REQ_ENV_TOP + visible )) && REQ_ENV_TOP=$(( REQ_ENV_SEL - visible + 1 ))
@@ -1368,9 +1379,15 @@ req_nav_overlay() {
     (( REQ_CMD_ACTIVE )) && REQ_SCREEN_LINES+=(":${REQ_CMD_BUF}${cursor}")
 }
 
+req_nav_logo_overlay() {
+    [[ -n $REQ_LOGO ]] || req_logo
+    REQ_SCREEN_LINES=("$REQ_LOGO" "${REQ_SCREEN_LINES[@]}")
+}
+
 req_nav_run() {
     req_nav_init "$1" || return 1
     req_nav_restore_cursor
+    req_logo
     REQ_EXIT_HOOK=req_nav_save_cursor      # a signal ends the process: save the cursor then too
     [[ -t 1 ]] && printf '\033[?25l'
     [[ -t 0 ]] && stty -echo 2>/dev/null
@@ -1391,6 +1408,7 @@ req_nav_run() {
         fi
         req_nav_overlay
         req_notification_overlay        # the bars go above everything else
+        req_nav_logo_overlay            # and the logo above the bars
         req_screen_draw
         req_read_key || break
         req_nav_handle "$REQ_KEY"
@@ -1957,7 +1975,7 @@ REQ_HELP_ROWS=(
     ":e|edit the selected request (alias :edit)"
     ":d|duplicate the selected request (alias :dup)"
     ":env [name]|menu to pick or create one, or jump to <name>"
-    ":vars|edit the project variables in your editor (alias :var)"
+    ":vars|edit the variables of the environment in use (alias :var)"
     ":log [yes|no]|switch the log of requests and responses in this session (setting: log)"
     ":v [yes|no]|switch the verbose mode (>> sent, << received) in this session (REQ_VERBOSE)"
     ":config [-g] [key=value]|show the settings, or change one (this project's; -g: global ~/.req/config)"
@@ -2315,34 +2333,34 @@ req_cmd_env() {
 
 req_vars_howto() {
     printf 'No editor found (tried $VISUAL, $EDITOR, vim and nano).\n'
-    printf 'The variables of the project, shared by every environment, are in:\n\n  %s\n\n' "$1"
+    printf 'The variables of environment %s are in:\n\n  %s\n\n' "$2" "$1"
     printf 'Add one per line, as key=value, for example:\n\n  host=https://api.example.com\n\n'
     printf 'and use it in a request as ${host}. Set $EDITOR, or install vim or nano, to edit them with :vars.\n\n'
     req_prompt "Press Enter to go back" "" || true
 }
 
 req_cmd_vars() {
-    local file abs err status
+    local env=${REQ_ENV:-default} file abs err status
     if [[ -n $1 ]]; then
-        req_notification_warn "usage: :vars (no argument: it opens the variables shared by every environment)"
+        req_notification_warn "usage: :vars (no argument: it opens the variables of the environment in use)"
         return 0
     fi
     if [[ -z $REQ_PROJECT_ID ]]; then
         req_notification_warn "the project state in $(req_config_dir) is not available, so there are no variables to edit"
         return 0
     fi
-    if ! err=$(req_vars_create 2>&1); then
+    if ! err=$(req_vars_create "$env" 2>&1); then
         req_notification_warn "${err#req: error: }"
         return 0
     fi
-    file=$(req_vars_file "$REQ_PROJECT_ID")
+    file=$(req_env_file "$REQ_PROJECT_ID" "$env")
     abs=$(req_abs_path "$file")
     req_nav_prompt_begin
     req_edit_file "$file" vim nano; status=$?
-    (( status == 2 )) && req_vars_howto "$abs"
+    (( status == 2 )) && req_vars_howto "$abs" "$env"
     req_nav_prompt_end
     case $status in
-        0) req_env_activate "${REQ_ENV:-default}" ;;
+        0) req_env_activate "$env" ;;
         1) req_notification_warn "the editor failed; $abs is as the editor left it" ;;
     esac
     return 0
@@ -2352,21 +2370,51 @@ req_cmd_vars() {
 
 declare -gA REQ_VARS=()      # variables of the last loaded environment (key -> value)
 
-req_env_file() {
+req_env_dir() {
     req_project_state_dir "$1" "env/$2"
 }
 
-req_vars_file() {
-    req_project_state_dir "$1" vars
+req_env_file() {
+    req_project_state_dir "$1" "env/$2/vars"
 }
 
 req_env_legacy_file() {
     printf '%s/env/%s/secrets.json' "$(req_config_dir)" "$1"
 }
 
+req_env_legacy_files() {
+    local id=${1-$REQ_PROJECT_ID} dir f
+    local -a found=()
+    [[ -n $id ]] || return 0
+    f=$(req_project_state_dir "$id" vars)
+    [[ -f $f ]] && printf '%s\n' "$(req_abs_path "$f")"
+    dir=$(req_project_state_dir "$id" env)
+    [[ -d $dir ]] || return 0
+    for f in "$dir"/*; do
+        [[ -f $f ]] && found+=("$(req_abs_path "$f")")
+    done
+    (( ${#found[@]} == 0 )) || printf '%s\n' "${found[@]}" | LC_ALL=C sort
+    return 0
+}
+
+req_env_legacy_notice() {
+    local id=${1-$REQ_PROJECT_ID} f project_vars
+    [[ -n $id ]] || return 0
+    project_vars=$(req_abs_path "$(req_project_state_dir "$id" vars)")
+    while IFS= read -r f; do
+        [[ -n $f ]] || continue
+        if [[ $f == "$project_vars" ]]; then
+            req_warn "$f is from the previous layout and is no longer read: copy its lines into the vars file of each environment that uses them"
+        else
+            req_warn "$f is from the previous layout and is no longer read: rename it, make a folder with its name and move the file into it as vars"
+        fi
+    done < <(req_env_legacy_files "$id")
+    return 0
+}
+
 req_vars_load() {
     local env=$1 id=${2-$REQ_PROJECT_ID} file legacy line
-    local -A loaded=()
+    local -A seen=()
     REQ_VARS=()
     req_valid_name "$env" || {
         req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
@@ -2376,23 +2424,14 @@ req_vars_load() {
     [[ -n $id ]] || return 0
     req_valid_name "$id" || { req_err "invalid project id: \"$id\""; return 1; }
 
-    local -a files=("$(req_vars_file "$id")" "$(req_env_file "$id" "$env")")
-    local status=0
-    for file in "${files[@]}"; do req_kv_check "$file" || status=1; done
-    (( status )) && return 1
-
-    local -A seen=()
-    for file in "${files[@]}"; do
-        seen=()
-        while IFS= read -r line; do
-            req_kv_parse_line "$line" || continue
-            [[ -n ${seen[$REQ_KV_KEY]+x} ]] && continue     # the first line of a key wins
-            seen[$REQ_KV_KEY]=1
-            loaded[$REQ_KV_KEY]=$REQ_KV_VALUE
-        done < <(req_kv_list "$file")
-    done
-    local k
-    for k in "${!loaded[@]}"; do REQ_VARS[$k]=${loaded[$k]}; done
+    file=$(req_env_file "$id" "$env")
+    req_kv_check "$file" || return 1
+    while IFS= read -r line; do
+        req_kv_parse_line "$line" || continue
+        [[ -n ${seen[$REQ_KV_KEY]+x} ]] && continue     # the first line of a key wins
+        seen[$REQ_KV_KEY]=1
+        REQ_VARS[$REQ_KV_KEY]=$REQ_KV_VALUE
+    done < <(req_kv_list "$file")
     return 0
 }
 
@@ -2430,7 +2469,7 @@ req_subst_fail() {
     for key in "$@"; do list+=", $key"; done
     req_err "no value for ${list#, } in environment \"$env\""
     if [[ -n $id ]] && req_valid_name "$id"; then
-        where="$(req_abs_path "$(req_env_file "$id" "$env")") (or $(req_abs_path "$(req_vars_file "$id")") for every environment)"
+        where=$(req_abs_path "$(req_env_file "$id" "$env")")
     fi
     for key in "$@"; do
         printf '  %s: set the variable %s' "$key" "$(req_env_var_name "$env" "$key")" >&2
@@ -2498,7 +2537,7 @@ req_env_list() {
     dir=$(req_project_state_dir "$id" env)
     [[ -d $dir ]] || return 0
     for f in "$dir"/*; do
-        [[ -f $f ]] || continue
+        [[ -d $f ]] || continue
         name=${f##*/}
         req_valid_name "$name" && printf '%s\n' "$name"
     done | LC_ALL=C sort
@@ -2508,7 +2547,7 @@ req_env_exists() {
     local env=$1 id=${2-$REQ_PROJECT_ID}
     req_valid_name "$env" || return 1
     [[ $env == default ]] && return 0
-    [[ -n $id && -f $(req_env_file "$id" "$env") ]]
+    [[ -n $id && -d $(req_env_dir "$id" "$env") ]]
 }
 
 req_env_ensure_dir() {
@@ -2521,21 +2560,23 @@ req_env_ensure_dir() {
 }
 
 req_env_create() {
-    local env=$1 id=${2-$REQ_PROJECT_ID} file abs
+    local env=$1 id=${2-$REQ_PROJECT_ID} dir abs file
     req_valid_name "$env" || {
         req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
         return 1; }
     req_env_ensure_dir "$id" || return 1
+    dir=$(req_env_dir "$id" "$env")
+    abs=$(req_abs_path "$dir")
+    [[ -d $dir ]] && return 0
+    [[ ! -e $dir && ! -L $dir ]] || { req_err "$abs exists and is not a folder"; return 1; }
+    (umask 077; mkdir "$dir") 2>/dev/null || { [[ -d $dir ]] && return 0; req_err "cannot create $abs"; return 1; }
     file=$(req_env_file "$id" "$env")
-    abs=$(req_abs_path "$file")
-    [[ -f $file ]] && return 0
-    [[ ! -e $file && ! -L $file ]] || { req_err "$abs exists and is not a file"; return 1; }
-    (umask 077; set -o noclobber; : >"$file") 2>/dev/null || { req_err "cannot create $abs"; return 1; }
+    (umask 077; req_vars_template "$env" >"$file") 2>/dev/null || { req_err "cannot create $(req_abs_path "$file")"; return 1; }
 }
 
 req_vars_template() {
     printf '%s\n' \
-        '# Variables of this project, shared by every environment (the file of an environment wins).' \
+        "# Variables of environment $1: they are loaded when it is the environment in use." \
         '# One per line, key=value: the key uses letters, digits and underscores; the value is the rest of the line.' \
         '# Lines that start with # are comments. A request uses a variable as ${key}, for example ${host}/users.' \
         '#' \
@@ -2544,14 +2585,19 @@ req_vars_template() {
 }
 
 req_vars_create() {
-    local id=${1-$REQ_PROJECT_ID} file abs
+    local env=$1 id=${2-$REQ_PROJECT_ID} file abs
     [[ -n $id ]] || { req_err "no project is open, so there are no variables to make"; return 1; }
     req_valid_name "$id" || { req_err "invalid project id: \"$id\""; return 1; }
-    file=$(req_vars_file "$id")
+    req_valid_name "$env" || {
+        req_err "invalid environment name: \"$env\" (use a slug: lowercase letters, digits and hyphens)"
+        return 1; }
+    file=$(req_env_file "$id" "$env")
     abs=$(req_abs_path "$file")
     [[ -f $file ]] && return 0
     [[ ! -e $file && ! -L $file ]] || { req_err "$abs exists and is not a file"; return 1; }
-    (umask 077; mkdir -p "${file%/*}"; set -o noclobber; req_vars_template >"$file") 2>/dev/null ||
+    req_env_create "$env" "$id" || return 1
+    [[ -f $file ]] && return 0
+    (umask 077; set -o noclobber; req_vars_template "$env" >"$file") 2>/dev/null ||
         { req_err "cannot create $abs"; return 1; }
 }
 
@@ -2755,7 +2801,10 @@ req_project_activate() {
         return 1
     fi
     REQ_PROJECT_ID=$id
-    problem=$(req_env_create default "$id" 2>&1) || req_warn "${problem#req: error: }"
+    req_env_legacy_notice "$id"
+    if [[ ! -f $(req_env_dir "$id" default) ]]; then
+        problem=$(req_env_create default "$id" 2>&1) || req_warn "${problem#req: error: }"
+    fi
     return 0
 }
 
