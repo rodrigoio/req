@@ -166,8 +166,8 @@ test_usability() {
     count=$(( (${#out} - ${#stripped}) / ${#clear} ))
     assert_eq "2" "$count" "the terminal was cleared when the menu started and once by Ctrl-L (no draw cleared it)"
     after=${out##*"$clear"}
-    assert_eq "{❯} Req" "${after%%$'\n'*}" "the menu is drawn again right after, from the top, with the logo first"
-    assert_eq "GET    ping" "$(sed -n 2p <<<"$after")" "and the same request open under it"
+    assert_eq "GET    ping" "${after%%$'\n'*}" "the menu is drawn again right after, from the top: the details come first, without the logo"
+    assert_contains "url  http://" "$(sed -n 2p <<<"$after")" "and the same request is open: its url is under it"
     assert_not_contains "HTTP 200" "$after" "and the old result is not drawn again"
 
     # What that run wrote to the log is what req log shows, and it keeps following.
@@ -470,7 +470,7 @@ test_start_clear() {
     stripped=${out//"$clear"/}
     count=$(( (${#out} - ${#stripped}) / ${#clear} ))
     assert_eq "1" "$count" "and it clears once"
-    assert_contains "req / (1/1)" "${out#"$clear"}" "the menu is drawn after it"
+    assert_contains "{❯} Req / (1/1)" "${out#"$clear"}" "the menu is drawn after it, with the logo in its header"
 
     # 2. what is not the menu never clears
     out=$($REQ run "$work/ping.get.json" 2>&1)
@@ -492,7 +492,7 @@ test_usability_release() {
     command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
     command -v timeout >/dev/null 2>&1 || { echo "  skip timeout unavailable"; return; }
     [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
-    local work=$TMP/usab port out status state after line word
+    local work=$TMP/usab port out status state after line word details
     local clear=$'\033[H\033[2J' esc=$'\033' down=$'\033[B'
     port=$(<"$TMP/port")
     mkdir -p "$work/sub" && cd "$work" || return
@@ -506,7 +506,7 @@ test_usability_release() {
     out=$(PTY_RAW=1 guarded_menu "q"); status=$?
     assert_eq "0" "$status" "q at the root of the list quits req"
     assert_eq "$clear" "${out:0:${#clear}}" "the screen was cleared when the menu started"
-    assert_contains "req / (1/2)" "$out" "and the list was drawn"
+    assert_contains "{❯} Req / (1/2)" "$out" "and the list was drawn, with the logo in its header"
     for word in "Enter open" "Esc back" "v response" ":h help" "move   Enter"; do
         assert_not_contains "$word" "$out" "the list has no hint line: no \"$word\""
     done
@@ -548,7 +548,7 @@ test_usability_release() {
     assert_eq "1" "$(grep -c 'environment: staging, created in' <<<"$out")" ":env staging said where it made the file, once"
     line=$(grep -n '^! environment: staging, created in' <<<"$out" | head -1 | cut -d: -f1)
     assert_contains "! environment: staging, created in" "$(sed -n "${line:-0}p" <<<"$out")" "in a bar"
-    assert_contains "req / (1/2)  usab @ staging" "$(sed -n "$(( ${line:-0} + 1 ))p" <<<"$out")" "and the header, in the new environment, is right under it"
+    assert_contains "{❯} Req / (1/2)  usab @ staging" "$(sed -n "$(( ${line:-0} + 1 ))p" <<<"$out")" "and the header, in the new environment, is right under it"
 
     # 7. an arrow key in the viewer does not close it (Esc is not bound there: it would close it at the first arrow)
     if command -v less >/dev/null 2>&1; then
@@ -557,10 +557,21 @@ test_usability_release() {
         assert_contains "HTTP 200" "$out" "the request ran"
         after=$(awk '/^=+$/ { buf = ""; next } { buf = buf $0 "\n" } END { printf "%s", buf }' <<<"$out")
         assert_contains "GET    top" "$after" "after the run the details were drawn again, the viewer was opened"
-        assert_not_contains "req / (" "$after" "an arrow key did not close the viewer, and q closed it: the list was never drawn again"
+        assert_not_contains "{❯} Req / (" "$after" "an arrow key did not close the viewer, and q closed it: the list was never drawn again"
     else
         echo "  skip less unavailable"
     fi
+
+    # 8. the logo is in the header of the list and nowhere else: opening a request and coming back never leaves it
+    # on a row of its own or in the details, and the list shows it once per draw
+    out=$(guarded_menu "$down" "$ENTER" "$esc" "q"); status=$?
+    assert_eq "0" "$status" "q at the root of the list ended the session (no command was typed, so no extra draw)"
+    assert_eq "0" "$(grep -c -E '^\{❯\} Req[[:space:]]*$' <<<"$out")" "the logo has no row of its own"
+    # the details block: the row above its first line (where a logo of its own would be) up to the next list header
+    details=$(awk '/^GET    top/ { on = 1; print prev } on && /\{❯\} Req/ { exit } on { print } { prev = $0 }' <<<"$out")
+    assert_contains "url  http://" "$details" "the details of the request were drawn"
+    assert_not_contains "{❯}" "$details" "and they have no logo"
+    assert_eq "3" "$(grep -c '{❯} Req / (' <<<"$out")" "the list has it once per draw: the start, the arrow and the way back from the details"
     cd "$ROOT" || return
 }
 
