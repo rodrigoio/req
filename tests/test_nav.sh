@@ -1360,6 +1360,11 @@ test_env_menu() {
     REQ_VIEW=list; type_keys : e n v enter
     LINES=10 req_nav_build_env
     assert_eq "1" "$(( ${#REQ_SCREEN_LINES[@]} <= 10 ))" "the menu fits the terminal height"
+    assert_eq "8" "${#REQ_SCREEN_LINES[@]}" "and leaves two of the 10 rows: one for the command prompt and one spare"
+    REQ_NOTIFICATION_LINES=("! one" "! two")
+    LINES=10 req_nav_build_env
+    assert_eq "6" "${#REQ_SCREEN_LINES[@]}" "each bar at the top takes a row from the window"
+    REQ_NOTIFICATION_LINES=()
     for i in $(seq 1 20); do req_nav_handle down; done
     LINES=10 req_nav_build_env; out=$(printf '%s\n' "${REQ_SCREEN_LINES[@]}")
     assert_contains "> many-test-env-" "$out" "the selected row stays in the window"

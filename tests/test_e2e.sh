@@ -492,7 +492,7 @@ test_usability_release() {
     command -v python3 >/dev/null 2>&1 || { echo "  skip python3 unavailable"; return; }
     command -v timeout >/dev/null 2>&1 || { echo "  skip timeout unavailable"; return; }
     [[ -s $TMP/port ]] || { echo "  skip the mock server of test_flow is not running"; return; }
-    local work=$TMP/usab port out status state after line word
+    local work=$TMP/usab port out status state after line word details
     local clear=$'\033[H\033[2J' esc=$'\033' down=$'\033[B'
     port=$(<"$TMP/port")
     mkdir -p "$work/sub" && cd "$work" || return
@@ -561,6 +561,17 @@ test_usability_release() {
     else
         echo "  skip less unavailable"
     fi
+
+    # 8. the logo is in the header of the list and nowhere else: opening a request and coming back never leaves it
+    # on a row of its own or in the details, and the list shows it once per draw
+    out=$(guarded_menu "$down" "$ENTER" "$esc" "q"); status=$?
+    assert_eq "0" "$status" "q at the root of the list ended the session (no command was typed, so no extra draw)"
+    assert_eq "0" "$(grep -c -E '^\{❯\} Req[[:space:]]*$' <<<"$out")" "the logo has no row of its own"
+    # the details block: the row above its first line (where a logo of its own would be) up to the next list header
+    details=$(awk '/^GET    top/ { on = 1; print prev } on && /\{❯\} Req/ { exit } on { print } { prev = $0 }' <<<"$out")
+    assert_contains "url  http://" "$details" "the details of the request were drawn"
+    assert_not_contains "{❯}" "$details" "and they have no logo"
+    assert_eq "3" "$(grep -c '{❯} Req / (' <<<"$out")" "the list has it once per draw: the start, the arrow and the way back from the details"
     cd "$ROOT" || return
 }
 
